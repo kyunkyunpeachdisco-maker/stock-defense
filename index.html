@@ -36,6 +36,7 @@
   #hand { display:flex; gap:5px; flex-wrap:wrap; padding:4px 0; }
   .tile { border:2px solid #2c3d6b; border-radius:8px; padding:4px 6px; font-size:12px; background:#0a0f1d; color:var(--text); cursor:pointer; min-width:96px; text-align:left; white-space:nowrap; }
   .tile b { font-size:15px; display:block; }
+  .tile .eff { display:block; color:#ffe9a8; font-size:11px; white-space:normal; line-height:1.3; margin:1px 0; }
   .tile.sel { background:#1c2b52; border-color:#7cf9ff; box-shadow:0 0 10px #7cf9ff; }
   .tile.bad { opacity:.35; }
   button { font-size:16px; }
@@ -166,6 +167,8 @@ const TYPES = {
 // 同時に寄せられるのは2体まで（強化1段ごとに +1）。全部を寄せると強すぎた（1ゲームで寄せた敵が敵全体の8割ほど）ので「一部」にした
 const lureCap = t => TYPES.lure.cap + (t.lv - 1);
 const lureChance = t => TYPES.lure.chance + .1 * (t.lv - 1);
+// 効果のひとこと（手札の札と、盤のタワーを選んだときに出す）
+const TYPE_SHORT = { node:'安い壁。弱く撃つ', av:'近くを素早く撃つ', fw:'撃たずに遅くする', scan:'遠くへ強い一撃', burst:'まとめて削る', lure:'敵を寄り道させる' };
 // 説明（画面で長押し・カーソルを合わせると出る）
 const TYPE_DESC = {
   node:'安くて早い壁。近くの敵を弱く撃つ。迷路の壁を作るのに使う',
@@ -222,16 +225,16 @@ const wallCol = (x, gaps) => Array.from({ length:ROWS }, (_, y) => [x, y]).filte
 const COURSES = [
   // 壁なし（エリアに置けるので、広い場所に自分で迷路を作る。Desktop Tower Defense と同じ形）。
   // 前は縦の壁3本を置いていた：wall:[...wallCol(3, [2, 10, 11]), ...wallCol(6, [0, 6, 12]), ...wallCol(9, [2, 3, 9])]
-  { name:'ゲートウェイ', hpMul:.97, note:'左から右へ。広い場所に、タイルで迷路を作る',
+  { name:'ゲートウェイ', hpMul:.97, note:'敵は左の「入」から右の◆へ向かう。じゃまなマスのない、いちばん素直な盤',
     entrances:[[0, 6], [0, 7]], exit:[11, 6],
     block:[], fast:[[1, 6], [1, 7], [2, 6]], heal:[[10, 5], [10, 6]] },
-  { name:'はさみうち', hpMul:1, early:.7, note:'左上と左下から来る。10回目の波までは片側ずつ交互、そのあとは両側から。群れが多い',
+  { name:'はさみうち', hpMul:1, early:.7, note:'敵は左上と左下の2か所から来る（10回目までは1回ずつ交互、そのあとは両方から）。数の多い群れがよく来る',
     entrances:[[0, 0], [0, 12]], exit:[11, 6],
     block:[[4, 3], [4, 9], [8, 6]], fast:[[6, 2], [6, 10]], heal:[[9, 5], [9, 7]] },
-  { name:'縦断', hpMul:.9, note:'上から下へ。まんなかに速くなるマス。速い敵が多い',
+  { name:'縦断', hpMul:.9, note:'敵は上から下へ向かう。真ん中に敵が速くなるマスがある。速い敵がよく来る',
     entrances:[[5, 0], [6, 0]], exit:[6, 12],
     block:[[2, 4], [9, 4], [2, 8], [9, 8]], fast:[[6, 6], [5, 6]], heal:[[6, 11], [5, 11]] },
-  { name:'対角', hpMul:.8, early:.7, note:'左上の隅から右下の隅へ。硬い敵が多い',
+  { name:'対角', hpMul:.8, early:.7, note:'敵は左上の隅から右下の隅へ向かう。硬い敵がよく来る',
     entrances:[[0, 0], [1, 0]], exit:[11, 12],
     block:[[3, 3], [8, 9], [6, 6]], fast:[[0, 1], [1, 1], [5, 6], [6, 7]], heal:[[10, 11], [11, 11]] },
 ];
@@ -1852,7 +1855,7 @@ function turnText() {
   if (G.taking) return ['株を1枚、手札に入れてください', '下の「株」から、場の会社の株・山札の一番上・投資信託のどれか。お金はかかりません。数えるのは、あとで公開した株だけです'];
   if (G.exchanging) return ['手札の株を投資信託と交換しますか', '手札の株1枚を差し出すと、投資信託を1口、払わずに公開した状態で受け取れます。いらない株の逃げ道です。しないなら「交換しない」'];
   const sel = G.selected !== null ? me().hand[G.selected] : null, up = G.upSel ? G.tiles[G.upSel] : null;
-  if (up) return [`${label(up.x, up.y)} の${TYPES[up.type].name}を選んでいます`, canUpgrade(up) ? `下の「強化」で射程と威力が上がります（時間${TYPES[up.type].time}）。強化したあとも株を1枚もらえます。${left}` : 'このタワーは強化できません。手札のタイルを選び直してください'];
+  if (up) return [`${label(up.x, up.y)} の${TYPES[up.type].name}（${TYPE_SHORT[up.type]}）`, canUpgrade(up) ? `下の「強化」で射程と威力が上がります（時間${TYPES[up.type].time}）。強化したあとも株を1枚もらえます。${left}` : 'このタワーは強化できません。手札のタイルを選び直してください'];
   if (sel && AREA_MODE) { const c = canPlace(sel), tg = chosenOf(sel);
     if (!c.ok) return [`${tileName(sel)}には置けません（${c.why}）`, '別のタイルを選んでください'];
     if (!tg) return [`${tileName(sel)}の光っているマスに${TYPES[sel.type].name}を置けます`, `${TYPES[sel.type].name}：${TYPE_DESC[sel.type]}。置きたいマスを押してください。${left}`];
@@ -1894,7 +1897,7 @@ function renderHand() {
   me().hand.forEach((t, i) => {
     const b = document.createElement('button'), c = canPlace(t);
     b.className = 'tile' + (G.selected === i ? ' sel' : '') + (c.ok ? '' : ' bad');
-    b.innerHTML = `<img src="${iconUrl(t.type)}" alt="" style="width:22px;height:22px;float:right;margin-left:4px"><b>${tileName(t)}</b>${TYPES[t.type].name}<br><span class="note">時間${TYPES[t.type].time}</span>`;
+    b.innerHTML = `<img src="${iconUrl(t.type)}" alt="" style="width:22px;height:22px;float:right;margin-left:4px"><b>${tileName(t)}</b>${TYPES[t.type].name}<span class="eff">${TYPE_SHORT[t.type]}</span><span class="note">時間${TYPES[t.type].time}</span>`;
     b.dataset.tip = `${TYPES[t.type].name}：${TYPE_DESC[t.type]}` + (TYPES[t.type].range ? `（射程${TYPES[t.type].range}マス）` : '') + `。置くのに時間${TYPES[t.type].time}。` + (c.ok ? '' : `今は置けない：${c.why}`);
     b.onclick = () => { if (G.swapping && G.swapping.p === me()) { act(G.viewer || 0, { t:'swap', idx:i }); return; } G.selected = i; G.upSel = null; G.target = null; renderAll(); };
     el.appendChild(b);
@@ -2362,14 +2365,14 @@ function startGame() {
 // 始める前の画面：人数とコースを選ぶ
 function showStart() {
   let n = NPLAYERS;
-  const body = () => `<h3>電脳都市（プロト）</h3>
+  const body = () => `<h3>電脳都市</h3>
     <p class="note">タイルを置いて迷路を作り、ウイルスの波を全員で${WAVES}回守りきる。タイルのかたまりは会社になり、倒した数で株価が上がる。株を集めて、いちばんお金持ちになった人の勝ち。</p>
     <h4>人数（あなた＋ほかの人や CPU）</h4><div class="pick">${[2, 3, 4, 5, 6].map(k => `<button class="btn${k === n ? ' on' : ''}" data-n="${k}">${k}人</button>`).join('')}</div>
     <h4>CPU の強さ</h4><div class="pick">${[['normal', 'ふつう'], ['easy', 'よわい']].map(([k, t]) => `<button class="btn${k === CPU_LEVEL ? ' on' : ''}" data-lv="${k}">${t}</button>`).join('')}</div>
     <h4>会社の能力</h4><div class="pick">${[[false, 'なし'], [true, 'あり']].map(([k, t]) => `<button class="btn${k === POWERS ? ' on' : ''}" data-pw="${k ? 1 : 0}">${t}</button>`).join('')}</div>
     <h4>コース</h4><div class="pick">${COURSES.map((c, i) => `<button class="btn${i === COURSE ? ' on' : ''}" data-c="${i}">${c.name}</button>`).join('')}</div>
-    <p class="note">${COURSES[COURSE].note}（後ろに見えている盤）</p>
-    <p class="note">わからないときは、画面右上の「？ ルール」か、「？」の付いた見出しを押してください。はじめは押す場所が光ります。</p>`;
+    <p class="note">${COURSES[COURSE].note}。選んだコースの盤が後ろに出ます</p>
+    <p class="note">遊び方は、右上の「？ ルール」でいつでも読めます。遊んでいる間は、次に押す場所が光って教えてくれます。</p>`;
   const open = () => {
     modal(body(), [['ひとりで遊ぶ（CPUと）', () => { NPLAYERS = n; startGame(); }],
       ['部屋を作る', () => { let nm = ''; try { nm = localStorage.getItem('stock-defense-name') || ''; } catch (e) {} hostLobby(n, nm || 'ホスト'); }],
