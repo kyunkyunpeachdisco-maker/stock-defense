@@ -1,0 +1,2323 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>電脳都市（仮） - プロト</title>
+<style>
+  :root { --bg:#05070d; --panel:#0c1222; --line:#1d2a48; --text:#e6ecff; --dim:#8b97b8; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif; }
+  body { min-height:100dvh; display:flex; flex-direction:column; align-items:center; }
+  #wrap { width:100%; max-width:560px; padding:6px; }
+  #top { display:flex; gap:8px; align-items:center; font-size:13px; flex-wrap:wrap; padding:4px 2px; }
+  #top .big { font-size:16px; font-weight:bold; white-space:nowrap; }
+  @media (max-width:480px) { #top { flex-wrap:nowrap; gap:6px; } #top .big { font-size:14px; } #setupNote { display:none; }
+    /* スマホ：縦に長くならないよう、手札・ボタン・株の場を詰める */
+    .tile { min-width:0; flex:1 1 30%; padding:3px 5px; font-size:11px; } .tile b { font-size:13px; } .tile img { width:18px !important; height:18px !important; }
+    #acts .btn { padding:5px 8px; font-size:12px; } #market .btn { padding:4px 7px; font-size:12px; }
+    #turn { padding:4px 6px; } #turn .sub { font-size:11px; } table { font-size:11px; } th, td { padding:2px 3px; } }
+  #life { color:#ff6b8b; } #wave { color:#7cf9ff; } #money { color:#ffe066; }
+  canvas { display:block; width:100%; touch-action:manipulation; background:radial-gradient(circle at 50% 45%, #0b1430, #04060c 70%); border-radius:8px; }
+  #track { position:relative; height:30px; margin:6px 0 2px; background:var(--panel); border-radius:6px; overflow:hidden; }
+  #track .mk { position:absolute; top:4px; height:22px; min-width:22px; padding:0 5px; border-radius:11px; font-size:11px; line-height:22px; text-align:center; color:#000; font-weight:bold; transition:left .3s; }
+  #turn { font-size:14px; padding:4px 2px; min-height:24px; }
+  #hand { display:flex; gap:5px; flex-wrap:wrap; padding:4px 0; }
+  .tile { border:2px solid #2c3d6b; border-radius:8px; padding:4px 6px; font-size:12px; background:#0a0f1d; color:var(--text); cursor:pointer; min-width:96px; text-align:left; white-space:nowrap; }
+  .tile b { font-size:15px; display:block; }
+  .tile.sel { background:#1c2b52; border-color:#7cf9ff; box-shadow:0 0 10px #7cf9ff; }
+  .tile.bad { opacity:.35; }
+  button { font-size:16px; }
+  .btn { background:#16213d; color:var(--text); border:1px solid #2c3d6b; border-radius:8px; padding:7px 10px; font-size:14px; cursor:pointer; }
+  .btn:disabled { opacity:.35; cursor:default; }
+  #acts { display:flex; gap:6px; flex-wrap:wrap; padding:4px 0; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { padding:3px 4px; border-bottom:1px solid var(--line); text-align:right; }
+  th:first-child, td:first-child { text-align:left; }
+  td .sw { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px; }
+  #log { font-size:12px; color:var(--dim); max-height:110px; overflow:auto; padding:4px 2px; border-top:1px solid var(--line); margin-top:6px; }
+  #modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:9; }
+  #modal .box { background:var(--panel); border:1px solid #2c3d6b; border-radius:12px; padding:16px; max-width:92%; width:380px; }
+  #modal h3 { margin:0 0 8px; font-size:17px; }
+  #modal .row { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+  .note { font-size:12px; color:var(--dim); }
+  /* 説明まわり */
+  #soundBtn { margin-left:auto; }
+  #helpBtn { padding:4px 10px; font-size:13px; }
+  #turn { background:#101a33; border:1px solid #2c3d6b; border-radius:8px; padding:6px 8px; margin:4px 0; line-height:1.5; }
+  #turn .now { color:#7cf9ff; font-weight:bold; }
+  #turn .sub { display:block; font-size:12px; color:var(--dim); }
+  .sec { font-size:12px; color:#9fb0dd; margin:6px 0 0; font-weight:bold; }
+  .sec .q { color:var(--dim); font-weight:normal; cursor:help; border-bottom:1px dotted var(--dim); margin-left:4px; }
+  [data-tip] { cursor:help; }
+  #tip { position:fixed; z-index:20; max-width:280px; background:#18254a; border:1px solid #4d6bb3; color:var(--text); font-size:12px; line-height:1.5; padding:6px 8px; border-radius:6px; pointer-events:none; display:none; }
+  .glow { animation:glow 1s ease-in-out infinite alternate; position:relative; z-index:2; }
+  @keyframes glow { from { box-shadow:0 0 0 2px #7cf9ff88; } to { box-shadow:0 0 14px 4px #7cf9ffee; } }
+  #modal .box { max-height:88dvh; overflow:auto; }
+  #modal .box h4 { margin:12px 0 4px; font-size:14px; color:#7cf9ff; }
+  #modal .box p, #modal .box li { font-size:13px; line-height:1.6; margin:2px 0; }
+  #modal .box ul { padding-left:18px; margin:2px 0; }
+  .pick { display:flex; gap:6px; flex-wrap:wrap; margin:4px 0; }
+  .pick .btn.on { background:#24407a; border-color:#7cf9ff; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="top">
+    <span id="wave" class="big" data-tip="敵の波。全部の回数は上に出ています。波と波の間は少しだけ時間があります"></span>
+    <span id="life" class="big" data-tip="全員で共有のライフ。敵が出口（中枢サーバー）に届くと減り、0になると全員の負け"></span>
+    <span id="money" class="big" data-tip="株を公開するときに払うお金。終わりにいちばん多い人の勝ち"></span>
+    <span class="note" id="setupNote"></span>
+    <button class="btn" id="soundBtn" style="padding:4px 8px;font-size:13px" data-tip="効果音を鳴らす・消す"></button>
+    <button class="btn" id="helpBtn">？ ルール</button>
+  </div>
+  <canvas id="cv"></canvas>
+  <div id="turn"></div>
+  <div id="info" class="note" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:2px 2px 4px"></div>
+  <div class="sec">時間トラック<span class="q" data-tip="手番の順番を決める線です。いちばん左（後ろ）の人が次に動きます。行動するとその時間だけ右へ進みます。ピンクの線がこの波で使える時間の終わりで、越えた人は波が終わるまで待ちます。越えた分は次に持ち越します。">？</span></div>
+  <div id="track"></div>
+  <div class="sec">タイルの手札<span class="q" data-tip="タイルにはエリア（盤のうすい文字 A〜F）と種類が書いてあります。そのエリアの空いているマスなら、どこにでも置けます。選ぶと盤の上で置ける場所が光ります。置くとそこは壁になり、種類によっては敵を撃つタワーになります。置くのは無料で、時間だけ使います。">？</span></div>
+  <div id="hand"></div>
+  <div id="acts">
+    <button class="btn" id="place" disabled>このタイルを置く</button>
+    <button class="btn" id="swap">タイルを捨てて引き直す（時間1）</button>
+    <button class="btn" id="removeBtn" style="display:none">取り除く（時間2）</button>
+  </div>
+  <div class="sec">株<span class="q" data-tip="タイルを置くか強化すると、株を1枚手札に入れます（場の5枚・山札の一番上・投資信託から選ぶ）。手札の株はまだ数えません。お金を払って公開した株だけが、ボーナスと売却で数えられます。">？</span></div>
+  <div id="market" style="display:flex;gap:5px;flex-wrap:wrap;padding:4px 0;align-items:center"></div>
+  <div class="sec">会社<span class="q" data-tip="つながったタイルのかたまり（2枚以上）に会社が付きます。株価は、その会社のタワーが倒した敵の数で上がります。会社どうしがつながると合併し、吸収された会社の株主にボーナスが出ます。">？</span></div>
+  <table id="cos"></table>
+  <div id="log"></div>
+</div>
+<div id="modal"><div class="box" id="mbox"></div></div>
+<div id="tip"></div>
+<script>
+'use strict';
+// ===== 定数（ルール案 v0.9。数字は仮で、遊んで見直す） =====
+const COLS = 12, ROWS = 13;
+const ROWNAME = 'ABCDEFGHIJKLM';
+const PARAMS = new URLSearchParams(location.search);
+const AUTO = PARAMS.has('auto');                 // 全員 CPU（動作確認用）
+const SPEED = +(PARAMS.get('speed') || 1);       // 時間の進みを速める（動作確認用）
+// 区切り（使える時間が補充されるとき）：波が始まるとき（start）か、波が終わったとき（end）か。試して決める
+const CYCLE = PARAMS.get('cycle') === 'start' ? 'start' : 'end';  // CPU で比べて「波が終わったとき」に決めた
+const MARKET = 5;
+// 投資信託：取り方と交換はユニオン・パシフィック株にならう（20枚）。筆頭も順位の配当もない。
+// 儲けは、終わりにそのときの値段で売る（解約）ことだけ
+// 株の枚数：ユニオン・パシフィックのように会社ごとに違う（格の高い会社ほど多い）。合計130枚（ユーザー）。
+// 98枚では売り切れたので増やした。投資信託は、ユニオン・パシフィックと同じく全体の約17%で26口。
+// 比べるために ?shares=acquire でアクワイアどおり（1社25枚、投資信託35口）にもできる
+const SHARE_MODE = PARAMS.get('shares') === 'acquire' ? 'acquire' : 'up';
+// ユニオン・パシフィックでは大きくなれる会社ほど株が多い（いちばん大きい EP&RG が18枚、いちばん小さい灰が6枚）。
+// それにならい、格の高い会社ほど多くした（前は逆で、格の高い会社が少ない枚数で筆頭になれて得すぎた）。?shares=old で前の配分
+const SHARES_BY_CO = SHARE_MODE === 'up' ? (PARAMS.get('shares') === 'old' ? [26, 24, 22, 18, 16, 14, 10] : [10, 14, 16, 18, 22, 24, 26]) : [25, 25, 25, 25, 25, 25, 25];
+const CENTRAL = 7, CENTRAL_CARDS = SHARE_MODE === 'up' ? 26 : 35;
+const CENTRAL_CO = { id:CENTRAL, name:'投資信託', tier:0, color:'#ff4dff', active:true, central:true };
+const coOf = id => id === CENTRAL ? CENTRAL_CO : G.cos[id];
+// 投資信託の株価：盤にある会社の株価の加重平均（S&P のように、時価総額＝株価×公開されている株の枚数で重みをつける）。
+// 公開された株がまだなければ、会社の株価をそのまま平均する。100単位に丸める
+const centralPrice = () => {
+  const act = G.cos.filter(c => c.active);
+  if (!act.length) return 200;
+  const w = act.map(c => G.players.reduce((s2, q) => s2 + q.shares[c.id], 0)), sw = w.reduce((a, b) => a + b, 0);
+  const avg = sw ? act.reduce((s2, c, i) => s2 + price(c) * w[i], 0) / sw : act.reduce((s2, c) => s2 + price(c), 0) / act.length;
+  return Math.max(100, Math.round(avg / 100) * 100);
+};
+const priceOf = id => id === CENTRAL ? centralPrice() : price(G.cos[id]);  // 場に表向きに並べる株券の枚数（ユニオン・パシフィック式）
+let CPU_LEVEL = PARAMS.get('level') === 'easy' ? 'easy' : 'normal';
+let NPLAYERS = Math.max(2, Math.min(6, +(PARAMS.get('players') || 4)));
+
+// タイルの種類：時間・射程（マス）・威力・撃つ間隔（秒）・色
+const TYPES = {
+  node:  { name:'ノード',           time:1, color:'#c9d4ff', range:1.2, dmg:.4, cd:.5 },
+  av:    { name:'アンチウイルス',   time:2, color:'#33f0ff', range:1.6, dmg:1, cd:.35 },
+  fw:    { name:'ファイアウォール', time:3, color:'#ff9a3c', range:1.8, dmg:0, cd:.5, slow:.45 },
+  scan:  { name:'スキャナー',       time:4, color:'#ff4dd8', range:3.2, dmg:5, cd:1.6 },
+  burst: { name:'一斉駆除',         time:5, color:'#ffe14d', range:2.2, dmg:2, cd:1.4, splash:.9 },
+  // 誘導（ユーザーの案）：射程に入った敵の一部をおびき寄せ、自分の前まで寄り道させる。数字は Claude の案
+  lure:  { name:'ハニーポット',     time:3, color:'#ffd27a', range:2.2, dmg:0, cd:.3, cap:2, chance:.3 },
+};
+// ハニーポット：射程に入った敵は、それぞれ1回だけ「寄せられるか」を試され、30%（強化1段ごとに +10%）で寄せられる。
+// 同時に寄せられるのは2体まで（強化1段ごとに +1）。全部を寄せると強すぎた（1ゲームで寄せた敵が敵全体の8割ほど）ので「一部」にした
+const lureCap = t => TYPES.lure.cap + (t.lv - 1);
+const lureChance = t => TYPES.lure.chance + .1 * (t.lv - 1);
+// 説明（画面で長押し・カーソルを合わせると出る）
+const TYPE_DESC = {
+  node:'安くて早い壁。近くの敵を弱く撃つ。迷路の壁を作るのに使う',
+  av:'近くの敵を素早く撃つ',
+  fw:'撃たないが、射程の中の敵を遅くする。ほかのタワーが当てやすくなる',
+  scan:'遠くまで届く強い一撃。撃つ間隔は長い',
+  burst:'当たったまわりの敵もまとめて削る。群れに強い',
+  lure:'撃たないが、射程に入った敵の一部（それぞれ30%の確率、同時に2体まで。強化で増える）をおびき寄せ、自分の前まで寄り道させる。敵を自分の会社のタワーの前に通せる',
+};
+// ?nolure でハニーポットなし（比べる用。抜いた分はノードにする）
+const MIX = PARAMS.has('nolure') ? [['node', .32], ['av', .24], ['fw', .15], ['scan', .15], ['burst', .14]] : [['node', .24], ['av', .24], ['fw', .15], ['scan', .15], ['burst', .14], ['lure', .08]];
+
+// 会社：アクワイアと同じく3つの格（安い2・中3・高い2）
+const COMPANIES = [
+  { name:'ネオン',   tier:0, color:'#4dff88' }, { name:'ピクセル', tier:0, color:'#ffd24d' },
+  { name:'シナプス', tier:1, color:'#4dc3ff' }, { name:'クオーク', tier:1, color:'#b07cff' }, { name:'ベクター', tier:1, color:'#ff8a4d' },
+  { name:'オメガ',   tier:2, color:'#ff4d6d' }, { name:'ヘリオス', tier:2, color:'#ffffff' },
+];
+// 会社の能力モード（?powers=1 か開始画面）：能力はその会社のタイル全部に効く。筆頭の権限ではない。吸収された会社の能力は消える
+let POWERS = PARAMS.get('powers') === '1';
+const PW = { rapid:.75, splash:.5, link:.1, range:.4, slow:.2, pierce:1.4, fame:1.1 };   // 数字は CPU の試しで合わせる。?pw=rapid:.8,fame:1.1 で上書き
+(PARAMS.get('pw') || '').split(',').filter(Boolean).forEach(x => { const [k, v] = x.split(':'); PW[k] = +v; });
+const POWER = [
+  { name:'連射', desc:'タワーの撃つ間隔が短い' }, { name:'拡散', desc:'弾が当たった敵のとなりの敵にも少し当たる' },
+  { name:'連携', desc:'となりの同じ会社のタワー1つごとに威力が上がる（3つまで）' }, { name:'遠視', desc:'タワーの射程が長い' },
+  { name:'減速', desc:'弾が当たった敵が少し遅くなる。遅くした敵をほかの会社が倒したら、手柄を分ける' }, { name:'貫通', desc:'硬い敵と大きい敵によく効く' },
+  { name:'集客', desc:'倒した数が多めに数えられ、株価が上がりやすい' },
+];
+const hasPower = (id, n) => POWERS && id === n;
+const POWER_HP = 1.025;   // 能力ありは守りが強くなるぶん、敵を硬くする
+// 1つの波につき1人が使える時間。使い切ったら次の波まで待つ（テーベの「年の終わり」のような区切り）。
+// 全員の合計を4人×6＝24にそろえる（ユーザー）：2人12・3人8・4人6・5人5・6人4
+const budget = () => Math.round(24 / NPLAYERS);
+// 人数ごとの敵の硬さの倍率（4人を基準に CPU 対戦で合わせた。?php= で上書き）
+const PLAYER_HP = { 2:.93, 3:.97, 4:1, 5:.98, 6:.97 };
+const playerHp = () => +(PARAMS.get('php') || PLAYER_HP[NPLAYERS] || 1);
+// 敵の体力の伸び：波 n の敵は（6 ＋ HP_GROWTH × n）倍。?hp= で変えて試す
+const HP_GROWTH = +(PARAMS.get('hp') || 8.5);
+const SAFE = +(PARAMS.get('safe') || 11), START_MONEY = 3000, HAND = +(PARAMS.get('hand') || 6), LIVES = 10, WAVES = +(PARAMS.get('waves') || 12);   // 12回（ユーザー。20回だと8回目以降は合併が起きず、動きのない後半が長かった）
+// 波の回数を変えたとき：?wavescale=1 なら最後の波の強さ・種類の時期・ボスの割合を20回のときにそろえる（敵が速く強くなる）。
+// ふつうは20回のときと同じ上がり方で、早く終わるだけ
+const WSCALE = PARAMS.get('wavescale') === '1' ? 20 / WAVES : 1, effWave = n => n * WSCALE;
+const isBoss = (n, every) => Math.floor(effWave(n) / every + 1e-9) > Math.floor(effWave(n - 1) / every + 1e-9);
+// 敵の総数の割合（株価の区切りを、倒せる数に合わせて縮める）
+const enemyTotal = w => { let t = 0; for (let n = 1; n <= w; n++) t += 6 + 2 * effWave(n); return t; };
+// 株価：アクワイアの表の「タイル数」を「倒した数」に置き換えたもの
+const KILL_BANDS = [0, 10, 15, 20, 30, 60, 100, 150, 200].map(k => Math.round(k * enemyTotal(WAVES) / 540));   // 540：20回のときの敵の総数
+const BASE_PRICE = [200, 300, 400, 500, 600, 700, 800, 900, 1000];
+
+// コース（盤面）。始める前に選ぶ。?course=番号 でも選べる
+// block：建てられない（敵は通れる）、fast：敵が速くなる、heal：敵が回復する
+// 縦の壁：x 列の全部の行を壁にし、gaps の行だけ開ける（六角形の行ずらしの盤でも、横へは1列ずつしか進めないので、すき間以外は通れない）
+const wallCol = (x, gaps) => Array.from({ length:ROWS }, (_, y) => [x, y]).filter(([, y]) => !gaps.includes(y));
+const COURSES = [
+  // 壁なし（エリアに置けるので、広い場所に自分で迷路を作る。Desktop Tower Defense と同じ形）。
+  // 前は縦の壁3本を置いていた：wall:[...wallCol(3, [2, 10, 11]), ...wallCol(6, [0, 6, 12]), ...wallCol(9, [2, 3, 9])]
+  { name:'ゲートウェイ', hpMul:.97, note:'左から右へ。広い場所に、タイルで迷路を作る',
+    entrances:[[0, 6], [0, 7]], exit:[11, 6],
+    block:[], fast:[[1, 6], [1, 7], [2, 6]], heal:[[10, 5], [10, 6]] },
+  { name:'はさみうち', hpMul:1, early:.7, note:'左上と左下から来る。10回目の波までは片側ずつ交互、そのあとは両側から。群れが多い',
+    entrances:[[0, 0], [0, 12]], exit:[11, 6],
+    block:[[4, 3], [4, 9], [8, 6]], fast:[[6, 2], [6, 10]], heal:[[9, 5], [9, 7]] },
+  { name:'縦断', hpMul:.9, note:'上から下へ。まんなかに速くなるマス。速い敵が多い',
+    entrances:[[5, 0], [6, 0]], exit:[6, 12],
+    block:[[2, 4], [9, 4], [2, 8], [9, 8]], fast:[[6, 6], [5, 6]], heal:[[6, 11], [5, 11]] },
+  { name:'対角', hpMul:.8, early:.7, note:'左上の隅から右下の隅へ。硬い敵が多い',
+    entrances:[[0, 0], [1, 0]], exit:[11, 12],
+    block:[[3, 3], [8, 9], [6, 6]], fast:[[0, 1], [1, 1], [5, 6], [6, 7]], heal:[[10, 11], [11, 11]] },
+];
+let COURSE = Math.max(0, Math.min(COURSES.length - 1, +(PARAMS.get('course') || 0)));
+let ENTRANCES, EXIT, SPECIAL;
+const EXPAND = PARAMS.get('expand') === '1';
+// 広げる向き：縦断（上から下へ）は行、ほかは列。開いている範囲の始まり（OPEN_FROM）より手前は、まだ盤の外（通れない・置けない）
+const expandAxis = () => COURSE === 2 ? 'y' : 'x';
+// [この波のあと, ここから開く]。新しく開く3列（3行）のうち、前の盤に接する1列が境目、残り2列が新しい場所
+const EXPAND_STAGES = { x:[[0, 6], [4, 3], [8, 0]], y:[[0, 7], [4, 4], [8, 0]] };
+let OPEN_FROM = 0, BASE_ENTRANCES = [];
+const isClosed = (x, y) => EXPAND && (expandAxis() === 'x' ? x < OPEN_FROM : y < OPEN_FROM);
+function openEntrances() {
+  const out = [];
+  for (const [x, y] of BASE_ENTRANCES) { const e = expandAxis() === 'x' ? [Math.max(x, OPEN_FROM), y] : [x, Math.max(y, OPEN_FROM)]; if (!out.some(([a, b]) => a === e[0] && b === e[1])) out.push(e); }
+  return out;
+}
+// タイルの置き方：ふつうはエリア（タイルに書いたエリアの中ならどこでも。キングダムビルダーの地形カードのように）。
+// ?place=coord で前の決まり（書いてある座標か、そのまわり6マス）
+const AREA_MODE = PARAMS.get('place') !== 'coord';
+const AREA_NAMES = 'ABCDEFGH';
+let areaOf = () => 0, AREA_CELLS = [];
+function useCourse(i) {
+  const c = COURSES[i]; COURSE = i;
+  BASE_ENTRANCES = c.entrances; EXIT = c.exit; SPECIAL = {};
+  OPEN_FROM = EXPAND ? EXPAND_STAGES[expandAxis()][0][1] : 0;
+  // 広がる場所との境目：建てられないが敵は通れるマスの列を置き、橋のマスだけ残す（?border=0 でなし）。
+  // 境目をはさんだタイルは隣りあわないので、前からある会社は新しい場所へ伸びられない。つながれるのは橋だけ
+  if (EXPAND && PARAMS.get('border') !== '0') {
+    const lines = expandAxis() === 'x' ? [[5, [3, 9]], [2, [2, 10]]] : [[6, [3, 8]], [3, [2, 9]]];
+    for (const [line, bridges] of lines) for (let i = 0; i < (expandAxis() === 'x' ? ROWS : COLS); i++) {
+      if (bridges.includes(i)) continue;
+      const [x, y] = expandAxis() === 'x' ? [line, i] : [i, line], k = x + ',' + y;
+      if (!SPECIAL[k] && !(x === EXIT[0] && y === EXIT[1])) SPECIAL[k] = 'block';
+    }
+  }
+  ENTRANCES = EXPAND ? openEntrances() : c.entrances;
+  // ?walls=0 で壁なし（比べる用）
+  const noWalls = PARAMS.get('walls') === '0';
+  ['block', 'fast', 'heal', 'wall'].forEach(kind => (kind === 'wall' && noWalls ? [] : c[kind] || []).forEach(([x, y]) => SPECIAL[x + ',' + y] = kind));
+  // 壁のないコースは、盤を横3つ×縦2つの6エリアに分ける
+  areaOf = (!noWalls && c.area) || ((x, y) => Math.min(2, Math.floor(x / 4)) + (y >= 7 ? 3 : 0));
+  AREA_CELLS = [];
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (!isClosed(x, y) && !SPECIAL[x + ',' + y] && !ENTRANCES.some(([a, b]) => a === x && b === y) && !(x === EXIT[0] && y === EXIT[1])) (AREA_CELLS[areaOf(x, y)] = AREA_CELLS[areaOf(x, y)] || []).push([x, y]);
+}
+useCourse(COURSE);
+
+// 敵の種類
+const ENEMY = {
+  normal: { name:'普通', hp:1,   speed:1.0, life:1, color:'#7cf9ff', r:.22 },
+  fast:   { name:'速い', hp:.6,  speed:2.0, life:1, color:'#ffe066', r:.18 },
+  hard:   { name:'硬い', hp:2.6, speed:.7,  life:2, color:'#ff9a3c', r:.27 },
+  swarm:  { name:'群れ', hp:.5,  speed:1.2, life:1, color:'#b6ff4d', r:.13 },
+  healer: { name:'回復', hp:1.2, speed:.9,  life:1, color:'#6dff9a', r:.22 },
+  // ワーム（?worm=1、試し中）：進みながら、3マスごとに通り道のそばのタイルを1枚壊す
+  worm:   { name:'ワーム', hp:1.4, speed:.8,  life:1, color:'#ff6bd6', r:.24 },
+  big:    { name:'大きい', hp:11, speed:.55, life:3, color:'#ff4d6d', r:.38 },
+};
+
+// ===== 六角形の格子（行ずらし。奇数行は右へ半マス） =====
+const key = (x, y) => x + ',' + y;
+const inBoard = (x, y) => x >= 0 && x < COLS && y >= 0 && y < ROWS;
+function neighbors(x, y) {
+  const d = (y & 1) ? [[1,0],[-1,0],[1,-1],[0,-1],[1,1],[0,1]] : [[1,0],[-1,0],[0,-1],[-1,-1],[0,1],[-1,1]];
+  return d.map(([dx, dy]) => [x + dx, y + dy]).filter(([a, b]) => inBoard(a, b));
+}
+const label = (x, y) => (x + 1) + ROWNAME[y];
+let S = 20;  // 六角形の大きさ（画面に合わせて決める）
+const center = (x, y) => [S * Math.sqrt(3) * (x + .5 + .5 * (y & 1)), S * (1 + 1.5 * y)];
+const cellDist = (ax, ay, bx, by) => { const dx = ax - bx, dy = ay - by; return Math.sqrt(dx * dx + dy * dy) / (S * 1.7320508075688772); };
+
+// ===== 状態 =====
+const G = {
+  tiles: {},            // 'x,y' -> { type, x, y, cool }
+  owner: {},            // 'x,y' -> 会社番号（グループに付いた会社）
+  bag: [], players: [], cos: COMPANIES.map((c, i) => ({ ...c, id:i, active:false, kills:0 })),
+  enemies: [], particles: [], beams: [], shocks: [], flashes: [], texts: [], banner: null, flash: {}, red: 0,
+  lives: LIVES, wave: 0, waveTimer: 60, spawnQueue: [], spawnTimer: 0, over:false, result:'',
+  calib: 1, waveLeaks: 0, limit: 6, roundOrder: [], deck: [], market: [], stats:{ merges:0, bought:0, upgrades:0, placed:0 }, actor: null, busy:false, seq:0, log:[], selected:null, dist:null,
+};
+
+function rnd(n) { return Math.floor(Math.random() * n); }
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function log(t) { G.log.unshift(t); G.log.length = Math.min(G.log.length, 60); renderLog(); }
+
+function setup() {
+  // タイルの山：建てられるマスに1枚ずつ。種類は割合どおりに混ぜて座標に割り当てる
+  const cells = [];
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    const k = key(x, y);
+    if (SPECIAL[k] || BASE_ENTRANCES.some(([a, b]) => a === x && b === y) || ENTRANCES.some(([a, b]) => a === x && b === y) || (x === EXIT[0] && y === EXIT[1])) continue;
+    cells.push([x, y]);
+  }
+  const types = [];
+  MIX.forEach(([t, p]) => { for (let i = 0; i < Math.round(cells.length * p); i++) types.push(t); });
+  while (types.length < cells.length) types.push('node');
+  types.length = cells.length; shuffle(types);
+  const all = cells.map(([x, y], i) => ({ x, y, type:types[i], area:areaOf(x, y) }));
+  G.bag = shuffle(all.filter(t => !isClosed(t.x, t.y))); G.later = all.filter(t => isClosed(t.x, t.y));
+  for (let i = 0; i < NPLAYERS; i++) {
+    G.players.push({ id:i, name: i === 0 && !AUTO ? 'あなた' : 'CPU' + (AUTO ? i + 1 : i), cpu: AUTO || i > 0,
+      color:['#ffffff', '#7cf9ff', '#ff9a3c', '#b07cff', '#6dff9a', '#ff4d6d'][i], money:START_MONEY, shares:Array(8).fill(0),
+      hand:[], cards:[], t:0, order:i });  // hand＝タイルの手札、cards＝株の手札（伏せる）。shares は公開した株
+    for (let j = 0; j < HAND; j++) G.players[i].hand.push(G.bag.pop());
+  }
+  G.players.forEach((p, i) => p.style = i % 2 === 0 ? 'build' : 'buy');  // CPU の性格：守る人／株を買う人
+  // CPU の強さ（?level=easy でよわい、?mix=1 で偶数番だけふつう・奇数番はよわい。比べる用）
+  G.players.forEach(q => q.smart = PARAMS.get('mix') === '1' ? q.id % 2 === 0 : CPU_LEVEL !== 'easy');
+  makePlan();
+  // 最初の波の前だけ、使える時間を2倍にする（はさみうち・縦断で、守りが間に合わず1〜2回目の波で全滅していたため）。?prep= で変えられる
+  G.centralLeft = CENTRAL_CARDS; G.limit = budget() * +(PARAMS.get('prep') || 2);
+  G.roundOrder = shuffle(G.players.map(p => p.id));
+  G.players.forEach(p => p.order = -G.roundOrder.indexOf(p.id));
+  G.deck = shuffle(G.cos.flatMap(c => Array(SHARES_BY_CO[c.id]).fill(c.id)));
+  refillMarket();
+  G.dist = distanceField();
+  document.getElementById('setupNote').textContent = NPLAYERS + '人';
+}
+
+// ===== 株券：山札と、表向きに並べた場 =====
+const availOf = id => G.availNet ? G.availNet[id] : G.deck.filter(c => c === id).length + G.market.filter(c => c === id).length + (G.discards || []).filter(c => c === id).length;
+// 場の5枚が全部同じ会社になったら、その5枚をゲームから取り除いて並べ直す（ユニオン・パシフィックどおり）
+// 捨て札の山：場を入れ替えた株と、手札の上限で捨てた株を置く。山札がなくなったら混ぜて山札にする（ユニオン・パシフィックの線路カードと同じ）
+function drawDeck() {
+  if (!G.deck.length && G.discards && G.discards.length) { G.deck = shuffle(G.discards); G.discards = []; log('株の山札がなくなったので、捨て札を混ぜて山札にした'); }
+  return G.deck.pop();
+}
+function refillMarket() {
+  for (;;) {
+    while (G.market.length < MARKET && (G.deck.length || (G.discards && G.discards.length))) G.market.push(drawDeck());
+    if (G.market.length < MARKET || G.market.some(id => id !== G.market[0])) return;
+    const co = G.cos[G.market[0]];
+    G.removed = (G.removed || 0) + G.market.length; G.market = [];
+    if (G.log) log(`場の株が5枚とも${co.name}になったので、ゲームから取り除いて並べ直した`);
+  }
+}
+function takeCard(id) {
+  // 設立や交換で株券を1枚取る（山札から。なければ捨て札から、それもなければ場から取って補充）
+  let i = G.deck.indexOf(id); if (i >= 0) { G.deck.splice(i, 1); return true; }
+  i = (G.discards || []).indexOf(id); if (i >= 0) { G.discards.splice(i, 1); return true; }
+  i = G.market.indexOf(id); if (i >= 0) { G.market.splice(i, 1); refillMarket(); return true; }
+  return false;
+}
+function returnCards(id, n) { for (let i = 0; i < n; i++) G.deck.push(id); shuffle(G.deck); }
+function resetMarket() { (G.discards = G.discards || []).push(...G.market); G.market = []; refillMarket(); }
+
+// ===== グループと会社 =====
+function groupOf(x, y, tiles = G.tiles) {
+  const seen = new Set([key(x, y)]), st = [[x, y]];
+  while (st.length) { const [a, b] = st.pop(); for (const [c, d] of neighbors(a, b)) { const k = key(c, d); if (tiles[k] && !seen.has(k)) { seen.add(k); st.push([c, d]); } } }
+  return [...seen];
+}
+const coSize = id => Object.values(G.owner).filter(o => o === id).length;
+function price(co) {
+  let b = 0; KILL_BANDS.forEach((k, i) => { if (co.kills >= k) b = i; });
+  return BASE_PRICE[b] + co.tier * 100;
+}
+
+// ハニーポットに寄り道する敵の道：ハニーポットのとなりの空きマスからの距離。盤が変わったら作り直す
+const lureFields = {};
+function lureField(k) {
+  if (lureFields[k] && lureFields[k].v === G.dist) return lureFields[k].d;
+  const [x, y] = k.split(',').map(Number), d = {}, q = [];
+  for (const [a, b] of neighbors(x, y)) { const kk = key(a, b); if (!G.tiles[kk] && G.dist[kk] !== undefined) { d[kk] = 0; q.push([a, b]); } }
+  while (q.length) { const [a, b] = q.shift(); for (const [c, e] of neighbors(a, b)) { const kk = key(c, e); if (d[kk] === undefined && !G.tiles[kk] && SPECIAL[kk] !== 'wall' && !isClosed(c, e)) { d[kk] = d[key(a, b)] + 1; q.push([c, e]); } } }
+  lureFields[k] = { v:G.dist, d }; return d;
+}
+// ===== 敵の道（出口からの距離。タイルのあるマスは通れない） =====
+// マスを番号（y×列数＋x）で扱う。隣のマスの一覧と、マスの名前（'x,y'）は前もって作っておく（CPU が何度も呼ぶので速く）
+let NB = null, KEYS = null;
+function prepGrid() {
+  if (NB) return;
+  NB = []; KEYS = [];
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) { NB.push(neighbors(x, y).map(([a, b]) => b * COLS + a)); KEYS.push(key(x, y)); }
+}
+function distanceField(tiles = G.tiles) {
+  prepGrid();
+  const N = COLS * ROWS, dist = new Int16Array(N).fill(-1), q = new Int16Array(N);
+  const start = EXIT[1] * COLS + EXIT[0]; dist[start] = 0; q[0] = start;
+  for (let head = 0, tail = 1; head < tail; head++) {
+    const i = q[head];
+    for (const j of NB[i]) {
+      if (dist[j] >= 0) continue;
+      const k = KEYS[j];
+      if (tiles[k] || SPECIAL[k] === 'wall' || isClosed(j % COLS, (j / COLS) | 0)) continue;
+      dist[j] = dist[i] + 1; q[tail++] = j;
+    }
+  }
+  const d = {}; for (let i = 0; i < N; i++) if (dist[i] >= 0) d[KEYS[i]] = dist[i];
+  return d;
+}
+
+// タイルは、印刷されたマスか、そのまわり6マスのどれかに置ける（ユーザー）。迷路を作れるようにするため
+const buildable = (x, y) => inBoard(x, y) && !isClosed(x, y) && !SPECIAL[key(x, y)] && !ENTRANCES.some(([a, b]) => a === x && b === y) && !(x === EXIT[0] && y === EXIT[1]);
+const spotsOf = t => AREA_MODE ? (AREA_CELLS[t.area] || []) : [[t.x, t.y], ...neighbors(t.x, t.y)].filter(([x, y]) => buildable(x, y));
+// タイルの呼び名（エリアなら「エリアC」、座標なら「3F」）
+const tileName = t => AREA_MODE ? 'エリア' + AREA_NAMES[t.area] : label(t.x, t.y);
+// そのマスに置けるか：空き・ふさぎ禁止・安全な会社どうしの合併禁止
+function canPlaceAt(t, x, y) {
+  const k = key(x, y);
+  if (G.tiles[k]) return { ok:false, dead:true, why:'もう置かれている' };
+  const after = { ...G.tiles, [k]: { type:t.type } };
+  const d = distanceField(after);
+  if (ENTRANCES.some(([a, b]) => d[key(a, b)] === undefined)) return { ok:false, why:'入口から出口への道がふさがる' };
+  for (const e of G.enemies) if (e.cell === k || e.next === k || d[e.cell] === undefined) return { ok:false, why:'敵がいる・敵の道がふさがる' };
+  const cos = new Set(neighbors(x, y).map(([a, b]) => G.owner[key(a, b)]).filter(o => o !== undefined));
+  const safe = [...cos].filter(id => coSize(id) >= SAFE);
+  if (safe.length >= 2) return { ok:false, dead:true, why:'安全な会社どうしはつなげない' };
+  // 会社の大きさの上限：置くとつながるかたまりの大きさが上限を超えるなら置けない（盤が広がれば上限も上がるので、ずっと置けないとは限らない）
+  if (CO_CAP && cos.size && groupOf(x, y, after).length > coCap()) return { ok:false, why:`会社が大きくなりすぎる（${coCap()}枚まで）` };
+  return { ok:true };
+}
+// そのタイルを置ける場所の一覧。どこにも置けず、この先も置けないなら dead（引き直せる）
+// 会社の大きさの上限（?cap=0.2 なら、今開いている置けるマスの2割。試し中。なしなら上限なし）
+const CO_CAP = +(PARAMS.get('cap') || 0);
+const coCap = () => Math.round(CO_CAP * AREA_CELLS.reduce((a, c) => a + (c ? c.length : 0), 0));
+function canPlace(t) {
+  const res = spotsOf(t).map(([x, y]) => ({ x, y, ...canPlaceAt(t, x, y) }));
+  const ok = res.filter(r => r.ok);
+  if (ok.length) return { ok:true, spots:ok };
+  return { ok:false, dead:res.every(r => r.dead), why:res.length ? res[0].why : 'まわりに置けるマスがない', spots:[] };
+}
+// 人が選んだ置き場所（なければ印刷されたマス、置けなければ置ける場所の最初）
+function targetOf(t) {
+  const c = canPlace(t); if (!c.ok) return null;
+  if (G.target && c.spots.some(s2 => s2.x === G.target[0] && s2.y === G.target[1])) return G.target;
+  const own = c.spots.find(s2 => s2.x === t.x && s2.y === t.y) || c.spots[0];
+  return [own.x, own.y];
+}
+
+// ===== 行動 =====
+// 区切り：線を越えて進んでいた分は、そのまま引き継ぐ。
+// 使い切らなかった人は線まで進める（使わなかった時間はためられない）。ただし順番は保ち、後ろにいた人ほど先に動く
+function newCycle() {
+  const base = G.limit;
+  const behind = G.players.filter(p => p.t < base).sort((a, b) => a.t - b.t || b.order - a.order);
+  behind.forEach((p, i) => { p.t = base; p.order = 1e9 - i; });  // 線ちょうどにいた人より先に動く
+  G.players.forEach(p => p.resetUsed = false);
+  G.limit = base + budget();
+  renderAll();
+}
+function nextActor() {
+  // 時間トラックでいちばん後ろの人。同じなら、あとからその位置に来た人が先（テーベと同じ）。
+  // この波で使える時間を使い切った人は、次の波まで動けない
+  const ready = G.players.filter(p => p.t < G.limit);
+  return ready.sort((a, b) => a.t - b.t || b.order - a.order)[0] || null;
+}
+function spend(p, time) { p.t += time; p.order = ++G.seq + 100; }
+function waveActive() { return G.spawnQueue.length > 0 || G.enemies.length > 0; }
+
+// 2人のときだけ：タイルを置いたあと、任意で手札のタイルを1枚入れ替えられる（ユーザー）。入れ替えたタイルは山の底へ。
+// 2人だと全員の手札が少なく、置きたいエリアのタイルが来にくいため。?swap=0 でなし、?swap=1 で人数によらずあり（比べる用）
+const swapOn = () => PARAMS.get('swap') === '1' || (PARAMS.get('swap') !== '0' && NPLAYERS === 2);
+function swapStep(p, done) {
+  if (!swapOn() || !G.bag.length || !p.hand.length) return done();
+  if (p.cpu) {
+    // CPU：使い道のいちばん少ないタイル（迷路の設計図のマスも、敵の道のそばの空きも少ないエリア）を入れ替える
+    const near = new Set(); for (const [x, y] of pathFrom(G.dist)) for (const [a, b] of neighbors(x, y)) near.add(key(a, b));
+    const score = t => spotsOf(t).reduce((s2, [x, y]) => { const k = key(x, y); return G.tiles[k] ? s2 : s2 + (PLAN.has(k) ? 3 : 0) + (near.has(k) ? 1 : 0); }, 0);
+    let worst = 0; p.hand.forEach((t, i) => { if (score(t) < score(p.hand[worst])) worst = i; });
+    if (score(p.hand[worst]) <= 2) swapOne(p, worst);
+    return done();
+  }
+  G.swapping = { p, done }; renderAll();
+}
+function swapOne(p, idx) {
+  const t = p.hand.splice(idx, 1)[0]; G.bag.unshift(t); p.hand.push(G.bag.pop());
+  G.stats.swapped = (G.stats.swapped || 0) + 1;
+  log(`${p.name}：手札のタイルを1枚入れ替えた`);
+}
+function finishSwap(idx) {
+  const sw = G.swapping; if (!sw) return;
+  G.swapping = null; if (idx !== null) swapOne(sw.p, idx); sw.done();
+}
+function placeTile(p, idx, onDone, at) {
+  const t0 = p.hand[idx], [ax, ay] = at || targetOf(t0) || [t0.x, t0.y], t = { ...t0, x:ax, y:ay };
+  G.tiles[key(t.x, t.y)] = { type:t.type, x:t.x, y:t.y, cool:0, lv:1 }; G.stats.placed++; p.resetUsed = false;
+  if (ax !== t0.x || ay !== t0.y) G.stats.placedNext = (G.stats.placedNext || 0) + 1;
+  { const pt = G.stats.placedBy = G.stats.placedBy || {}; pt[t.type] = (pt[t.type] || 0) + 1; }
+  p.hand.splice(idx, 1); G.selected = null; G.target = null;
+  if (G.bag.length) p.hand.push(G.bag.pop());
+  spend(p, TYPES[t.type].time);
+  log(`${p.name}：${label(t.x, t.y)} に${TYPES[t.type].name}を置いた（時間${TYPES[t.type].time}）`);
+  G.dist = distanceField();
+  burst(...center(t.x, t.y), '#eef3ff', 14, 1.2); shock(...center(t.x, t.y), .8); sfx('place', center(t.x, t.y)[0]);
+  resolveGroup(p, t.x, t.y, () => swapStep(p, onDone));
+}
+
+// 強化：盤の上のどのタイルでも（タイルは誰のものでもない）。時間は置いたときと同じ。3段階まで。ノードは撃たないので強化しない
+const canUpgrade = t => t && TYPES[t.type].range > 0 && t.type !== 'node' && t.lv < 3;
+// タイルを取り除く（?remove=1 でプレイヤーの行動、?worm=1 で敵のワームが壊す。どちらも試し中）。
+// 会社が分かれたら、いちばん大きいかたまりが会社を引き継ぎ、小さい方のかたまりはタイルごと盤から消える（ユーザー。
+// 会社なしに戻すと、2枚以上のかたまりなのに会社がない、という矛盾が起きるため）。1枚以下になった会社は盤から消える
+const REMOVE = PARAMS.get('remove') === '1', WORM = PARAMS.get('worm') === '1', REMOVE_TIME = 2;
+function removeTile(k, why) {
+  const t = G.tiles[k]; if (!t) return;
+  const id = G.owner[k];
+  delete G.tiles[k]; delete G.owner[k];
+  G.stats.removed = (G.stats.removed || 0) + 1;
+  if (id !== undefined) {
+    const left = Object.keys(G.owner).filter(kk => G.owner[kk] === id), groups = [], seen = new Set();
+    for (const kk of left) {
+      if (seen.has(kk)) continue;
+      const g = groupOf(...kk.split(',').map(Number)).filter(x => G.owner[x] === id); g.forEach(x => seen.add(x)); groups.push(g);
+    }
+    groups.sort((a, b) => b.length - a.length);
+    groups.slice(1).forEach(g => g.forEach(x => { const tt = G.tiles[x]; delete G.owner[x]; delete G.tiles[x]; G.stats.vanished = (G.stats.vanished || 0) + 1; if (tt) burst(...center(tt.x, tt.y), '#ff6bd6', 12, 1.2); }));
+    if (!groups.length || groups[0].length < 2) {
+      (groups[0] || []).forEach(x => delete G.owner[x]);
+      const co = G.cos[id]; co.active = false; co.kills = 0; G.stats.dissolved = (G.stats.dissolved || 0) + 1;
+      log(`${co.name}のタイルがなくなり、盤から消えた`);
+    } else if (groups.length > 1) { G.stats.splits = (G.stats.splits || 0) + 1; log(`${G.cos[id].name}が分かれた。小さい方のタイルは消えた`); }
+  }
+  G.dist = distanceField();
+  const [cx, cy] = center(t.x, t.y); burst(cx, cy, '#ff6bd6', 30, 1.6); shock(cx, cy, 1.2);
+  log(why);
+}
+function removeAction(p, k) {
+  const t = G.tiles[k]; spend(p, REMOVE_TIME);
+  removeTile(k, `${p.name}：${label(t.x, t.y)} の${TYPES[t.type].name}を取り除いた（時間${REMOVE_TIME}）`);
+}
+// 取り除けるか：入口・出口の道はふさがらない。敵がいるときは、敵の道が変わるだけなのでいつでもよい
+const canRemove = k => REMOVE && !!G.tiles[k];
+function upgradeTile(p, k) {
+  const t = G.tiles[k]; t.lv++; spend(p, TYPES[t.type].time); G.stats.upgrades++;
+  { const ut = G.stats.upgBy = G.stats.upgBy || {}; ut[t.type] = (ut[t.type] || 0) + 1; } p.resetUsed = false;
+  log(`${p.name}：${label(t.x, t.y)} の${TYPES[t.type].name}を強化（段階${t.lv}、時間${TYPES[t.type].time}）`);
+  burst(...center(t.x, t.y), '#eef3ff', 30, 1.6); sfx('upgrade', center(t.x, t.y)[0]);
+}
+function resolveGroup(p, x, y, onDone) {
+  const grp = groupOf(x, y);
+  const cos = [...new Set(grp.map(k => G.owner[k]).filter(o => o !== undefined))];
+  if (cos.length === 0) {
+    if (grp.length >= 2) {
+      const free = G.cos.filter(c => !c.active);
+      if (!free.length) return onDone();
+      const found = id => { foundCompany(p, id, grp); onDone(); };
+      if (p.cpu) found(free.map(c => ({ id:c.id, v:(p.cards.filter(x => x === c.id).length + p.shares[c.id]) * 10 + c.tier + Math.random() })).sort((a, b) => b.v - a.v)[0].id);
+      else requestChoice(p, 'found', { ids:free.map(c => c.id) }, found);
+      return;
+    }
+    return onDone();
+  }
+  if (cos.length === 1) { grp.forEach(k => G.owner[k] = cos[0]); return onDone(); }
+  // 合併：タイルの多い会社が残る（同じなら置いた人が選ぶ）
+  cos.sort((a, b) => coSize(b) - coSize(a));
+  const top = cos.filter(id => coSize(id) === coSize(cos[0]));
+  const doMerge = survivor => {
+    const absorbed = cos.filter(id => id !== survivor).sort((a, b) => coSize(b) - coSize(a));
+    mergeChain(p, survivor, absorbed, () => { grp.forEach(k => G.owner[k] = survivor); onDone(); });
+  };
+  if (top.length > 1 && !p.cpu) requestChoice(p, 'survivor', { ids:top }, doMerge); else doMerge(top[0]);
+}
+
+function foundCompany(p, id, grp) {
+  const co = G.cos[id]; co.active = true; co.kills = 0; co.founder = p.id; G.stats.founds = (G.stats.founds || 0) + 1;
+  grp.forEach(k => G.owner[k] = id);
+  log(`${p.name}：${co.name}を設立`);
+  const c = centroid(id); if (c) { shock(c[0], c[1], 1.8); burst(c[0], c[1], co.color, 50, 2); floatText(c[0], c[1], `${co.name} 設立`, co.color); } G.flash[id] = 1; sfx('found');
+}
+
+// 記録：誰に、何の種類で、いくら入ったか
+function earn(p, kind, v) { if (!p || !v) return; p.income = p.income || {}; p.income[kind] = (p.income[kind] || 0) + v; }
+function bonuses(co, m1 = 10, m2 = 5, kind = null, label = 'ボーナス') {
+  // 筆頭に株価の10倍、次点に5倍（決算の配当は4倍・2倍）。2人のときは「市場」がサイコロの目の枚数を持つ
+  const pr = price(co);
+  const holders = G.players.map(p => ({ p, n:p.shares[co.id] })).filter(h => h.n > 0);
+  if (NPLAYERS === 2) holders.push({ p:null, n:1 + rnd(6) });
+  if (!holders.length) return;
+  holders.sort((a, b) => b.n - a.n);
+  const pay = (list, amount) => { const each = Math.ceil(amount / list.length / 100) * 100; list.forEach(h => { if (h.p) { h.p.money += each; earn(h.p, kind || (G.over ? '終わりのボーナス' : '合併のボーナス'), each); } }); return each; };
+  const first = holders.filter(h => h.n === holders[0].n);
+  if (holders.length === 1 || first.length > 1) {
+    const each = pay(first, pr * (m1 + m2));
+    log(`${co.name}の${label}：${first.map(h => h.p ? h.p.name : '市場').join('・')} に各${each}`);
+    return;
+  }
+  pay(first, pr * m1);
+  const rest = holders.filter(h => h.n < holders[0].n);
+  const second = rest.filter(h => h.n === rest[0].n);
+  const each2 = pay(second, pr * m2);
+  log(`${co.name}の${label}：筆頭 ${first[0].p ? first[0].p.name : '市場'} に${pr * m1}、次点 ${second.map(h => h.p ? h.p.name : '市場').join('・')} に各${each2}`);
+}
+
+// 合併の株の扱いを、組み合わせを比べて決める（?disp=mix で偶数番だけ、?disp=0 でなし。比べる用）
+// 12回の比べ（2026-11-07）で強くならなかった（平均順位 2.64 対 2.36）ので、ふつうは使わない。?disp=1 で全員、?disp=mix で偶数番だけ
+const dispSmart = p => p.smart && (PARAMS.get('disp') === 'mix' ? p.id % 2 === 0 : PARAMS.get('disp') === '1');
+function mergeChain(placer, survivor, absorbed, done) {
+  const sv = G.cos[survivor];
+  const queue = [...absorbed];
+  const step = () => {
+    if (!queue.length) return done();
+    const id = queue.shift(), co = G.cos[id];
+    log(`合併：${sv.name}が${co.name}を吸収`); G.stats.merges++;
+    const moneyBefore = G.players.map(q => q.money), sizes = [coSize(id), coSize(survivor)];
+    { const c = centroid(id); if (c) { shock(c[0], c[1], 3.5); burst(c[0], c[1], co.color, 90, 2.6); floatText(c[0], c[1], `合併：${sv.name}が${co.name}を吸収`, sv.color); } G.flash[id] = 1.4; G.flash[survivor] = 1.4; announce('合併', `${sv.name} ← ${co.name}`); sfx('merge'); shake(12); }
+    bonuses(co);
+    // 株の扱い：置いた人から順に
+    const order = [...G.players.slice(placer.id), ...G.players.slice(0, placer.id)].filter(p => p.shares[id] > 0);
+    const pr = price(co);
+    const next = () => {
+      if (!order.length) {
+        (G.stats.mergeInfo = G.stats.mergeInfo || []).push({ wave:G.wave, placer:placer.id, absorbed:id, survivor, size:sizes[0], svSize:sizes[1], price:pr,
+          gain:G.players.map((q, i) => q.money - moneyBefore[i]), founder:co.founder });
+        sv.kills += co.kills; co.active = false; co.kills = 0;
+        // 吸収された会社の手札の株は、そのまま手札に残す（その会社がまた設立されたら公開できる。ユーザー）
+        Object.keys(G.owner).forEach(k => { if (G.owner[k] === id) G.owner[k] = survivor; });
+        return step();
+      }
+      const p = order.shift();
+      // アクワイアどおり：売る枚数と、交換する組（2枚→1枚）の数を決め、残りは持ち続ける
+      const apply = ({ sell, pairs }) => {
+        let got = 0;
+        while (got < pairs && takeCard(survivor)) got++;
+        p.shares[id] -= got * 2; returnCards(id, got * 2); p.shares[survivor] += got;
+        if (sell) { p.money += sell * pr; earn(p, '合併の売却', sell * pr); p.shares[id] -= sell; returnCards(id, sell); (G.mergeLog = G.mergeLog || []).push({ wave:G.wave, pid:p.id, id, n:sell, pr }); }
+        log(`${p.name}：${co.name}の株を、売る${sell}枚・交換${got * 2}枚（${sv.name}を${got}枚）・持ち続ける${p.shares[id]}枚`);
+        next();
+      };
+      const n = p.shares[id], maxPairs = Math.min(Math.floor(n / 2), availOf(survivor));
+      // CPU：残る会社の株価が、2枚を売った額より高ければ交換し、残りは売る
+      if (p.cpu) {
+        let pairs = price(sv) > pr * 2 ? maxPairs : Math.floor(maxPairs / 2);
+        if (dispSmart(p)) {
+          // 売る・交換するの組み合わせを全部比べる：交換した株は、残る会社のこれからの株価と、筆頭・次点に近づく分の値打ち
+          const fp = futurePrice(sv), base = bonusShareBase(p, survivor, p.shares[survivor]);
+          let best = -1e9;
+          for (let k = 0; k <= maxPairs; k++) {
+            const v = (n - 2 * k) * pr + k * fp + (bonusShareBase(p, survivor, p.shares[survivor] + k) - base) * fp;
+            if (v > best) { best = v; pairs = k; }
+          }
+        }
+        apply({ pairs, sell:n - pairs * 2 });
+      }
+      else requestChoice(p, 'dispose', { co:id, sv:survivor, pr, n, maxPairs }, v => {
+        // 届いた数が決まりに合うかを確かめる（別の端末から来ることがあるため）
+        const sell = Math.max(0, Math.floor(v.sell || 0)), pairs = Math.max(0, Math.min(maxPairs, Math.floor(v.pairs || 0)));
+        apply(sell + pairs * 2 <= n ? { sell, pairs } : { sell:0, pairs:0 });
+      });
+    };
+    next();
+  };
+  step();
+}
+
+// ===== 株：置く・強化したら1枚手札に入れる。公開するときにお金を払う（ユニオン・パシフィック式） =====
+function takeShare(p, mi) {
+  // mi が -1 なら山札の一番上、-2 なら投資信託
+  let id;
+  if (mi === -2) { if (G.centralLeft <= 0) return; G.centralLeft--; id = CENTRAL; }
+  else if (mi < 0) id = drawDeck(); else { id = G.market[mi]; G.market.splice(mi, 1); refillMarket(); }
+  if (id === undefined) return;
+  p.cards.push(id); G.stats.taken = (G.stats.taken || 0) + 1;
+  log(`${p.name}：株を1枚手札に入れた` + (p.cpu ? '' : `（${coOf(id).name}）`));
+}
+// 株を取ったあと、手札の好きな1枚を差し出して、投資信託を1口受け取れる（現物拠出）。
+// 差し出した株が支払いのかわりなので、お金は払わず、そのまま公開された状態になる。出した株は伏せたままゲームから外す
+function exchangeCentral(p, id) {
+  if (G.centralLeft <= 0 || id === CENTRAL) return;
+  p.cards.splice(p.cards.indexOf(id), 1); p.shares[CENTRAL]++; G.centralLeft--; G.stats.exchanged = (G.stats.exchanged || 0) + 1;
+  log(`${p.name}：手札の株1枚を差し出して、投資信託を1口受け取った（現物拠出）`);
+}
+const canExchange = p => G.centralLeft > 0 && p.cards.some(c => c !== CENTRAL);
+// 場に、今ある会社の株が1枚もないときは、1回だけ並べ直せる
+function canReset(p) { return !p.resetUsed && G.market.length > 0 && !G.market.some(id => G.cos[id].active) && G.deck.length > 0; }
+// 置く・強化のあとに、株を1枚手札に入れる。人のときは場から選んでもらう
+// 株の手札の上限（ユーザーの案）。株を手札に入れたあと、超えた分を捨てる（山札に戻して混ぜる。投資信託は残り口数に戻す）。
+// 8枚まで（?cardmax= で変えられる。0 で上限なし）
+const CARD_MAX = PARAMS.has('cardmax') ? +PARAMS.get('cardmax') : 8;
+function discardCard(p, id) {
+  p.cards.splice(p.cards.indexOf(id), 1);
+  if (id === CENTRAL) G.centralLeft++; else (G.discards = G.discards || []).push(id);
+  G.stats.discarded = (G.stats.discarded || 0) + 1;
+  log(`${p.name}：手札の株が多すぎるので1枚捨てた` + (p.cpu ? '' : `（${coOf(id).name}）`));
+}
+function discardStep(p, done) {
+  if (!CARD_MAX || p.cards.length <= CARD_MAX) return done();
+  if (p.cpu) {
+    while (p.cards.length > CARD_MAX) {
+      const worst = [...new Set(p.cards)].map(id => ({ id, v:cardValue(p, id) })).sort((a, b) => a.v - b.v)[0];
+      discardCard(p, worst.id);
+    }
+    return done();
+  }
+  G.discarding = { p, done }; renderAll();
+}
+function finishDiscard(id) {
+  const ds = G.discarding; if (!ds) return;
+  discardCard(ds.p, id);
+  if (ds.p.cards.length > CARD_MAX) { renderAll(); return; }
+  G.discarding = null; ds.done();
+}
+function takeStep(p, done0) {
+  const done = () => discardStep(p, done0);
+  if (!G.market.length && !G.deck.length && !(G.discards || []).length && G.centralLeft <= 0) return done();
+  if (p.cpu) { cpuTake(p); cpuExchange(p); return done(); }
+  G.taking = { p, done }; renderAll();
+  if (p === me()) document.getElementById('market').scrollIntoView({ block:'nearest', behavior:'smooth' });
+}
+function finishTake(mi) {
+  const tk = G.taking; if (!tk) return;
+  G.taking = null; takeShare(tk.p, mi);
+  if (canExchange(tk.p)) { G.exchanging = tk; renderAll(); return; }
+  tk.done();
+}
+function finishExchange(id) {
+  const ex = G.exchanging; if (!ex) return;
+  G.exchanging = null; if (id !== null) exchangeCentral(ex.p, id); ex.done();
+}
+const canReveal = (p, id, n = 1) => !waveActive() && coOf(id).active && p.cards.filter(c => c === id).length >= n && p.money >= priceOf(id) * n;
+function revealShares(p, id, n) {
+  const co = coOf(id), pr = priceOf(id);
+  for (let i = 0; i < n; i++) p.cards.splice(p.cards.indexOf(id), 1);
+  p.shares[id] += n; p.money -= pr * n; G.stats.bought += n; p.resetUsed = false; earn(p, id === CENTRAL ? '払った（投資信託）' : '払った（会社）', -pr * n);
+  (G.revLog = G.revLog || []).push({ wave:G.wave, pid:p.id, id, n, pr, after:p.shares[id] });
+  if (!G.pairing) spend(p, revealTime(n)); sfx('coin');
+  log(`${p.name}：${co.name}の株を${n}枚公開（${pr * n}払った${G.pairing ? "" : `、時間${revealTime(n)}`}）`);
+}
+// 2社の株を1枚ずつ公開する（ユニオン・パシフィックどおり。1回の行動として、時間は2）
+const canRevealPair = (p, a, b) => a !== b && canReveal(p, a, 1) && canReveal(p, b, 1) && p.money >= priceOf(a) + priceOf(b);
+// 公開の時間：1回の公開につき1（何枚出しても、2社に1枚ずつでも同じ。ユニオン・パシフィックの「1回の手番で何枚でも」にそろえる。
+// 1枚につき1だと、まとめて出す意味がなかった）。?revtime=card で前の「1枚につき1」、?revtime=2 などで変えて比べる
+const REV_TIME = PARAMS.get('revtime') === 'card' ? null : (PARAMS.get('revtime') || '1');
+const revealTime = n => REV_TIME ? +REV_TIME : n;
+function revealPair(p, a, b) {
+  G.pairing = true; revealShares(p, a, 1); revealShares(p, b, 1); G.pairing = false;
+  spend(p, REV_TIME ? +REV_TIME : 2);
+}
+
+// ===== CPU =====
+// ===== CPU =====
+// 守りの強さ：今の敵の通り道の各マスについて、そのマスを射程に入れているタワーの火力を足し合わせる
+function towerPower(type, lv, co) {
+  const ty = TYPES[type], up = (lv || 1) - 1;
+  if (!ty.range) return { range:0, dps:0, slow:0 };
+  const range = ty.range + .4 * up + (hasPower(co, 3) ? PW.range : 0);
+  if (type === 'fw') return { range, dps:0, slow:Math.min(.75, ty.slow + .12 * up) };
+  // 能力の見積もり：連射はそのまま、拡散・連携・貫通はおおよそ2割増しとして読む
+  const pm = hasPower(co, 0) ? 1 / PW.rapid : hasPower(co, 1) || hasPower(co, 2) || hasPower(co, 5) ? 1.2 : 1;
+  const dps = ty.dmg * (1 + .6 * up) / ty.cd * (type === 'burst' ? 2 : 1) * pm;
+  return { range, dps, slow:0 };
+}
+function pathFrom(dist) {
+  const out = [];
+  for (const [ex, ey] of ENTRANCES) {
+    let cur = [ex, ey], guard = 0;
+    while (cur && guard++ < 300) {
+      out.push(cur);
+      const d = dist[key(...cur)]; if (!d) break;
+      cur = neighbors(...cur).find(([a, b]) => dist[key(a, b)] === d - 1);
+    }
+  }
+  return out;
+}
+function defense(tiles, dist) {
+  dist = dist || distanceField(tiles);
+  const towers = Object.values(tiles).filter(t => TYPES[t.type].range).map(t => ({ ...towerPower(t.type, t.lv, G.owner[key(t.x, t.y)]), c:center(t.x, t.y) }));
+  // 入口ごとの道で守りの強さを測り、いちばん手薄な道で見る（入口の数を掛けて、そろっていれば合計と同じ）。
+  // 合計で見ると、片側が厚ければもう片側が薄くても安全と思い込み、はさみうちで手薄な側から崩れていた
+  const per = ENTRANCES.map(([ex, ey]) => {
+    let sum = 0, cur = [ex, ey], guard = 0;
+    while (cur && guard++ < 300) {
+      const c = center(...cur); let dps = 0, slow = 0;
+      for (const t of towers) if (cellDist(...t.c, ...c) <= t.range) { dps += t.dps; slow = Math.max(slow, t.slow); }
+      sum += dps / (1 - slow);   // 遅くなると、そのマスにいる時間が延びる
+      const d = dist[key(...cur)]; if (!d) break;
+      cur = neighbors(...cur).find(([a, b]) => dist[key(a, b)] === d - 1);
+    }
+    return sum;
+  });
+  let total = Math.min(...per) * per.length;
+  // ハニーポット：寄せた敵は、ハニーポットのまわりのタワーの前を余分に通る
+  for (const lu of Object.values(tiles).filter(t => t.type === 'lure')) {
+    const c = center(lu.x, lu.y); let dps = 0;
+    for (const t of towers) if (cellDist(...t.c, ...c) <= t.range + 1) dps += t.dps;
+    total += dps * (TYPES.lure.cap + (lu.lv || 1) - 1) * (TYPES.lure.chance + .1 * ((lu.lv || 1) - 1)) * 2;
+  }
+  return total;   // 敵1体が通り道を進む間に受ける火力のおおよそ（× 1マスを進む秒数）
+}
+// 危なさ：次の波の敵1体の平均の体力と、守りが与えられるダメージを比べる。1を超えると危ない
+function danger(def) {
+  const n = Math.max(1, waveActive() ? G.wave : G.wave + 1);
+  const hp = (6 + effWave(n) * HP_GROWTH) * 1.15, secPerCell = 1 / 1.4, count = 6 + 2 * effWave(n);
+  const per = def * secPerCell / Math.max(1, count * .25);   // 火力は、同時に射程に入る敵どうしで分け合う
+  const lifeFactor = Math.sqrt(LIVES / Math.max(1, G.lives));
+  return hp / Math.max(1, per) * lifeFactor * G.calib;   // calib：前の波で敵が届いたら慎重になる
+}
+// 迷路を作る CPU の守りの見積もり：次の波の敵が入口から1マスずつ進むのを再現し、出口に着いたときに残っている体力の割合から、
+// 次の波で減るライフの見込みを出す。道が長く、タワーの前を何度も通るほど、敵は削られる（折り返しの迷路が得と見える）。
+// ?cpu=leak で使う（試し中。六角形の盤ではタイル1枚で道がほぼ延びず、効き目を確かめられていないので、ふつうは前の見積もり）
+const LEAK = PARAMS.get('cpu') === 'leak';
+const ENEMY_MIX = [[.6, 2.0, .3, 1], [1, 1, .5, 1], [2.6, .7, .2, 2]];   // 速い・普通・硬い：体力の倍率・速さ・割合・減るライフ
+// 2つ先の波で見る（タイルは盤に残るので、先の波に備えて道を作らせる）。ボスが来る波はボスも入れる。
+// 倒しきれるかどうかだけでなく、体力の1.5倍のダメージを与えられるかで余裕を見る（ぎりぎりの守りも危ないとみなす）
+function leakEstimate(tiles, dist) {
+  const n = Math.min(WAVES, Math.max(1, waveActive() ? G.wave : G.wave + 1) + 2), base = 6 + effWave(n) * HP_GROWTH, count = 6 + 2 * effWave(n), crowd = Math.max(1, count * CROWD), secPerCell = 1 / 1.4;
+  const boss = isBoss(n, (WAVE_STYLE[COURSE] || WAVE_STYLE[0]).boss);
+  const mix = boss ? [...ENEMY_MIX, [ENEMY.big.hp, ENEMY.big.speed, 1 / count, ENEMY.big.life]] : ENEMY_MIX;
+  const towers = Object.values(tiles).filter(t => TYPES[t.type].range && t.type !== 'lure').map(t => ({ ...towerPower(t.type, t.lv, G.owner[key(t.x, t.y)]), c:center(t.x, t.y) }));
+  let lost = 0;
+  for (const [ex, ey] of ENTRANCES) {
+    const cells = []; let cur = [ex, ey], guard = 0;
+    while (cur && guard++ < 300) {
+      const c = center(...cur); let dps = 0, slow = 0;
+      for (const t of towers) if (cellDist(...t.c, ...c) <= t.range) { dps += t.dps; slow = Math.max(slow, t.slow); }
+      cells.push({ dps:dps / crowd, slow, fast:SPECIAL[key(...cur)] === 'fast', heal:SPECIAL[key(...cur)] === 'heal' });
+      const d = dist[key(...cur)]; if (!d) break;
+      cur = neighbors(...cur).find(([a, b]) => dist[key(a, b)] === d - 1);
+    }
+    for (const [mult, speed, w, life] of mix) {
+      const hp0 = base * mult; let dmg = 0;
+      for (const c of cells) {
+        const time = secPerCell / speed / (c.fast ? 1.6 : 1) / (1 - c.slow);
+        dmg += c.dps * time - (c.heal ? 1.5 * time : 0);
+      }
+      lost += w * life * Math.max(0, 1.5 - dmg / hp0) / 1.5;   // 体力の1.5倍に足りない割合（0なら余裕をもって倒せる）
+    }
+  }
+  return lost / ENTRANCES.length * count;   // 次の波で減るライフの見込み
+}
+// 減るライフの見込み（余裕を見た多めの数）を、危なさに直す。?leakdiv= で割る数を変えて試す
+const LEAK_DIV = +(PARAMS.get('leakdiv') || 1);
+const leakDanger = E => E * G.calib / Math.max(1, G.lives * LEAK_DIV);
+const estimate = (tiles, dist) => LEAK ? leakEstimate(tiles, dist) : defense(tiles, dist);
+const dangerOf = v => LEAK ? leakDanger(v) : danger(v);
+const defGain = (v0, v1) => LEAK ? (v0 - v1) * 150 : (v1 - v0) * .5;   // 守りがどれだけ良くなったか（得点の単位にそろえる）
+// 負ける見込み。0% や 100% に張りつくと、どの手も差がなく見えてしまうので、なめらかな曲線にする
+const loseChance = u => 1 / (1 + Math.exp(-(u - 1) * 3));
+// 会社の、終わりまでに見込める株価
+function futurePrice(co) {
+  const rate = co.kills / Math.max(1, G.wave);
+  const kills = co.kills + rate * Math.max(0, WAVES - G.wave);
+  let b = 0; KILL_BANDS.forEach((k, i) => { if (kills >= k) b = i; });
+  return BASE_PRICE[b] + co.tier * 100;
+}
+// ボーナスのうち、自分が受け取る見込み（公開した株の枚数で）
+const divLeft = () => DIVIDEND_WAVES.filter(w => w > G.wave && w < WAVES).length;
+function bonusShare(p, id, mine) {
+  return bonusShareBase(p, id, mine) * (1 + .4 * divLeft());
+}
+function bonusShareBase(p, id, mine) {
+  const counts = G.players.map(q => q === p ? mine : q.shares[id]);
+  if (mine <= 0) return 0;
+  const sorted = [...counts].sort((a, b) => b - a), first = sorted[0];
+  const nFirst = counts.filter(c => c === first).length;
+  if (mine === first) return nFirst > 1 || sorted.filter(c => c > 0).length === 1 ? 15 / nFirst : 10;
+  const second = sorted.find(c => c < first);
+  if (mine === second) return 5 / counts.filter(c => c === second).length;
+  return 0;
+}
+// 終わりまで守りきったら手に入る見込み（お金＋公開した株の値打ち＋ボーナス）。全員負けたら全部なくなる
+function wealth(p) {
+  // 投資信託のこれからの配当も、守りきれなければなくなるので含める
+  return p.money + G.cos.reduce((s2, co) => s2 + (co.active ? (p.shares[co.id] + bonusShare(p, co.id, p.shares[co.id])) * futurePrice(co) : 0), 0)
+    + p.shares[CENTRAL] * futureTrust();
+}
+// 投資信託の、終わりに売るときの値段の見込み（各社の見込みの株価を、今の公開枚数で重みづけ）
+function futureTrust() {
+  const act = G.cos.filter(c => c.active);
+  if (!act.length) return centralPrice();
+  const w = act.map(c => G.players.reduce((s2, q) => s2 + q.shares[c.id], 0) || 1), sw = w.reduce((a, b) => a + b, 0);
+  return act.reduce((s2, c, i) => s2 + futurePrice(c) * w[i], 0) / sw;
+}
+function cardValue(p, id) {
+  if (id === CENTRAL) return Math.max(100, futureTrust() - centralPrice() * .5);
+  const co = G.cos[id];
+  if (!co.active) return 150;
+  const fp = futurePrice(co), mine = p.shares[id] + p.cards.filter(c => c === id).length;
+  return (fp - price(co) * .5) + (bonusShare(p, id, mine + 1) - bonusShare(p, id, mine)) * fp * .5;
+}
+function cpuTake(p) {
+  if (canReset(p)) { resetMarket(); p.resetUsed = true; }
+  let best = { mi:-1, v:200 + Math.random() * 50 };  // 山札の一番上
+  G.market.forEach((id, mi) => { const v = cardValue(p, id) + Math.random() * 30; if (v > best.v) best = { mi, v }; });
+  if (G.centralLeft > 0) { const v = cardValue(p, CENTRAL) + Math.random() * 30; if (v > best.v) best = { mi:-2, v }; }
+  takeShare(p, best.mi);
+}
+// いちばん値打ちの低い手札の株が、投資信託より安ければ交換する
+function cpuExchange(p) {
+  if (!canExchange(p)) return;
+  const worst = [...new Set(p.cards.filter(c => c !== CENTRAL))].map(id => ({ id, v:cardValue(p, id) })).sort((a, b) => a.v - b.v)[0];
+  // 受け取る1口は公開済みで、終わりに売れる。差し出す株の値打ちより高ければ交換する
+  if (worst && futureTrust() > worst.v + 100) exchangeCentral(p, worst.id);
+}
+// 合併の見込み：このタイルで会社どうしがつながるなら、吸収される会社のボーナスのうち自分の取り分から、
+// ほかの人の取り分の平均の半分を引く（人を儲けさせるつなぎ方は控える）
+const MERGE_WAIT = PARAMS.get('mergewait') !== '0';
+function mergeGain(p, t) {
+  const ids = [...new Set(neighbors(t.x, t.y).map(([a, b]) => G.owner[key(a, b)]).filter(v => v !== undefined))];
+  if (ids.length < 2) return 0;
+  ids.sort((a, b) => coSize(b) - coSize(a));
+  let v = 0;
+  for (const id of ids.slice(1)) {
+    const pr = price(G.cos[id]);
+    const mine = bonusShareBase(p, id, p.shares[id]) * pr;
+    const others = G.players.filter(q => q !== p).reduce((s2, q) => s2 + bonusShareBase(q, id, q.shares[id]) * pr, 0) / Math.max(1, G.players.length - 1);
+    // 待つ得：吸収される会社の株価がこれから上がりそうなら、今つなげると、その分のボーナスを取り逃す（ここぞで合併させる）。?mergewait=0 で考えない
+    const wait = MERGE_WAIT ? bonusShareBase(p, id, p.shares[id]) * Math.max(0, futurePrice(G.cos[id]) - pr) * .7 : 0;
+    v += mine - others * .5 - wait;
+  }
+  return v;
+}
+// 経路で株価を動かす打ち方（比べるための切り替え）。?route=1：偶数番（1・3番目）の CPU だけ、?route=all：全員
+// 置いたあとの道で、各社がこれから倒す数の取り分を見積もり、自分が株を持つ会社の取り分が増える置き方・強化ほど得と考える
+const ROUTE = PARAMS.get('route');
+// CPU の強さ：ふつうの CPU（p.smart）は、経路で株価を動かし、迷路の設計図どおりに置く。よわい CPU は素朴な打ち方。
+// ?route=all / 1 / 0 は比べる用（全員・偶数番だけ・なし）
+const routeOn = p => ROUTE === 'all' ? true : ROUTE === '1' ? p.id % 2 === 0 : ROUTE === '0' ? false : !!p.smart;
+const CROWD = +(PARAMS.get('crowd') || .25);
+function coShares(tiles, dist, ownerOf) {
+  // 敵が入口から1マスずつ進むのを簡単に再現し、体力が尽きたマスでとどめを刺した会社に1体を入れる。
+  // そのマスでファイアウォールに遅くされていれば、決まりどおりファイアウォールの会社と半分ずつ。
+  // 体力は次の波の「速い・普通・硬い」の3通り（ハニーポットの寄り道は入れていない）
+  // 敵は何体も同時に来るので、1体が受ける火力は同時に射程にいる数で割る（CROWD 体ぶん）
+  const n = Math.max(1, waveActive() ? G.wave : G.wave + 1), base = (6 + effWave(n) * HP_GROWTH), secPerCell = 1 / 1.4, crowd = Math.max(1, (6 + 2 * effWave(n)) * CROWD);
+  const towers = Object.entries(tiles).filter(([, t]) => TYPES[t.type].range && t.type !== 'lure').map(([k, t]) => ({ ...towerPower(t.type, t.lv, ownerOf(k)), c:center(t.x, t.y), co:ownerOf(k) ?? -1 }));
+  const by = {}; let count = 0;
+  for (const [ex, ey] of ENTRANCES) {
+    const path = []; let cur = [ex, ey], guard = 0;
+    while (cur && guard++ < 300) { path.push(cur); const d = dist[key(...cur)]; if (!d) break; cur = neighbors(...cur).find(([a, b]) => dist[key(a, b)] === d - 1); }
+    const cells = path.map(([x, y]) => {
+      const c = center(x, y), hit = [], slows = [];
+      for (const t of towers) if (cellDist(...t.c, ...c) <= t.range) { if (t.slow) slows.push(t); else hit.push(t); }
+      const sl = slows.sort((a, b) => b.slow - a.slow)[0];
+      return { hit, fwCo:sl ? sl.co : undefined, time:secPerCell * (SPECIAL[key(x, y)] === 'fast' ? 1 / 1.6 : 1) / (1 - (sl ? sl.slow : 0)) };
+    });
+    for (const [mult, w] of [[.6, .3], [1, .5], [2.6, .2]]) {
+      let hp = base * mult; count += w;
+      for (const cell of cells) {
+        const dmg = cell.hit.reduce((s2, t) => s2 + t.dps * cell.time, 0) / crowd;
+        if (dmg >= hp && dmg > 0) {
+          for (const t of cell.hit) {
+            const part = w * t.dps * cell.time / crowd / dmg;   // このマスでの手柄を、与えた量で分ける
+            if (cell.fwCo !== undefined && cell.fwCo !== t.co) { by[t.co] = (by[t.co] || 0) + part / 2; by[cell.fwCo] = (by[cell.fwCo] || 0) + part / 2; }
+            else by[t.co] = (by[t.co] || 0) + part;
+          }
+          hp = 0; break;
+        }
+        hp -= dmg;
+      }
+    }
+  }
+  for (const k in by) by[k] /= count || 1;
+  return by;
+}
+// その会社の倒した数が1増えると、自分の持ち分の値打ちがいくら増えるか（株価の区切りまでの残りから）
+const RIVAL = PARAMS.get('rival') !== '0';
+function perKillValue(p, id) {
+  const co = G.cos[id]; if (!co || !co.active) return 0;
+  let b = 0; KILL_BANDS.forEach((k, i) => { if (co.kills >= k) b = i; });
+  if (KILL_BANDS[b + 1] === undefined) return 0;
+  const slope = (BASE_PRICE[b + 1] - BASE_PRICE[b]) / (KILL_BANDS[b + 1] - KILL_BANDS[b]) * (hasPower(id, 6) ? PW.fame : 1);
+  const mine = p.shares[id] + .5 * p.cards.filter(c => c === id).length + bonusShare(p, id, p.shares[id]);
+  if (!RIVAL) return slope * mine;
+  // ほかの人の持ち分も比べる：ライバルが筆頭の会社が倒すほど、相手が得をする（?rival=0 で前の打ち方）
+  const others = G.players.filter(q => q !== p).map(q => q.shares[id] + bonusShare(q, id, q.shares[id]));
+  return slope * (mine - Math.max(0, ...others) * .8);
+}
+function routeValue(p, before, after) {
+  const K = Math.max(0, WAVES - G.wave) * (8 + 2 * G.wave) * .9;   // これから倒す数のおおよそ
+  let v = 0;
+  for (const id of new Set([...Object.keys(before), ...Object.keys(after)])) if (id !== '-1') v += perKillValue(p, +id) * K * ((after[id] || 0) - (before[id] || 0));
+  return v;
+}
+// 置こうとしているタイルが、どの会社に入りそうか（となりの会社。複数なら大きい方）
+function guessOwner(x, y) {
+  const ids = [...new Set(neighbors(x, y).map(([a, b]) => G.owner[key(a, b)]).filter(v => v !== undefined))];
+  return ids.sort((a, b) => coSize(b) - coSize(a))[0];
+}
+// CPU が道を長くすることを得と考えるか（比べるための切り替え。?maze=1）
+const MAZE = PARAMS.get('maze') === '1';
+// 迷路の設計図（?maze=plan）：人が迷路を作るときのように、蛇行する壁の形を先に決めておき、CPU はそのマスに置く手を高く見る。
+// 入口と出口の間に縦の壁を3本、すき間を上下互い違いに（入口・出口が左右にあるコース向け）
+const MAZE_PLAN = PARAMS.get('maze') === 'plan';   // 全員に設計図を使わせる（比べる用）。ふつうの CPU はこれがなくても使う
+// 迷路の設計図は、強さによらずどの CPU も使う（よわい CPU は株の打ち方だけ素朴にする。守りまで弱いと、いっしょに守る人も負けるため）。?maze=0 で使わない
+const planOn = p => PARAMS.get('maze') !== '0';
+let PLAN = new Set();
+// 設計図の候補：壁の列（縦断は行）を3本、3つおきに。すき間は上下（左右）互い違いで、最初のすき間がどちら側かの2通り
+function planCells(lines, start) {
+  const out = [], vert = COURSE === 2, len = vert ? COLS : ROWS;
+  lines.forEach((ln, i) => { const gap = (i % 2 === 0) === (start === 0) ? 0 : len - 1; for (let j = 0; j < len; j++) out.push({ k:vert ? key(j, ln) : key(ln, j), gap:j === gap }); });
+  return out;
+}
+// 盤に合う設計図を選ぶ：すでに置かれたタイルを多く使え、建てられないマスで壁が途切れず、すき間がふさがっていないもの
+function bestPlan() {
+  const lim = COURSE === 2 ? ROWS : COLS;
+  let best = null;
+  for (let a = 1; a + 6 < lim - 1; a++) for (const start of [0, 1]) {
+    const cells = planCells([a, a + 3, a + 6], start);
+    let sc = 0;
+    for (const c of cells) {
+      const [x, y] = c.k.split(',').map(Number);
+      if (c.gap) { if (G.tiles[c.k]) sc -= 5; continue; }
+      if (G.tiles[c.k]) sc += 1; else if (!buildable(x, y)) sc -= 2;
+    }
+    if (!best || sc > best.sc) best = { sc, cells, key:a + ',' + start };
+  }
+  return best;
+}
+function bestPlanScore(k) {
+  if (!k) return -1e9;
+  const [a, start] = k.split(',').map(Number); let sc = 0;
+  for (const c of planCells([a, a + 3, a + 6], start)) { const [x, y] = c.k.split(',').map(Number); if (c.gap) { if (G.tiles[c.k]) sc -= 5; continue; } if (G.tiles[c.k]) sc += 1; else if (!buildable(x, y)) sc -= 2; }
+  return sc;
+}
+function makePlan() {
+  PLAN = new Set();
+  if (PARAMS.get('maze') === '0') return;
+  // 盤に合わせて設計図を選ぶ（?replan=0 で前の決まった設計図）。盤が広がるときは決まった設計図（境目を避ける）
+  if (!EXPAND && PARAMS.get('replan') !== '0') {
+    const b = bestPlan(); G.planKey = b.key; G.planScore = b.sc;
+    b.cells.forEach(c => { if (!c.gap) PLAN.add(c.k); });
+    return;
+  }
+  // 縦断（上から下へ）は横の壁、ほかは縦の壁
+  if (COURSE === 2) (EXPAND ? [[9, 11], [5, 0], [1, 11]] : [[3, 11], [6, 0], [9, 11]]).forEach(([y, gap]) => { for (let x = 0; x < COLS; x++) if (x !== gap) PLAN.add(key(x, y)); });
+  else (EXPAND ? [[8, 12], [4, 0], [1, 12]] : [[2, 12], [5, 0], [8, 12]]).forEach(([x, gap]) => { for (let y = 0; y < ROWS; y++) if (y !== gap) PLAN.add(key(x, y)); });   // 盤が広がるときは、境目の列（2・5列目）を避ける
+}
+const PLAN_BONUS = +(PARAMS.get('planbonus') || 600);
+// 賢い株の判断（試し中。ふつうは使わない。?smart2=mix で偶数番だけ、?smart2=1 で全員。?s2=settle / reserve で片方だけ）
+// 12回の比べ（2026-11-07）では、両方入れると弱くなった（平均順位 2.89 対 2.11）
+const smart2On = p => p.smart && (PARAMS.get('smart2') === 'mix' ? p.id % 2 === 0 : PARAMS.get('smart2') === '1');
+const S2 = PARAMS.get('s2') || 'both';
+// 決算の前に筆頭・次点を取りにいく：次の波のあとが決算なら、公開で順位が上がる分の配当をそのまま得として見る
+function settleGain(p, id, n) {
+  if (!smart2On(p) || S2 === 'reserve' || id === CENTRAL) return 0;
+  const next = waveActive() ? G.wave : G.wave + 1;
+  if (!DIVIDEND_WAVES.includes(next)) return 0;
+  const co = G.cos[id]; if (!co.active) return 0;
+  return (bonusShareBase(p, id, p.shares[id] + n) - bonusShareBase(p, id, p.shares[id])) * price(co) * DIV_M1 / 10;
+}
+// お金を残しておく：自分が筆頭か次点の会社の株価の2枚分は、守りに使えるように手元に置いておきたい。下回る分を損と見る
+function reserveCost(p, cost) {
+  if (!smart2On(p) || S2 === 'settle') return 0;
+  const keep = G.cos.filter(c => c.active && bonusShareBase(p, c.id, p.shares[c.id]) > 0).reduce((a, c) => Math.max(a, price(c) * 2), 0);
+  return Math.max(0, keep - (p.money - cost)) * .5;
+}
+function cpuAct(p) {
+  replaceDead(p);
+  const dist0 = G.dist, def0 = estimate(G.tiles, dist0), u0 = dangerOf(def0), L0 = loseChance(u0), myW = Math.max(3000, wealth(p));
+  const bestCard = Math.max(200, ...G.market.map(id => cardValue(p, id)));
+  const opts = [];
+  // 置く：守りの増え方（危なさが下がる分）と、株を持つ会社が育つ分と、手札に入る株の値打ち
+  const len0 = pathFrom(dist0).length, RT = routeOn(p), sh0 = RT ? coShares(G.tiles, dist0, k => G.owner[k]) : null;
+  p.hand.forEach((t0, i) => {
+    const cp = canPlace(t0); if (!cp.ok) return;
+    let spots = cp.spots;
+    if (AREA_MODE && spots.length > 10) {
+      const onPath = new Set(); for (const [x, y] of pathFrom(dist0)) { onPath.add(key(x, y)); for (const [a, b] of neighbors(x, y)) onPath.add(key(a, b)); }
+      const inPlan = spots.filter(s2 => PLAN.has(key(s2.x, s2.y)));
+      const near = spots.filter(s2 => onPath.has(key(s2.x, s2.y)) && !PLAN.has(key(s2.x, s2.y))), rest = shuffle(spots.filter(s2 => !onPath.has(key(s2.x, s2.y)) && !PLAN.has(key(s2.x, s2.y))));
+      spots = PARAMS.get('fast') === '0' ? [...shuffle(inPlan).slice(0, 6), ...shuffle(near).slice(0, 6), ...rest.slice(0, 3)] : [...shuffle(inPlan).slice(0, 4), ...shuffle(near).slice(0, 4), ...rest.slice(0, 2)];
+    }
+    for (const sp of spots) {
+    const t = { ...t0, x:sp.x, y:sp.y };
+    const k = key(t.x, t.y), after = { ...G.tiles, [k]:{ type:t.type, x:t.x, y:t.y, lv:1 } };
+    const dist1 = distanceField(after), def1 = estimate(after, dist1);
+    // 道が延びると、敵がタワーの射程にいる時間が延び、あとから置くタワーも当てやすくなる。延びた割合だけ守りが強いとみなす
+    const len1 = pathFrom(dist1).length, defM = MAZE && !LEAK ? def1 * Math.max(1, len1 / len0) + Math.max(0, len1 - len0) * 2 : def1;
+    const safety = (loseChance(u0) - loseChance(dangerOf(defM))) * myW;
+    const stakeIds = new Set(neighbors(t.x, t.y).map(([a, b]) => G.owner[key(a, b)]).filter(v => v !== undefined));
+    const stake = [...stakeIds].reduce((s2, id) => s2 + (p.shares[id] + p.cards.filter(c => c === id).length) * 40, 0);
+    const growth = defGain(def0, def1) * (stake ? 1 : .2);
+    const gco = RT ? guessOwner(t.x, t.y) : undefined, rv = RT ? routeValue(p, sh0, coShares(after, dist1, kk => kk === k ? gco : G.owner[kk])) : 0;
+    const plan = planOn(p) && PLAN.has(k) ? PLAN_BONUS : 0;   // 設計図のマスなら高く見る
+    opts.push({ v:safety + (1 - L0) * (growth + stake + bestCard + mergeGain(p, t) + rv) + plan, time:TYPES[t.type].time, run:() => placeTile(p, i, () => takeStep(p, afterAction), [t.x, t.y]) });
+    }
+  });
+  // 取り除く：守りの変化と、経路で株価がどう動くか（自分が株を持つ会社に倒させる道に変わるなら得）
+  if (REMOVE) {
+    const keys = Object.keys(G.tiles), near = new Set(); for (const [x, y] of pathFrom(dist0)) for (const [a, b] of neighbors(x, y)) near.add(key(a, b));
+    const cand = [...shuffle(keys.filter(k => near.has(k))).slice(0, 6), ...shuffle(keys.filter(k => !near.has(k))).slice(0, 3)];
+    for (const k of cand) {
+      const after = { ...G.tiles }; delete after[k];
+      const dist1 = distanceField(after), def1 = estimate(after, dist1), safety = (loseChance(u0) - loseChance(dangerOf(def1))) * myW;
+      const rv = RT ? routeValue(p, sh0, coShares(after, dist1, kk => G.owner[kk])) : 0;
+      // 自分が株を持つ会社のタイルを減らすのは損、ほかの会社なら得（大きさは合併で残るかどうかに効く）
+      const co = G.owner[k], hold = co !== undefined ? p.shares[co] + p.cards.filter(c => c === co).length : 0, others = co !== undefined ? G.players.filter(q => q !== p).reduce((a, q) => a + q.shares[co], 0) : 0;
+      const size = co !== undefined ? (others - hold * 2) * 30 : 0;
+      opts.push({ v:safety + (1 - L0) * (defGain(def0, def1) + rv + size), time:REMOVE_TIME, run:() => { removeAction(p, k); afterAction(); } });
+    }
+  }
+  // 強化：守りの増え方と、その会社に株があれば育つ分。
+  // 候補は、射程に敵の道が多く入るタワーから順に12個と、ほかから3個に絞る（スマホで考える時間が長くならないように）
+  const pathPts = pathFrom(dist0).map(([x, y]) => center(x, y));
+  const upCand = Object.entries(G.tiles).filter(([, t]) => canUpgrade(t)).map(([k, t]) => {
+    const c = center(t.x, t.y), r = towerPower(t.type, t.lv + 1).range || TYPES[t.type].range;
+    return { k, t, cover:pathPts.filter(q => cellDist(...c, ...q) <= r).length };
+  }).sort((a, b) => b.cover - a.cover);
+  const upPick = PARAMS.get('fast') === '0' ? upCand : [...upCand.slice(0, 12), ...shuffle(upCand.slice(12)).slice(0, 3)];
+  for (const { k, t } of upPick) {
+    const after = { ...G.tiles, [k]:{ ...t, lv:t.lv + 1 } };
+    const def1 = estimate(after, dist0), safety = (loseChance(u0) - loseChance(dangerOf(def1))) * myW;
+    const co = G.owner[k], stake = co !== undefined ? (p.shares[co] + p.cards.filter(c => c === co).length) * 40 : 0;
+    const rv = RT ? routeValue(p, sh0, coShares(after, dist0, kk => G.owner[kk])) : 0;
+    opts.push({ v:safety + (1 - L0) * (defGain(def0, def1) * (stake ? 1 : .2) + stake + bestCard + rv), time:TYPES[t.type].time, run:() => { upgradeTile(p, k); takeStep(p, afterAction); } });
+  }
+  // 公開：終わりまでの値上がりと、ボーナスの見込みの増え方から、払う株価を引く
+  // 投資信託の公開：これからの配当の増え方から、払う株価を引く
+  if (p.cards.includes(CENTRAL)) {
+    const have = p.cards.filter(c => c === CENTRAL).length;
+    for (let n = 1; n <= have; n++) {
+      if (!canReveal(p, CENTRAL, n)) break;
+      const v = n * (futureTrust() - centralPrice());
+      opts.push({ v:(1 - L0) * v, time:revealTime(n), run:() => { revealShares(p, CENTRAL, n); afterAction(); } });
+    }
+  }
+  // 2社に1枚ずつ
+  const ids2 = [...new Set(p.cards)].filter(id => id === CENTRAL || G.cos[id].active);
+  const oneValue = id => id === CENTRAL ? futureTrust() - centralPrice()
+    : (futurePrice(G.cos[id]) - price(G.cos[id])) + (bonusShare(p, id, p.shares[id] + 1) - bonusShare(p, id, p.shares[id])) * futurePrice(G.cos[id]);
+  for (let i = 0; i < ids2.length; i++) for (let j = i + 1; j < ids2.length; j++) {
+    const a = ids2[i], b = ids2[j]; if (!canRevealPair(p, a, b)) continue;
+    opts.push({ v:(1 - L0) * (oneValue(a) + oneValue(b) + settleGain(p, a, 1) + settleGain(p, b, 1) - reserveCost(p, priceOf(a) + priceOf(b))) * (1 + G.wave / WAVES), time:REV_TIME ? +REV_TIME : 2, run:() => { revealPair(p, a, b); afterAction(); } });
+  }
+  for (const id of new Set(p.cards)) {
+    if (id === CENTRAL) continue;
+    const co = G.cos[id]; if (!co.active) continue;
+    const have = p.cards.filter(c => c === id).length, pr = price(co), fp = futurePrice(co);
+    for (let n = 1; n <= have; n++) {
+      if (!canReveal(p, id, n)) break;
+      const v = n * (fp - pr) + (bonusShare(p, id, p.shares[id] + n) - bonusShare(p, id, p.shares[id])) * fp + settleGain(p, id, n) - reserveCost(p, pr * n);
+      // 終わりが近いほど、手札の株は紙くずになりやすいので急ぐ
+      // 守りきれなければ全部なくなるので、生き残る見込みを掛ける
+      opts.push({ v:(1 - L0) * v * (1 + G.wave / WAVES), time:revealTime(n), run:() => { revealShares(p, id, n); afterAction(); } });
+    }
+  }
+  // 時間あたりの値打ちがいちばん高い手を選ぶ
+  let best = null;
+  for (const o of opts) { const score = o.v / o.time + Math.random() * 20; if (!best || score > best.score) best = { ...o, score }; }
+  if (best && best.v > 0) return best.run();
+  // どの手も得に見えなくても、置けるタイルがあればパスより置く（守りの火力がいちばん増える手）
+  const fallback = opts.filter(o => o.time <= 5).sort((a, b) => b.v - a.v)[0];
+  if (fallback) return fallback.run();
+  swapTile(p, 0); afterAction();
+}
+// 置く・強化・公開のどれかができるか
+function canDoSomething(p) {
+  if (p.hand.some(t => canPlace(t).ok)) return true;
+  if (Object.values(G.tiles).some(t => canUpgrade(t))) return true;
+  return [...new Set(p.cards)].some(id => canReveal(p, id, 1));
+}
+// どれもできないときだけ：手札のタイルを1枚捨てて引き直す（時間1）
+function swapTile(p, idx) {
+  const t = p.hand.splice(idx, 1)[0];
+  if (G.bag.length) { p.hand.push(G.bag.pop()); G.bag.unshift(t); } else p.hand.push(t);
+  spend(p, 1);
+  log(`${p.name}：どの行動もできないので、タイルを1枚捨てて引き直した（時間1）`);
+}
+function replaceDead(p) {
+  p.hand.forEach((t, i) => { if (canPlace(t).dead && G.bag.length) { p.hand[i] = G.bag.pop(); } });
+}
+function pathCells() {
+  // 入口から出口への今の道（敵が通るマス）
+  const out = [];
+  for (const [ex, ey] of ENTRANCES) {
+    let cur = [ex, ey], guard = 0;
+    while (cur && guard++ < 200) {
+      out.push(cur);
+      const d = G.dist[key(...cur)]; if (!d) break;
+      cur = neighbors(...cur).find(([a, b]) => G.dist[key(a, b)] === d - 1);
+    }
+  }
+  return out;
+}
+
+// ===== 手番の流れ =====
+let cpuTimer = 0;
+function afterAction() { G.busy = false; G.selected = null; G.upSel = null; renderAll(); }
+function turnTick(dt) {
+  if (G.over || G.busy) return;
+  const p = nextActor();
+  if (G.actor !== p) { G.actor = p; renderAll(); if (!p) return; if (p.cpu) cpuTimer = 2; else replaceDead(p); }  // CPU が考える時間は、ゲームの中の2秒（人が決めるのと同じくらい）
+  if (!p) return;
+  if (p.cpu) { cpuTimer -= dt; if (cpuTimer <= 0) { G.busy = true; const t0 = performance.now(); cpuAct(p); const ms = performance.now() - t0; G.stats.cpuMs = (G.stats.cpuMs || 0) + ms; G.stats.cpuN = (G.stats.cpuN || 0) + 1; G.stats.cpuMax = Math.max(G.stats.cpuMax || 0, ms); } }
+}
+
+// ===== 敵の波 =====
+// 波の中身：コースごとに個性を付ける（Claude の案）。mix は時期ごとの種類の割合、boss はボスの間隔
+const WAVE_STYLE = {
+  // ゲートウェイ：基準
+  0: { mix:n => n <= 5 ? { fast:.35 } : n <= 10 ? { fast:.25, hard:.2, swarm:.15 } : { fast:.2, hard:.2, swarm:.15, healer:.1 }, boss:5 },
+  // はさみうち：群れが多め。1〜10回目は左右から交互、11回目からは両側から（spawn で入口を決める）
+  1: { mix:n => n <= 5 ? { fast:.25, swarm:.1 } : n <= 10 ? { fast:.2, hard:.15, swarm:.3 } : { fast:.15, hard:.2, swarm:.3, healer:.1 }, boss:5 },
+  // 縦断：速い敵が多め。後半は回復も多め
+  2: { mix:n => n <= 5 ? { fast:.35 } : n <= 10 ? { fast:.45, hard:.15, swarm:.1 } : { fast:.4, hard:.15, swarm:.1, healer:.15 }, boss:5 },
+  // 対角：硬い敵が多め（迷路を作る CPU で厳しすぎたので、硬い敵を減らし、ボスは5回ごとに戻した）
+  3: { mix:n => n <= 5 ? { fast:.25, hard:.1 } : n <= 10 ? { fast:.2, hard:.25, swarm:.1 } : { fast:.15, hard:.25, swarm:.1, healer:.1 }, boss:5 },
+};
+function makeWave(n) {
+  const list = [], count = Math.round(6 + 2 * effWave(n)), st = WAVE_STYLE[COURSE] || WAVE_STYLE[0], mix = st.mix(effWave(n));
+  for (let i = 0; i < count; i++) {
+    let type = 'normal', r = Math.random();
+    for (const [k, w] of Object.entries(mix)) { if (r < w) { type = k; break; } r -= w; }
+    if (WORM && !EXPAND && effWave(n) >= 10 && Math.random() < .08) type = 'worm';
+    if (type === 'swarm') { list.push('swarm', 'swarm'); }
+    list.push(type);
+  }
+  if (isBoss(n, st.boss)) list.push('big');
+  if (EXPAND && G.wormNext) { for (let i = 0; i < G.wormNext; i++) list.splice(rnd(list.length), 0, 'worm'); G.wormNext = 0; }
+  return list;
+}
+function spawn(type) {
+  // はさみうち：1〜10回目の波は左右から交互に、11回目からは両側から
+  const ent = COURSE === 1 && G.wave <= 10 ? G.wave % 2 : rnd(ENTRANCES.length), [ex, ey] = ENTRANCES[ent];
+  // 最初の3回の波だけ敵を弱くする（?early=0.5 なら波1は半分、波4でふつうに戻る。ふつうは1、入口が隅のコースはコースごとの値）
+  const E = +(PARAMS.get('early') || COURSES[COURSE].early || 1), early = G.wave <= 3 ? E + (1 - E) * (G.wave - 1) / 3 : 1;
+  const def = ENEMY[type], hp = Math.round(def.hp * (6 + effWave(G.wave) * HP_GROWTH) * early * (COURSES[COURSE].hpMul || 1) * playerHp() * (POWERS ? POWER_HP : 1) * 10) / 10;  // 回を追うごとに硬くする（数字は仮）
+  const [x, y] = center(ex, ey);
+  G.enemies.push({ type, x, y, hp, max:hp, cell:key(ex, ey), next:null, slow:0, id:++G.seq, ent });
+}
+// 途中の決算（ユニオン・パシフィックの配当にならう。入れることはユーザー、時期と倍率は Claude の案）：
+// 4回目と8回目の波が終わったとき、盤にある会社ごとに、筆頭に株価の4倍、次点に2倍。?dividend=0 でなし
+const DIVIDEND_WAVES = PARAMS.get('dividend') === '0' ? [] : [4, 8];
+const DIV_M1 = 4, DIV_M2 = 2;
+function settle() {
+  const before = G.players.map(q => q.money);
+  for (const co of G.cos.filter(c => c.active)) bonuses(co, DIV_M1, DIV_M2, '決算の配当', '決算の配当');
+  G.stats.settles = (G.stats.settles || 0) + 1;
+  const got = G.players.map((q, i) => q.money - before[i]);
+  announce('決算', G.players.map((q, i) => got[i] ? `${q.name.replace('CPU', 'C')} +${got[i]}` : '').filter(Boolean).join('  ') || '配当なし');
+  G.lastSettle = `前回の決算（${G.wave}回目のあと）：` + G.players.map((q, i) => `<span style="color:${q.color}">${q.name.replace('CPU', 'C')} +${got[i]}</span>`).join(' ');
+  sfx('coin'); log(`決算（${G.wave}回目の波のあと）：` + G.players.map((q, i) => `${q.name} +${got[i]}`).join('、'));
+}
+function expandCheck() {
+  const st = EXPAND_STAGES[expandAxis()].find(([w]) => w === G.wave);
+  if (!st || st[0] === 0 || st[1] >= OPEN_FROM) return;
+  OPEN_FROM = st[1]; ENTRANCES = openEntrances();
+  // エリアの置ける場所を作り直し、開いた場所のタイルを山に足して混ぜる
+  AREA_CELLS = [];
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (buildable(x, y)) (AREA_CELLS[areaOf(x, y)] = AREA_CELLS[areaOf(x, y)] || []).push([x, y]);
+  const opened = G.later.filter(t => !isClosed(t.x, t.y)); G.later = G.later.filter(t => isClosed(t.x, t.y));
+  G.bag = shuffle([...G.bag, ...opened]);
+  G.dist = distanceField(); G.wormNext = PARAMS.get('expandworm') === '0' ? 0 : 2;   // 広がった直後の波にワームが2体（?expandworm=0 でなし）
+  G.stats.expanded = (G.stats.expanded || 0) + 1;
+  announce('都市が広がった', '新しい回線から、ワームが入ってくる');
+  for (const [x, y] of ENTRANCES) { shock(...center(x, y), 3); burst(...center(x, y), '#ff6bd6', 40, 2); }
+  log('都市が広がった。新しい場所にタイルを置ける。次の波にはワームが来る');
+}
+function waveTick(dt) {
+  if (G.over) return;
+  if (G.wave !== G.wdWave) { G.wdWave = G.wave; G.wdT = 0; } else if ((G.wdT += dt) > 300 && !G.stats.stall) {
+    G.stats.stall = { wave:G.wave, q:G.spawnQueue.length, timer:G.waveTimer, inWave:G.inWave, en:G.enemies.slice(0, 5).map(e => ({ c:e.cell, n:e.next, lure:e.lure, d:G.dist[e.cell], hp:e.hp, dead:e.dead })), actor:G.actor && G.actor.id, busy:G.busy, t:G.players.map(q => q.t), lim:G.limit, taking:!!G.taking, ex:!!G.exchanging };
+  }
+  if (G.spawnQueue.length) {
+    G.spawnTimer -= dt;
+    if (G.spawnTimer <= 0) { spawn(G.spawnQueue.shift()); G.spawnTimer = .8; if (!G.spawnQueue.length) G.waveTimer = 30; }
+    G.inWave = true;
+    return;
+  }
+  if (G.enemies.length) return;
+  if (G.inWave) {
+    G.inWave = false;
+    // 記録：敵の道の長さ（入口ごとの平均マス数）と、各社の倒した数・タイル数
+    (G.stats.pathLen = G.stats.pathLen || []).push([G.wave, Math.round(pathFrom(G.dist).length / ENTRANCES.length)]);
+    if (G.wave <= 5) (G.stats.entDef = G.stats.entDef || []).push([G.wave, ENTRANCES.map(([ex, ey]) => {
+      const path = []; let cur = [ex, ey], guard = 0;
+      while (cur && guard++ < 300) { path.push(cur); const d = G.dist[key(...cur)]; if (!d) break; cur = neighbors(...cur).find(([a, b]) => G.dist[key(a, b)] === d - 1); }
+      const towers = Object.values(G.tiles).filter(t => TYPES[t.type].dmg > 0).map(t => ({ ...towerPower(t.type, t.lv, G.owner[key(t.x, t.y)]), c:center(t.x, t.y) }));
+      return [path.length, Math.round(path.reduce((s2, [x, y]) => s2 + towers.filter(t => cellDist(...t.c, ...center(x, y)) <= t.range).reduce((a, t) => a + t.dps, 0), 0))];
+    })]);
+    (G.stats.coSnap = G.stats.coSnap || []).push([G.wave, G.cos.map(c => c.active ? [coSize(c.id), Math.round(c.kills)] : null), Object.keys(G.tiles).filter(k => G.owner[k] === undefined).length]);
+    (G.stats.worth = G.stats.worth || []).push([G.wave, G.players.map(q => q.money + G.cos.reduce((s2, c) => s2 + (c.active ? q.shares[c.id] * price(c) : 0), 0) + q.shares[CENTRAL] * centralPrice())]);
+    G.calib = G.waveLeaks ? G.calib * 1.4 : Math.max(1, G.calib * .95); G.waveLeaks = 0;
+    if (EXPAND) expandCheck();
+    if (!EXPAND && PARAMS.get('replan') !== '0' && PARAMS.get('maze') !== '0') {
+      const b = bestPlan(), cur = bestPlanScore(G.planKey);
+      if (b.key !== G.planKey && b.sc >= cur + 3) { PLAN = new Set(b.cells.filter(c => !c.gap).map(c => c.k)); G.planKey = b.key; G.stats.replans = (G.stats.replans || 0) + 1; }
+    }
+    if (DIVIDEND_WAVES.includes(G.wave) && G.wave < WAVES) settle();
+    if (CYCLE === 'end') newCycle();
+    if (G.wave < WAVES) { announce(`WAVE ${G.wave} クリア`, '時間が補充された。株を公開できる'); sfx('clear'); }
+  }
+  if (G.wave >= WAVES) return finish(true);
+  G.waveTimer -= dt;
+  if (G.waveTimer <= 0) { G.wave++; G.lastSettle = null; if (CYCLE === 'start') newCycle(); G.spawnQueue = G.nextWave && G.nextWave.n === G.wave ? G.nextWave.list : makeWave(G.wave); G.spawnTimer = 0;
+    if (G.wave < WAVES) G.nextWave = { n:G.wave + 1, list:makeWave(G.wave + 1) }; log(`波 ${G.wave} が来た（${G.spawnQueue.length}体）`);
+    announce(`WAVE ${G.wave}`, `${G.spawnQueue.length}体のウイルス` + (G.spawnQueue.includes('big') ? '・大きいのが来る' : ''));
+    for (const [x, y] of ENTRANCES) { shock(...center(x, y), 2); burst(...center(x, y), '#ff4dff', 30, 1.6); } sfx('wave'); shake(5); }
+}
+function enemyTick(dt) {
+  for (const e of G.enemies) {
+    const def = ENEMY[e.type];
+    const [cx, cy] = e.cell.split(',').map(Number);
+    let F = G.dist;
+    if (e.lure) {
+      F = lureField(e.lure);
+      if (!G.tiles[e.lure] || F[e.cell] === undefined) { e.lure = null; F = G.dist; }
+      else if (F[e.cell] === 0) { e.lure = null; e.lureDone = true; e.next = null; F = G.dist; }   // ハニーポットの前に着いた
+    }
+    if (!e.next || F[e.next] === undefined || F[e.next] >= (F[e.cell] ?? 999)) {
+      const d = F[e.cell];
+      const opts = neighbors(cx, cy).filter(([a, b]) => F[key(a, b)] !== undefined && F[key(a, b)] < (d ?? 999));
+      e.next = opts.length ? key(...opts[rnd(opts.length)]) : null;
+    }
+    // 安全装置：3秒以上進めない敵は、寄り道をやめてふつうの道に戻す（記録に残す）
+    if (!e.next) { e.stuckT = (e.stuckT || 0) + dt; if (e.stuckT > 3) { e.lure = null; e.lureDone = true; e.stuckT = 0; G.stats.unstuck = (G.stats.unstuck || 0) + 1; } continue; }
+    e.stuckT = 0;
+    const [nx, ny] = e.next.split(',').map(Number), [tx, ty] = center(nx, ny);
+    let sp = def.speed * 1.4 * S * Math.sqrt(3);
+    if (SPECIAL[e.cell] === 'fast') sp *= 1.6;
+    if (e.slow > 0) { sp *= 1 - (e.slowAmt || TYPES.fw.slow); e.slow -= dt; }
+    if (SPECIAL[e.cell] === 'heal') e.hp = Math.min(e.max, e.hp + dt * 1.5);
+    // 回復：まわりの敵を、それぞれの最大体力の毎秒1%ずつ回復する（前は毎秒0.6で、体力が100を超える後半はほぼ効いていなかった。3%では強すぎた）
+    if (e.type === 'healer') for (const o of G.enemies) if (o !== e && Math.hypot(o.x - e.x, o.y - e.y) < S * 3) o.hp = Math.min(o.max, o.hp + dt * o.max * .01);
+    const dx = tx - e.x, dy = ty - e.y, len = Math.hypot(dx, dy), step = sp * dt;
+    if (len <= step) { e.x = tx; e.y = ty; e.cell = e.next; e.next = null; } else { e.x += dx / len * step; e.y += dy / len * step; }
+    if (e.type === 'worm' && e.cell !== e.lastCell) {
+      e.lastCell = e.cell; e.steps = (e.steps || 0) + 1;
+      if (e.steps % 3 === 0 && !(EXPAND && e.ate)) {
+        const [wx, wy] = e.cell.split(',').map(Number), adj = neighbors(wx, wy).map(([a, b]) => key(a, b)).filter(k => G.tiles[k]);
+        if (adj.length) { const k = adj[rnd(adj.length)], t = G.tiles[k]; G.stats.wormEat = (G.stats.wormEat || 0) + 1; removeTile(k, `ワームが ${label(t.x, t.y)} の${TYPES[t.type].name}を壊した`); e.ate = true; }
+      }
+    }
+    if (e.cell === key(...EXIT)) { e.dead = true; e.leak = true; }
+  }
+  for (const e of G.enemies) if (e.leak) {
+    { const k2 = e.lureBy ? 'luredLeaked' : 'plainLeaked'; G.stats[k2] = (G.stats[k2] || 0) + 1; const lt = G.stats.leakType = G.stats.leakType || {}; lt[e.type] = (lt[e.type] || 0) + 1; }
+    { const lb = G.stats.leakByEnt = G.stats.leakByEnt || {}; const kk = G.wave + ':' + e.ent; lb[kk] = (lb[kk] || 0) + ENEMY[e.type].life; }
+    G.lives -= ENEMY[e.type].life; G.waveLeaks++; log(`中枢サーバーに${ENEMY[e.type].name}が届いた（ライフ −${ENEMY[e.type].life}）`);
+    burst(e.x, e.y, '#ff4d6d', 50, 2.4); shock(e.x, e.y, 3); G.red = 1; sfx('leak'); shake(8);
+    if (G.lives <= 0) { G.lives = 0; finish(false); }
+  }
+  G.enemies = G.enemies.filter(e => !e.dead);
+}
+function towerTick(dt) {
+  for (const t of Object.values(G.tiles)) {
+    const ty = TYPES[t.type]; if (!ty.range) continue;
+    t.cool -= dt; if (t.cool > 0) continue;
+    const coId = G.owner[key(t.x, t.y)];
+    const up = t.lv - 1, range = ty.range + .4 * up + (hasPower(coId, 3) ? PW.range : 0), [cx, cy] = center(t.x, t.y);
+    const inR = G.enemies.filter(e => !e.dead && cellDist(cx, cy, e.x, e.y) <= range);
+    if (!inR.length) continue;
+    t.cool = ty.cd * (hasPower(coId, 0) ? PW.rapid : 1);
+    const bc = coId !== undefined ? G.cos[coId].color : '#cfd8ff';   // 色は会社。タワーの種類は形で見分ける
+    if (t.type === 'lure') {
+      const k = key(t.x, t.y), held = G.enemies.filter(e => !e.dead && e.lure === k).length;
+      let room = lureCap(t) - held;
+      for (const e of inR) {
+        if (room <= 0) break;
+        if (e.lure || e.lureDone || e.type === 'big' || lureField(k)[e.cell] === undefined) continue;
+        e.lureTried = e.lureTried || {}; if (e.lureTried[k]) continue;
+        e.lureTried[k] = true; if (Math.random() >= lureChance(t)) continue;
+        e.lure = k; e.lureBy = k; e.next = null; room--; G.stats.lured = (G.stats.lured || 0) + 1;
+        G.beams.push({ x1:cx, y1:cy, x2:e.x, y2:e.y, color:bc, life:.4, w:2.5 }); sfx('lure', cx);
+      }
+      continue;
+    }
+    if (t.type === 'fw') {
+      inR.forEach(e => { e.slow = .7; e.slowAmt = Math.min(.75, ty.slow + .12 * up); e.slowTile = key(t.x, t.y); });
+      G.beams.push({ ring:true, x:cx, y:cy, r:range * S * Math.sqrt(3), color:bc, life:.35 }); sfx('fw', cx);
+      continue;
+    }
+    // いちばん出口に近い敵を狙う
+    inR.sort((a, b) => (G.dist[a.cell] ?? 99) - (G.dist[b.cell] ?? 99));
+    const links = hasPower(coId, 2) ? Math.min(3, neighbors(t.x, t.y).filter(([a, b]) => { const k = key(a, b); return G.tiles[k] && TYPES[G.tiles[k].type].range && G.owner[k] === coId; }).length) : 0;
+    const target = inR[0], dmg = ty.dmg * (1 + .6 * up) * (1 + PW.link * links);
+    G.beams.push({ x1:cx, y1:cy, x2:target.x, y2:target.y, color:bc, life: t.type === 'scan' ? .25 : .08, w: t.type === 'scan' ? 3 : 1.5 });
+    sfx(t.type, cx);
+    const hit = t.type === 'burst' ? G.enemies.filter(e => !e.dead && cellDist(target.x, target.y, e.x, e.y) <= ty.splash) : hasPower(coId, 1) ? G.enemies.filter(e => !e.dead && cellDist(target.x, target.y, e.x, e.y) <= .8) : [target];
+    if (t.type === 'burst') burst(target.x, target.y, bc, 22, 1.4);
+    for (const e of hit) {
+      e.hp -= dmg * (hasPower(coId, 1) && t.type !== 'burst' && e !== target ? PW.splash : 1) * (hasPower(coId, 5) && (e.type === 'hard' || e.type === 'big') ? PW.pierce : 1);
+      if (hasPower(coId, 4)) { if (!(e.slow > 0)) { e.slowAmt = PW.slow; e.slowTile = key(t.x, t.y); } e.slow = Math.max(e.slow || 0, .5); }   // 減速で遅くした敵も、ファイアウォールと同じく手柄を分ける
+      hitSpark(e.x, e.y, t.type === 'scan' ? '#ffffff' : bc, t.type === 'scan' ? 14 : 5);
+      if (e.hp <= 0 && !e.dead) {
+        e.dead = true;
+        burst(e.x, e.y, ENEMY[e.type].color, e.type === 'big' ? 160 : 40, e.type === 'big' ? 3.2 : 1.8);
+        G.beams.push({ ring:true, x:e.x, y:e.y, r:(e.type === 'big' ? 4 : 1.4) * S, color:ENEMY[e.type].color, life:.3 });
+        shock(e.x, e.y, e.type === 'big' ? 2.5 : .5); sfx(e.type === 'big' ? 'bigkill' : 'kill', e.x); if (e.type === 'big') shake(14);
+        // 倒した数：とどめを刺したタワーの会社に入る。ファイアウォールで遅くなっている間に倒したら、
+        // そのファイアウォールの会社と半分ずつ分ける（ユーザー。割合は Claude の案）。会社のないタイルの分はどこにも入らない
+        { const k2 = e.lureBy ? 'luredKilled' : 'plainKilled'; G.stats[k2] = (G.stats[k2] || 0) + 1; const kt = G.stats.killType = G.stats.killType || {}; kt[e.type] = (kt[e.type] || 0) + 1; }
+        // ハニーポットで寄せた敵なら、そのハニーポットの会社も等分に入る（Claude の案）
+        const fwCo = e.slow > 0 && e.slowTile ? G.owner[e.slowTile] : undefined, luCo = e.lureBy ? G.owner[e.lureBy] : undefined;
+        const who = [coId]; for (const c2 of [fwCo, luCo]) if (c2 !== undefined && !who.includes(c2)) who.push(c2);
+        const shares = who.map(c2 => [c2, 1 / who.length]);
+        const kb = G.stats.killsBy = G.stats.killsBy || {};
+        for (const [id, n] of shares) {
+          kb[id ?? -1] = (kb[id ?? -1] || 0) + n;
+          if (id === undefined) continue;
+          const co = G.cos[id], before = price(co); co.kills += n * (hasPower(id, 6) ? PW.fame : 1);
+          if (price(co) > before) { const c = centroid(id) || [cx, cy]; floatText(c[0], c[1], `${co.name} 株価 ${price(co)}`, co.color); G.flash[id] = 1; shock(c[0], c[1], 1.5); sfx('price', c[0]); }
+        }
+      }
+    }
+  }
+}
+
+// ===== 終わり =====
+function finish(win) {
+  if (G.over) return;
+  G.over = true; sfx(win ? 'win' : 'lose');
+  if (!win) { G.result = 'ライフが0になった。全員の負け'; log(G.result); renderAll(); showResult(); return; }
+  log('最後の波を守りきった。最終決算');
+  G.final = { price:G.cos.map(co => co.active ? price(co) : 0), shares:G.players.map(q => [...q.shares]), cardsLeft:G.players.map(q => q.cards.length), activeIds:G.cos.filter(c => c.active).map(c => c.id) };
+  for (const co of G.cos.filter(c => c.active)) bonuses(co);
+  for (const p of G.players) G.cos.forEach(co => { if (co.active) { p.money += p.shares[co.id] * price(co); earn(p, '終わりの売却', p.shares[co.id] * price(co)); } });
+  const tp = centralPrice();
+  for (const p of G.players) if (p.shares[CENTRAL]) { p.money += p.shares[CENTRAL] * tp; earn(p, '投資信託の売却', p.shares[CENTRAL] * tp); }
+  log(`投資信託を ${tp} で売った`);
+  const rank = [...G.players].sort((a, b) => b.money - a.money);
+  G.result = rank.map((p, i) => `${i + 1}位 ${p.name} ${p.money}`).join('\n');
+  log('結果：' + rank[0].name + 'の勝ち');
+  renderAll(); showResult();
+}
+
+// ===== 効果音（その場で合成する。音のファイルはいらない） =====
+// 同じ作り方の関数で、ふつうの再生（AudioContext）と、動画用の書き出し（OfflineAudioContext）の両方に使う
+const SOUND_KEY = 'stock-defense-sound';
+let soundOn = true; try { soundOn = localStorage.getItem(SOUND_KEY) !== '0'; } catch (e) {}
+let AC = null, master = null;
+const noiseBufs = new WeakMap();
+function noiseBuf(ac) {
+  if (!noiseBufs.has(ac)) { const b = ac.createBuffer(1, ac.sampleRate, ac.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; noiseBufs.set(ac, b); }
+  return noiseBufs.get(ac);
+}
+function tone(ac, out, t, type, f0, f1, dur, vol, pan = 0) {
+  const o = ac.createOscillator(), g = ac.createGain(), pn = ac.createStereoPanner();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .005); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  pn.pan.value = pan; o.connect(g).connect(pn).connect(out); o.start(t); o.stop(t + dur + .02);
+}
+function noise(ac, out, t, dur, vol, ftype, f0, f1, pan = 0) {
+  const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(), pn = ac.createStereoPanner();
+  src.buffer = noiseBuf(ac); src.loop = true; f.type = ftype; f.Q.value = 1.2;
+  f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  pn.pan.value = Math.max(-1, Math.min(1, pan)); src.connect(f).connect(g).connect(pn).connect(out); src.start(t, Math.random() * .5); src.stop(t + dur + .02);
+}
+// ドン：低い音が落ちていく
+const boom = (ac, out, t, f0, dur, vol, pan = 0) => { tone(ac, out, t, 'sine', f0, 28, dur, vol, pan); noise(ac, out, t, dur * .8, vol * .8, 'lowpass', 2500, 50, pan); };
+const arp = (ac, out, t, type, notes, step, dur, vol) => notes.forEach((f, i) => tone(ac, out, t + i * step, type, f, f, dur, vol));
+// 音の一覧。p は左右の位置（盤の上の位置から決める）
+const SFX = {
+  node:    (ac, o, t, p) => tone(ac, o, t, 'square', 900, 500, .04, .03, p),   // ノード（安くて弱いタワー）が撃つ音
+  av:      (ac, o, t, p) => { tone(ac, o, t, 'square', 1800, 500, .06, .07, p); noise(ac, o, t, .03, .06, 'highpass', 6000, 3000, p); },
+  scan:    (ac, o, t, p) => { tone(ac, o, t, 'sawtooth', 3200, 120, .3, .14, p); tone(ac, o, t, 'square', 1600, 60, .25, .06, p); noise(ac, o, t, .08, .12, 'highpass', 5000, 2000, p); },
+  burst:   (ac, o, t, p) => { boom(ac, o, t, 140, .3, .25, p); },
+  lure:    (ac, o, t, p) => { tone(ac, o, t, 'sine', 300, 900, .18, .1, p); tone(ac, o, t + .05, 'triangle', 600, 1500, .15, .05, p); },
+  fw:      (ac, o, t, p) => { tone(ac, o, t, 'sine', 520, 120, .18, .08, p); noise(ac, o, t, .15, .04, 'bandpass', 1200, 300, p); },
+  // 倒した：パン！と弾ける（余韻のパチパチは不快だったのでなし。ユーザー）
+  kill:    (ac, o, t, p) => { noise(ac, o, t, .09, .45, 'bandpass', 1800 + Math.random() * 1500, 500, p); boom(ac, o, t, 200 + Math.random() * 60, .25, .3, p); },
+  // 大きい敵：ドーン
+  bigkill: (ac, o, t, p) => { boom(ac, o, t, 110, 1.6, .8, p); noise(ac, o, t, .2, .5, 'bandpass', 1500, 300, p); },
+  leak:    (ac, o, t) => { for (let i = 0; i < 3; i++) tone(ac, o, t + i * .18, 'square', 160, 90, .16, .2); boom(ac, o, t, 90, .7, .45); },
+  // 波が来る：サイレンのように上がって下がる
+  wave:    (ac, o, t) => { for (let i = 0; i < 2; i++) { tone(ac, o, t + i * .6, 'sawtooth', 300, 900, .3, .12); tone(ac, o, t + i * .6 + .3, 'sawtooth', 900, 300, .3, .12); } boom(ac, o, t, 70, 1.2, .35); },
+  clear:   (ac, o, t) => arp(ac, o, t, 'triangle', [523, 659, 784, 1047], .08, .25, .09),
+  place:   (ac, o, t, p) => { tone(ac, o, t, 'triangle', 660, 660, .07, .08, p); tone(ac, o, t + .06, 'triangle', 990, 990, .1, .07, p); },
+  upgrade: (ac, o, t, p) => { arp(ac, o, t, 'square', [523, 784, 1047, 1568], .045, .09, .04); noise(ac, o, t, .3, .05, 'highpass', 6000, 3000, p); },
+  coin:    (ac, o, t) => { tone(ac, o, t, 'triangle', 988, 988, .08, .09); tone(ac, o, t + .07, 'triangle', 1319, 1319, .3, .09); },
+  price:   (ac, o, t, p) => { tone(ac, o, t, 'sine', 1319, 1319, .25, .07, p); tone(ac, o, t + .05, 'sine', 1760, 1760, .3, .06, p); },
+  found:   (ac, o, t, p) => { arp(ac, o, t, 'triangle', [392, 523, 659, 784], .06, .2, .08); noise(ac, o, t, .4, .07, 'bandpass', 4000, 1000, p); },
+  merge:   (ac, o, t) => { noise(ac, o, t, 1, .3, 'bandpass', 200, 5000); tone(ac, o, t, 'sawtooth', 80, 420, 1, .14); boom(ac, o, t + 1, 100, 1.4, .7); arp(ac, o, t + 1.05, 'triangle', [523, 659, 784, 1047, 1319], .07, .5, .12); },
+  win:     (ac, o, t) => arp(ac, o, t, 'triangle', [523, 659, 784, 1047, 784, 1047, 1319, 1568], .12, .5, .1),
+  lose:    (ac, o, t) => { arp(ac, o, t, 'sawtooth', [392, 370, 349, 330, 311], .25, .5, .07); noise(ac, o, t, 1.5, .2, 'lowpass', 1500, 60); },
+};
+// 撃つ音は数が多いので、種類ごとに間をあける（ゲームの中の時間で）
+const SFX_GAP = { node:.12, av:.07, fw:.25, scan:.08, burst:.1, kill:.04, lure:.15 };
+const lastSfx = {};
+function sfx(name, x) {
+  if (!SFX[name]) return;   // 音のない名前で止まらないように
+  netFx('sfx', [name, x === undefined ? null : x / S]);
+  const now = G.clock || 0;
+  if (SFX_GAP[name] && now - (lastSfx[name] ?? -9) < SFX_GAP[name]) return;
+  lastSfx[name] = now;
+  const pan = x === undefined ? 0 : Math.max(-.8, Math.min(.8, x / (S * Math.sqrt(3) * COLS) * 2 - 1));
+  if (window.__sfxLog) window.__sfxLog.push({ t:now, name, pan });   // 動画用の記録
+  if (!soundOn || !AC || AC.state !== 'running') return;
+  SFX[name](AC, master, AC.currentTime + .01, pan);
+}
+// まとめ：残響（ホールの響き）を足し、圧縮して音を大きく、割れないようにする
+function makeMaster(ac) {
+  const bus = ac.createGain(), comp = ac.createDynamicsCompressor(), g = ac.createGain(), rev = ac.createConvolver(), wet = ac.createGain();
+  const len = Math.floor(ac.sampleRate * 2.2), ir = ac.createBuffer(2, len, ac.sampleRate);
+  for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
+  rev.buffer = ir; wet.gain.value = .35;
+  comp.threshold.value = -22; comp.knee.value = 6; comp.ratio.value = 10; comp.attack.value = .003; comp.release.value = .2; g.gain.value = 1.2;
+  bus.connect(comp); bus.connect(rev).connect(wet).connect(comp); comp.connect(g).connect(ac.destination);
+  return bus;
+}
+// ブラウザは、画面に触れるまで音を出せない。最初に触れたときに音の準備をする
+document.addEventListener('pointerdown', () => {
+  if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); master = makeMaster(AC); } catch (e) { return; } }
+  if (AC.state === 'suspended') AC.resume();
+}, true);
+// 動画用：記録した音（t は動画の頭からの秒）を、dur 秒ぶんまとめて書き出す。16bit ステレオを base64 で返す
+window.__renderSfx = async (events, dur) => {
+  const sr = 44100, ac = new OfflineAudioContext(2, Math.ceil(sr * dur), sr), out = makeMaster(ac);
+  for (const e of events) if (e.t >= 0 && e.t < dur && SFX[e.name]) SFX[e.name](ac, out, e.t, e.pan);
+  const buf = await ac.startRendering(), L = buf.getChannelData(0), R = buf.getChannelData(1);
+  const pcm = new Int16Array(L.length * 2);
+  for (let i = 0; i < L.length; i++) { pcm[2 * i] = Math.max(-1, Math.min(1, L[i])) * 32767; pcm[2 * i + 1] = Math.max(-1, Math.min(1, R[i])) * 32767; }
+  let bin = ''; const u8 = new Uint8Array(pcm.buffer);
+  for (let i = 0; i < u8.length; i += 32768) bin += String.fromCharCode(...u8.subarray(i, i + 32768));
+  return btoa(bin);
+};
+
+// ===== 演出：粒と光線 =====
+// 火花：GeoDefense のように大量に。速く飛ぶ火花と、ゆっくり漂って消える残り火
+// 花火のように：中心の閃光、輪になって広がる火花、重力で垂れて瞬く残り火、あとから弾ける小さな火花
+const SPARK_MAX = 10000;
+function burst(x, y, color, n, power) {
+  netFx('burst', [x / S, y / S, color, n, power]);
+  n = Math.round(n * 4);
+  if (G.particles.length > SPARK_MAX * .7) n = Math.ceil(n / 3);
+  G.flashes.push({ x, y, r:S * (1.2 + power * .9), life:.3, max:.3, color });
+  const shell = (150 + Math.random() * 60) * power * S / 20;   // 輪の速さ（この爆発の中ではそろえる）
+  for (let i = 0; i < n && G.particles.length < SPARK_MAX; i++) {
+    const a = Math.random() * Math.PI * 2, r = Math.random();
+    let v, life, g = S * 2, twinkle = false, pop = false, c = Math.random() < .2 ? '#ffffff' : color;
+    if (r < .55) { v = shell * (.88 + Math.random() * .24); life = .6 + Math.random() * .5; }            // 輪
+    else if (r < .8) { v = shell * Math.random(); life = .4 + Math.random() * .6; }                       // 中を埋める
+    else { v = shell * (.2 + Math.random() * .5); life = 1.2 + Math.random() * 1.2; g = S * 4; twinkle = true; c = Math.random() < .5 ? '#ffd98a' : c; pop = Math.random() < .25; }  // 残り火
+    G.particles.push({ x, y, vx:Math.cos(a) * v, vy:Math.sin(a) * v, life, g, twinkle, pop, color:c });
+  }
+}
+function shake(n) { G.shake = Math.max(G.shake || 0, n); }
+// 当たったところに小さく散る火花（倒さなくても出す）
+function hitSpark(x, y, color, n) {
+  for (let i = 0; i < n && G.particles.length < SPARK_MAX; i++) {
+    const a = Math.random() * Math.PI * 2, v = (60 + Math.random() * 200) * S / 20;
+    G.particles.push({ x, y, vx:Math.cos(a) * v, vy:Math.sin(a) * v, life:.15 + Math.random() * .3, color });
+  }
+}
+// 衝撃波：盤のマスが波打つ（GeoDefense の格子のゆがみ）
+function shock(x, y, power) { netFx('shock', [x / S, y / S, power]); G.shocks.push({ x, y, t:0, power }); if (G.shocks.length > 24) G.shocks.shift(); }
+function floatText(x, y, text, color) { netFx('text', [x / S, y / S, text, color]); G.texts.push({ x, y, text, color, life:1.6 }); }
+function announce(title, sub) { netFx('announce', [title, sub]); G.banner = { title, sub, life:2.4 }; }
+function centroid(coId) {
+  const ks = Object.keys(G.owner).filter(k => G.owner[k] === coId); if (!ks.length) return null;
+  const pts = ks.map(k => center(...k.split(',').map(Number)));
+  return [pts.reduce((a, q) => a + q[0], 0) / pts.length, pts.reduce((a, q) => a + q[1], 0) / pts.length];
+}
+function warp(px, py) {
+  let ox = 0, oy = 0;
+  for (const w of G.shocks) {
+    const dx = px - w.x, dy = py - w.y, d = Math.hypot(dx, dy) || 1, front = w.t * S * 14;
+    const a = w.power * S * .35 * Math.exp(-w.t * 2.2) * Math.exp(-(((d - front) / (S * 1.6)) ** 2));
+    ox += dx / d * a; oy += dy / d * a;
+  }
+  return [px + ox, py + oy];
+}
+function fxTick(dt) {
+  for (const w of G.shocks) w.t += dt;
+  G.shocks = G.shocks.filter(w => w.t < 1.6);
+  for (const q of G.texts) { q.life -= dt; q.y -= dt * S * .8; }
+  G.texts = G.texts.filter(q => q.life > 0);
+  if (G.banner && (G.banner.life -= dt) <= 0) G.banner = null;
+  for (const k in G.flash) if ((G.flash[k] -= dt * 1.2) <= 0) delete G.flash[k];
+  G.red = Math.max(0, G.red - dt * 1.5);
+  const drag = Math.pow(.93, dt * 60), born = [];
+  for (const q of G.particles) {
+    q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= drag; q.vy = q.vy * drag + (q.g || 0) * dt; q.life -= dt;
+    // 残り火の一部は、消えるときにもう一度小さく弾ける
+    if (q.pop && q.life <= 0) for (let i = 0; i < 7; i++) { const a = Math.random() * Math.PI * 2, v = (40 + Math.random() * 90) * S / 20; born.push({ x:q.x, y:q.y, vx:Math.cos(a) * v, vy:Math.sin(a) * v, life:.25 + Math.random() * .3, g:S, color:'#ffffff' }); }
+  }
+  G.particles = G.particles.filter(q => q.life > 0).concat(born.slice(0, Math.max(0, SPARK_MAX - G.particles.length)));
+  for (const f of G.flashes) f.life -= dt;
+  G.flashes = G.flashes.filter(f => f.life > 0);
+  G.shake = Math.max(0, (G.shake || 0) - dt * 25);
+  for (const b of G.beams) b.life -= dt;
+  G.beams = G.beams.filter(b => b.life > 0);
+}
+
+// ===== 描画 =====
+const cv = document.getElementById('cv'), cx2 = cv.getContext('2d');
+function resize() {
+  const w = Math.min(document.getElementById('wrap').clientWidth - 12, 548);
+  S = w / (Math.sqrt(3) * (COLS + .5));
+  const h = S * (1.5 * ROWS + .5);
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = w * dpr; cv.height = h * dpr; cv.style.height = h + 'px';
+  cx2.setTransform(dpr, 0, 0, dpr, 0, 0);
+  G.enemies.forEach(e => { const [x, y] = center(...e.cell.split(',').map(Number)); e.x = x; e.y = y; });
+}
+function hexPath(x, y, r) {
+  cx2.beginPath();
+  for (let i = 0; i < 6; i++) { const a = Math.PI / 180 * (60 * i - 30); cx2[i ? 'lineTo' : 'moveTo'](x + r * Math.cos(a), y + r * Math.sin(a)); }
+  cx2.closePath();
+}
+function draw() {
+  const dpr0 = window.devicePixelRatio || 1;
+  cx2.setTransform(dpr0, 0, 0, dpr0, 0, 0); cx2.clearRect(0, 0, cv.width, cv.height);
+  if (G.shake) cx2.translate((Math.random() - .5) * G.shake, (Math.random() - .5) * G.shake);
+  const path = new Set(pathCells().map(c => key(...c)));
+  const sel = G.selected !== null && G.actor && !G.actor.cpu ? G.actor.hand[G.selected] : null;
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    const k = key(x, y), [px, py] = warp(...center(x, y)), t = G.tiles[k], sp = SPECIAL[k];
+    hexPath(px, py, S * .96);
+    if (t) {
+      const co = G.owner[k], fl = co !== undefined ? G.flash[co] || 0 : 0;
+      // 塗りは会社の色（会社のないタイルは灰色）。タワーの種類は、内側の細い枠とアイコンの色で見せる
+      cx2.fillStyle = co !== undefined ? G.cos[co].color + (fl ? Math.round(85 + 150 * Math.min(1, fl)).toString(16).padStart(2, '0') : '55') : '#ffffff14'; cx2.fill();
+      if (co === undefined) { cx2.strokeStyle = '#ffffff40'; cx2.setLineDash([3, 3]); cx2.lineWidth = 1.5; cx2.stroke(); cx2.setLineDash([]); }
+      drawIcon(cx2, t.type, px, py, S * .42);
+      for (let l = 1; l < (t.lv || 1); l++) { cx2.fillStyle = ICON_COLOR; cx2.fillRect(px - S * .3 + l * S * .2, py + S * .5, S * .14, S * .1); }
+    } else {
+      cx2.fillStyle = isClosed(x, y) ? '#03050a' : sp === 'wall' ? '#1c2440' : sp === 'block' ? '#2a1830' : sp === 'fast' ? '#2a2a10' : sp === 'heal' ? '#102a18' : path.has(k) ? '#0f1d3a' : '#0a1226';
+      cx2.fill(); cx2.strokeStyle = isClosed(x, y) ? '#0b1020' : path.has(k) ? '#24407a' : '#1b2d55'; cx2.lineWidth = 1; cx2.stroke();
+      if (isClosed(x, y)) { cx2.strokeStyle = '#ffffff10'; cx2.beginPath(); cx2.moveTo(px - S * .5, py + S * .5); cx2.lineTo(px + S * .5, py - S * .5); cx2.stroke(); }   // まだ開いていない場所は斜線
+      if (sp === 'wall') { hexPath(px, py, S * .96); cx2.strokeStyle = '#4a5a90'; cx2.lineWidth = 1.5; cx2.stroke(); hexPath(px, py, S * .5); cx2.fillStyle = '#2e3a64'; cx2.fill(); }
+      else if (sp) { cx2.fillStyle = '#ffffff55'; cx2.font = `${S * .55}px sans-serif`; cx2.textAlign = 'center'; cx2.textBaseline = 'middle'; cx2.fillText(sp === 'block' ? '×' : sp === 'fast' ? '»' : '+', px, py); }
+    }
+  }
+  if (AREA_MODE && !AUTO) {   // エリアの文字（エリアのまんなかにうすく。全員 CPU で見ているだけのときは出さない）
+    cx2.save(); cx2.fillStyle = '#7f95d040'; cx2.font = `bold ${S * 1.1}px sans-serif`; cx2.textAlign = 'center'; cx2.textBaseline = 'middle';
+    AREA_CELLS.forEach((cells, a) => { if (!cells || !cells.length) return; const pts = cells.map(([x, y]) => center(x, y)); cx2.fillText(AREA_NAMES[a], pts.reduce((s2, q) => s2 + q[0], 0) / pts.length, pts.reduce((s2, q) => s2 + q[1], 0) / pts.length); });
+    cx2.restore();
+  }
+  drawCompanies();
+  // 敵の通り道：流れる点線で、どこを通るかを見せる
+  cx2.save(); cx2.strokeStyle = '#7cf9ff99'; cx2.lineWidth = 2.5; cx2.lineCap = 'round'; cx2.setLineDash([2, S * .8]); cx2.lineDashOffset = -performance.now() / 40;
+  for (const line of pathLines()) { cx2.beginPath(); line.forEach(([x, y], i) => { const [a, b] = warp(...center(x, y)); cx2[i ? 'lineTo' : 'moveTo'](a, b); }); cx2.stroke(); }
+  cx2.restore();
+  // 入口と出口
+  for (const [x, y] of ENTRANCES) mark(x, y, '#ff4dff', '入');
+  mark(EXIT[0], EXIT[1], '#ffffff', '◆');
+  // 置こうとしているタイルの場所
+  if (sel) {
+    const c = canPlace(sel), tg = targetOf(sel), pulse = .5 + .5 * Math.sin(performance.now() / 150);
+    // 置ける場所：うすく光る。印刷されたマスは点線
+    for (const s2 of c.spots) { const [qx, qy] = center(s2.x, s2.y); hexPath(qx, qy, S * .9); cx2.fillStyle = 'rgba(124,249,255,.12)'; cx2.fill(); cx2.strokeStyle = 'rgba(124,249,255,.6)'; cx2.lineWidth = 1.5; cx2.stroke(); }
+    if (!AREA_MODE) { const [qx, qy] = center(sel.x, sel.y); hexPath(qx, qy, S * .6); cx2.strokeStyle = c.ok ? '#ffffff88' : '#ff4d4d'; cx2.setLineDash([3, 3]); cx2.lineWidth = 1.5; cx2.stroke(); cx2.setLineDash([]); }
+    const [px, py] = tg ? center(...tg) : center(sel.x, sel.y), ok = !!tg;
+    hexPath(px, py, S * .96); cx2.save(); cx2.shadowColor = ok ? '#fff' : '#f44'; cx2.shadowBlur = 18;
+    cx2.strokeStyle = ok ? `rgba(255,255,255,${.5 + pulse * .5})` : '#ff4d4d'; cx2.lineWidth = 3; cx2.stroke(); cx2.restore();
+    if (ok) drawIcon(cx2, sel.type, px, py, S * .42);
+    if (TYPES[sel.type].range) { cx2.beginPath(); cx2.arc(px, py, TYPES[sel.type].range * S * Math.sqrt(3), 0, Math.PI * 2); cx2.strokeStyle = '#ffffff66'; cx2.setLineDash([4, 4]); cx2.stroke(); cx2.setLineDash([]); }
+  }
+  cx2.save(); cx2.globalCompositeOperation = 'lighter';
+  for (const b of G.beams) {
+    cx2.shadowColor = b.color; cx2.shadowBlur = 12; cx2.strokeStyle = b.color; cx2.globalAlpha = Math.min(1, b.life * 6);
+    if (b.ring) { cx2.lineWidth = 1.5; cx2.beginPath(); cx2.arc(b.x, b.y, b.r * (1.2 - b.life), 0, Math.PI * 2); cx2.stroke(); }
+    else { cx2.lineWidth = b.w; cx2.beginPath(); cx2.moveTo(b.x1, b.y1); cx2.lineTo(b.x2, b.y2); cx2.stroke(); }
+  }
+  cx2.globalAlpha = 1;
+  for (const e of G.enemies) if (e.lure && G.tiles[e.lure]) {
+    const [lx, ly] = center(...e.lure.split(',').map(Number)), co = G.owner[e.lure];
+    cx2.strokeStyle = co !== undefined ? G.cos[co].color : '#cfd8ff'; cx2.globalAlpha = .35; cx2.lineWidth = 1; cx2.setLineDash([2, 4]);
+    cx2.beginPath(); cx2.moveTo(e.x, e.y); cx2.lineTo(lx, ly); cx2.stroke(); cx2.setLineDash([]); cx2.globalAlpha = 1;
+  }
+  for (const e of G.enemies) {
+    const def = ENEMY[e.type], r = def.r * S * 1.7;
+    cx2.shadowColor = def.color; cx2.shadowBlur = 14; cx2.strokeStyle = def.color; cx2.lineWidth = 2;
+    cx2.beginPath();
+    const sides = { normal:4, fast:3, hard:6, swarm:3, healer:8, big:6, worm:5 }[e.type], rot = performance.now() / 600 * (e.type === 'fast' ? 3 : 1);
+    for (let i = 0; i < sides; i++) { const a = rot + i / sides * Math.PI * 2; cx2[i ? 'lineTo' : 'moveTo'](e.x + r * Math.cos(a), e.y + r * Math.sin(a)); }
+    cx2.closePath(); cx2.stroke();
+    cx2.fillStyle = def.color; cx2.globalAlpha = .7; cx2.fillRect(e.x - r, e.y - r - 4, 2 * r * Math.max(0, e.hp / e.max), 2); cx2.globalAlpha = 1;
+  }
+  // 火花：速さの向きに伸びる線。色と明るさごとにまとめて、太い薄い線（光のにじみ）と細い明るい線を重ねる
+  cx2.lineCap = 'round'; cx2.shadowBlur = 0;
+  const groups = {};
+  for (const q of G.particles) {
+    if (q.twinkle && Math.random() < .35) continue;   // 残り火は瞬く
+    const k = q.color + '|' + Math.min(3, Math.floor(q.life * 3)); (groups[k] = groups[k] || []).push(q);
+  }
+  for (const [k, list] of Object.entries(groups)) {
+    const [color, lv] = k.split('|'); cx2.strokeStyle = color; cx2.beginPath();
+    for (const q of list) { const sp = Math.hypot(q.vx, q.vy), tail = Math.min(.08, 4 / Math.max(1, sp)) + .035; cx2.moveTo(q.x, q.y); cx2.lineTo(q.x - q.vx * tail, q.y - q.vy * tail); }
+    const a = (+lv + 1) / 4;
+    cx2.globalAlpha = a * .18; cx2.lineWidth = 8; cx2.stroke();
+    cx2.globalAlpha = a * .45; cx2.lineWidth = 3.5; cx2.stroke();
+    cx2.globalAlpha = a; cx2.lineWidth = 1.6; cx2.stroke();
+  }
+  // 閃光：爆発の中心が白く光って広がる
+  for (const f of G.flashes) {
+    const k = f.life / f.max, r = f.r * (1.4 - k * .6), g = cx2.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+    g.addColorStop(0, `rgba(255,255,255,${.9 * k})`); g.addColorStop(.35, f.color + Math.round(160 * k).toString(16).padStart(2, '0')); g.addColorStop(1, f.color + '00');
+    cx2.globalAlpha = 1; cx2.fillStyle = g; cx2.beginPath(); cx2.arc(f.x, f.y, r, 0, Math.PI * 2); cx2.fill();
+  }
+  cx2.restore();
+  const W = cv.width / (window.devicePixelRatio || 1), H = cv.height / (window.devicePixelRatio || 1);
+  // 浮かぶ文字（株価が上がった、合併、設立）
+  cx2.save(); cx2.textAlign = 'center'; cx2.textBaseline = 'middle'; cx2.font = `bold ${Math.max(11, S * .6)}px sans-serif`;
+  for (const q of G.texts) { cx2.globalAlpha = Math.min(1, q.life); cx2.fillStyle = q.color; cx2.shadowColor = q.color; cx2.shadowBlur = 12; cx2.fillText(q.text, Math.max(60, Math.min(W - 60, q.x)), q.y); }
+  cx2.restore();
+  // 敵が届いたとき、画面のふちを赤く
+  if (G.red > 0) { const g = cx2.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .3, W / 2, H / 2, Math.max(W, H) * .7); g.addColorStop(0, 'rgba(255,40,80,0)'); g.addColorStop(1, `rgba(255,40,80,${.5 * G.red})`); cx2.fillStyle = g; cx2.fillRect(0, 0, W, H); }
+  // 大きな告知（WAVE、合併）
+  if (G.banner) {
+    const b = G.banner, a = Math.min(1, b.life * 2, (2.4 - b.life) * 4), sc = 1 + Math.max(0, b.life - 2) * .6;
+    cx2.save(); cx2.globalAlpha = a; cx2.textAlign = 'center'; cx2.textBaseline = 'middle';
+    cx2.fillStyle = 'rgba(4,8,20,.55)'; cx2.fillRect(0, H / 2 - S * 2.2, W, S * 4.2);
+    cx2.font = `900 ${S * 1.9 * sc}px sans-serif`; cx2.fillStyle = '#fff'; cx2.shadowColor = '#7cf9ff'; cx2.shadowBlur = 24;
+    cx2.fillText(b.title, W / 2, H / 2 - S * .5);
+    cx2.font = `bold ${S * .7}px sans-serif`; cx2.shadowBlur = 8; cx2.fillStyle = '#7cf9ff'; cx2.fillText(b.sub || '', W / 2, H / 2 + S * 1.2);
+    cx2.restore();
+  }
+}
+// 入口ごとの道（流れる点線用）
+function pathLines() {
+  return ENTRANCES.map(([ex, ey]) => {
+    const out = []; let cur = [ex, ey], guard = 0;
+    while (cur && guard++ < 200) { out.push(cur); const d = G.dist[key(...cur)]; if (!d) break; cur = neighbors(...cur).find(([a, b]) => G.dist[key(a, b)] === d - 1); }
+    return out;
+  });
+}
+// 会社：外周を会社の色の太い線でなぞり、まんなかに会社名を出す
+function drawCompanies() {
+  const r = S * .96;
+  cx2.save(); cx2.lineCap = 'round';
+  for (const [k, id] of Object.entries(G.owner)) {
+    const [x, y] = k.split(',').map(Number), [px, py] = warp(...center(x, y)), [cx0, cy0] = center(x, y), color = G.cos[id].color;
+    cx2.strokeStyle = color; cx2.shadowColor = color; cx2.shadowBlur = 10; cx2.lineWidth = 3; cx2.beginPath();
+    for (const [a, b] of neighbors(x, y).concat(outside(x, y))) {
+      if (inBoard(a, b) && G.owner[key(a, b)] === id) continue;
+      // となりのマスの向き（0＝右、60度ずつ時計回り）の辺を引く
+      const [nx, ny] = center(a, b), i = Math.round(Math.atan2(ny - cy0, nx - cx0) / (Math.PI / 3));
+      const a1 = Math.PI / 180 * (60 * i - 30), a2 = Math.PI / 180 * (60 * i + 30);
+      cx2.moveTo(px + r * Math.cos(a1), py + r * Math.sin(a1)); cx2.lineTo(px + r * Math.cos(a2), py + r * Math.sin(a2));
+    }
+    cx2.stroke();
+  }
+  cx2.shadowBlur = 0; cx2.textAlign = 'center'; cx2.textBaseline = 'middle'; cx2.font = `bold ${Math.max(10, S * .5)}px sans-serif`;
+  for (const co of G.cos.filter(c => c.active)) {
+    const c = centroid(co.id); if (!c) continue;
+    const [lx, ly] = warp(...c);
+    cx2.lineWidth = 3; cx2.strokeStyle = '#04060cdd'; cx2.strokeText(co.name, lx, ly);
+    cx2.fillStyle = co.color; cx2.fillText(co.name, lx, ly);
+  }
+  cx2.restore();
+}
+// 盤の外側のとなり（盤のふちの辺も引くため）
+function outside(x, y) {
+  const d = (y & 1) ? [[1,0],[-1,0],[1,-1],[0,-1],[1,1],[0,1]] : [[1,0],[-1,0],[0,-1],[-1,-1],[0,1],[-1,1]];
+  return d.map(([dx, dy]) => [x + dx, y + dy]).filter(([a, b]) => !inBoard(a, b));
+}
+function mark(x, y, color, t) {
+  const [px, py] = center(x, y);
+  hexPath(px, py, S * .96); cx2.save(); cx2.shadowColor = color; cx2.shadowBlur = 16; cx2.strokeStyle = color; cx2.lineWidth = 2.5; cx2.stroke(); cx2.restore();
+  cx2.fillStyle = color; cx2.font = `bold ${S * .6}px sans-serif`; cx2.textAlign = 'center'; cx2.textBaseline = 'middle'; cx2.fillText(t, px, py);
+}
+// タワーの種類のマーク（色は使わない。色は会社のもの）
+const ICON_COLOR = '#eef3ff';
+function drawIcon(c, type, x, y, r) {
+  c.save(); c.strokeStyle = ICON_COLOR; c.fillStyle = ICON_COLOR; c.lineWidth = Math.max(1.5, r * .14); c.lineCap = 'round';
+  c.shadowColor = ICON_COLOR; c.shadowBlur = 4;
+  const ring = rr => { c.beginPath(); c.arc(x, y, rr, 0, Math.PI * 2); c.stroke(); };
+  if (type === 'node') { c.fillRect(x - r * .25, y - r * .25, r * .5, r * .5); }
+  if (type === 'av') { ring(r * .6); c.beginPath(); c.arc(x, y, r * .2, 0, Math.PI * 2); c.fill(); }
+  if (type === 'fw') { ring(r * .4); ring(r * .8); }
+  if (type === 'scan') { c.beginPath(); c.moveTo(x - r, y); c.lineTo(x + r, y); c.moveTo(x, y - r); c.lineTo(x, y + r); c.stroke(); ring(r * .45); }
+  if (type === 'lure') { c.beginPath(); c.arc(x, y - r * .1, r * .55, Math.PI, 0, true); c.moveTo(x - r * .55, y - r * .1); c.lineTo(x - r * .55, y - r * .7); c.moveTo(x + r * .55, y - r * .1); c.lineTo(x + r * .55, y - r * .7); c.stroke(); }
+  if (type === 'burst') { c.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; c.moveTo(x + Math.cos(a) * r * .3, y + Math.sin(a) * r * .3); c.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } c.stroke(); }
+  c.restore();
+}
+// 手札のボタン用に、マークを小さな画像にしておく
+const ICON_URL = {};
+function iconUrl(type) {
+  if (!ICON_URL[type]) { const cv0 = document.createElement('canvas'); cv0.width = cv0.height = 48; drawIcon(cv0.getContext('2d'), type, 24, 24, 18); ICON_URL[type] = cv0.toDataURL(); }
+  return ICON_URL[type];
+}
+
+// ===== 画面の文字と操作 =====
+const me = () => G.players[G.viewer || 0];   // この端末で見ている人（1人で遊ぶときは0番）
+// 次の波の中身・決算までの残り・直近の決算の結果
+function renderInfo() {
+  const el = document.getElementById('info'); if (!el) return;
+  if (!G.started || G.over) { el.innerHTML = ''; return; }
+  if (!G.nextWave || G.nextWave.n !== G.wave + 1) G.nextWave = G.wave < WAVES ? { n:G.wave + 1, list:makeWave(G.wave + 1) } : null;
+  const parts = [];
+  // そのとき要るものだけ出す：次の波の中身は波と波の間だけ、決算は次の波のあとのときだけ、前回の決算は次の波が来るまで
+  if (G.nextWave && !waveActive()) {
+    const cnt = {}; G.nextWave.list.forEach(t => cnt[t] = (cnt[t] || 0) + 1);
+    parts.push(`<span data-tip="次の波で来る敵。色は敵の種類">次の波 ${G.nextWave.n}：` + Object.entries(cnt).map(([t, n]) => `<span style="color:${ENEMY[t].color}">${ENEMY[t].name}${n}</span>`).join(' ') + '</span>');
+  }
+  const nd = DIVIDEND_WAVES.find(w => w >= Math.max(1, G.wave) && w < WAVES && (w > G.wave || waveActive()));
+  const soon = nd ? nd <= G.wave + 1 : G.wave >= WAVES - 1;
+  if (soon) parts.push(nd ? `<span data-tip="この波が終わると、各社の筆頭に株価の4倍、次点に2倍の配当">${nd > G.wave ? 'この波のあと決算' : '決算'}</span>` : `<span data-tip="最後の波を守りきると、筆頭に株価の10倍、次点に5倍のボーナスと、株の売却">最後の波のあと清算</span>`);
+  if (G.lastSettle) parts.push(`<span data-tip="直近の決算で受け取った配当">${G.lastSettle}</span>`);
+  el.innerHTML = parts.join('');
+}
+function renderTop() {
+  const ac = waveActive();
+  document.getElementById('wave').textContent = G.over ? '終了' : ac ? `波 ${G.wave}/${WAVES} 来襲中` : G.wave >= WAVES ? '最後の波' : `次の波 ${G.wave + 1}/${WAVES} まで ${Math.ceil(G.waveTimer)}秒`;
+  document.getElementById('life').textContent = '♥ ' + G.lives;
+  document.getElementById('money').textContent = AUTO ? '' : '所持金 ' + me().money;
+}
+function renderTrack() {
+  const el = document.getElementById('track'), max = Math.max(...G.players.map(p => p.t)), min = Math.min(...G.players.map(p => p.t));
+  const span = Math.max(8, Math.max(max, G.limit) - min);
+  el.innerHTML = '';
+  const lim = document.createElement('div'); lim.style.cssText = `position:absolute;top:0;bottom:0;width:2px;background:#ff4dff;left:${Math.min(98, (G.limit - min) / span * 85)}%`; lim.title = 'この波で使える時間の終わり'; el.appendChild(lim);
+  const stacked = {};
+  [...G.players].sort((a, b) => a.order - b.order).forEach(p => {
+    const d = document.createElement('div'); d.className = 'mk'; d.style.background = p.color;
+    const s = stacked[p.t] = (stacked[p.t] || 0) + 1;
+    d.style.left = `calc(${(p.t - min) / span * 85}% + ${(s - 1) * 6}px)`; d.textContent = p.name.replace('CPU', 'C');
+    d.title = `${p.name}：時間 ${p.t}`;
+    el.appendChild(d);
+  });
+}
+// 「今やること」：いまの場面で何ができるかを1〜2行で出す
+function turnText() {
+  const p = G.actor;
+  if (G.over) return ['終わりました', ''];
+  const left = AUTO ? '' : `この波で使える時間：あと${Math.max(0, G.limit - me().t)}`;
+  if (!p) return ['全員が時間を使い切りました', `波が終わると${budget()}ずつ補充されます`];
+  if (p !== me()) return [`${p.name} の番`, left];
+  if (G.discarding) return [`株の手札が多すぎます。あと${me().cards.length - CARD_MAX}枚捨ててください`, `株の手札は${CARD_MAX}枚まで。下の「株」から捨てる株を選んでください（山札に戻ります）`];
+  if (G.swapping) return ['手札のタイルを1枚入れ替えますか', '入れ替えるタイルを手札から押すと、山から1枚引き直します（入れ替えたタイルは山の底へ）。しないなら「入れ替えない」'];
+  if (G.taking) return ['株を1枚、手札に入れてください', '下の「株」から、場の会社の株・山札の一番上・投資信託のどれか。お金はかかりません。数えるのは、あとで公開した株だけです'];
+  if (G.exchanging) return ['手札の株を投資信託と交換しますか', '手札の株1枚を差し出すと、投資信託を1口、払わずに公開した状態で受け取れます。いらない株の逃げ道です。しないなら「交換しない」'];
+  const sel = G.selected !== null ? me().hand[G.selected] : null, up = G.upSel ? G.tiles[G.upSel] : null;
+  if (up) return [`${label(up.x, up.y)} の${TYPES[up.type].name}を選んでいます`, canUpgrade(up) ? `下の「強化」で射程と威力が上がります（時間${TYPES[up.type].time}）。強化したあとも株を1枚もらえます。${left}` : 'このタワーは強化できません。手札のタイルを選び直してください'];
+  if (sel) { const c = canPlace(sel), tg = targetOf(sel); return [c.ok ? `${label(...tg)} に${TYPES[sel.type].name}を置けます` : `${tileName(sel)}${AREA_MODE ? '' : ' のまわり'}には置けません（${c.why}）`, c.ok ? `${AREA_MODE ? tileName(sel) + 'の中の' : label(sel.x, sel.y) + ' か、そのまわりの'}光っているマスに置けます。盤で場所を選び、「置く」かもう一度押す。置いたら株を1枚もらえます。${left}` : '別のタイルを選んでください'];  }
+  const can = [];
+  if (me().hand.some(t => canPlace(t).ok)) can.push('タイルを置く（手札から選ぶ）');
+  if (Object.values(G.tiles).some(t => canUpgrade(t))) can.push('タワーを強化する（盤のタワーを押す）');
+  if ([...new Set(me().cards)].some(id => canReveal(me(), id, 1))) can.push('手札の株を公開する（お金を払う）');
+  if (!can.length) return ['あなたの番：できることがありません', '「タイルを捨てて引き直す」を押してください（時間1）'];
+  return ['あなたの番：どれか1つ', can.join(' ／ ') + (waveActive() && me().cards.length ? '。敵が来ている間は公開できません' : '') + `。${left}`];
+}
+function renderTurn() {
+  const [a, b] = turnText();
+  document.getElementById('turn').innerHTML = `<span class="now">${a}</span>${b ? `<span class="sub">${b}</span>` : ''}`;
+  renderGuide();
+}
+// はじめのうちは、押す場所を光らせる（「？ ルール」から消せる）
+const GUIDE_KEY = 'stock-defense-guide-off';
+let guideOff = AUTO; try { guideOff = guideOff || localStorage.getItem(GUIDE_KEY) === '1'; } catch (e) {}
+function setGuide(off) { guideOff = off; try { localStorage.setItem(GUIDE_KEY, off ? '1' : '0'); } catch (e) {} renderGuide(); }
+function renderGuide() {
+  document.querySelectorAll('.glow').forEach(el => el.classList.remove('glow'));
+  if (guideOff || G.over || G.actor !== me() || G.busy && !G.taking && !G.exchanging && !G.swapping && !G.discarding) return;
+  let id = null;
+  if (G.discarding) id = 'market';
+  else if (G.swapping) id = 'hand';
+  else if (G.taking || G.exchanging) id = 'market';
+  else if (G.upSel) id = canUpgrade(G.tiles[G.upSel]) ? 'place' : 'hand';
+  else if (G.selected !== null) id = canPlace(me().hand[G.selected]).ok ? 'place' : 'hand';
+  else if (me().hand.some(t => canPlace(t).ok)) id = 'hand';
+  else if (!canDoSomething(me())) id = 'swap';
+  if (id) document.getElementById(id).classList.add('glow');
+}
+function renderHand() {
+  const el = document.getElementById('hand'); el.innerHTML = '';
+  if (AUTO) return;
+  const mine = G.actor === me() && !G.over && !G.busy;
+  me().hand.forEach((t, i) => {
+    const b = document.createElement('button'), c = canPlace(t);
+    b.className = 'tile' + (G.selected === i ? ' sel' : '') + (c.ok ? '' : ' bad');
+    b.innerHTML = `<img src="${iconUrl(t.type)}" alt="" style="width:22px;height:22px;float:right;margin-left:4px"><b>${tileName(t)}</b>${TYPES[t.type].name}<br><span class="note">時間${TYPES[t.type].time}</span>`;
+    b.dataset.tip = `${TYPES[t.type].name}：${TYPE_DESC[t.type]}` + (TYPES[t.type].range ? `（射程${TYPES[t.type].range}マス）` : '') + `。置くのに時間${TYPES[t.type].time}。` + (c.ok ? '' : `今は置けない：${c.why}`);
+    b.onclick = () => { if (G.swapping && G.swapping.p === me()) { act(G.viewer || 0, { t:'swap', idx:i }); return; } G.selected = i; G.upSel = null; G.target = null; renderAll(); };
+    el.appendChild(b);
+  });
+  const sel = G.selected !== null ? me().hand[G.selected] : null, ok = sel && canPlace(sel), tg = sel && targetOf(sel);
+  const pb = document.getElementById('place');
+  const up = G.upSel ? G.tiles[G.upSel] : null;
+  if (up) {
+    pb.disabled = !(mine && canUpgrade(up));
+    pb.textContent = canUpgrade(up) ? `${label(up.x, up.y)} の${TYPES[up.type].name}を強化（段階${up.lv}→${up.lv + 1}、時間${TYPES[up.type].time}）` : (up.type === 'node' ? 'ノードは強化できない' : 'これ以上強化できない');
+  } else {
+    pb.disabled = !(mine && ok && ok.ok);
+    pb.textContent = sel ? (ok.ok ? `${label(...tg)} に置く（時間${TYPES[sel.type].time}）` : `置けない：${ok.why}`) : 'タイルを選ぶ（盤の置かれたタイルを押すと強化）';
+    if (G.taking) { pb.disabled = true; pb.textContent = '株の場から1枚選んでください'; }
+    if (G.exchanging) { pb.disabled = true; pb.textContent = '投資信託と交換するか選んでください'; }
+  }
+  const rb = document.getElementById('removeBtn');
+  rb.style.display = REMOVE && G.upSel && G.tiles[G.upSel] ? '' : 'none'; rb.disabled = !(mine && G.upSel && canRemove(G.upSel));
+  const sb = document.getElementById('swap');
+  if (G.swapping && G.swapping.p === me()) { sb.disabled = false; sb.textContent = '入れ替えない'; }
+  else { sb.textContent = 'タイルを捨てて引き直す（時間1）'; sb.disabled = !(mine && !canDoSomething(me())); }
+}
+function renderCos() {
+  const el = document.getElementById('cos');
+  const mine = G.actor === me() && !G.over && !G.busy && !AUTO;
+  const th = (t, tip) => `<th data-tip="${tip}">${t}</th>`;
+  let h = '<tr>' + th('会社', '灰色の会社はまだ盤にない（設立前、または合併で消えた）') + th('格', '★が多い会社ほど、同じ倒した数でも株価が100ずつ高い')
+    + th('タイル', 'その会社のタイルの数。11枚以上は安全で、合併で吸収されない') + th('倒した', 'その会社のタワーが倒した敵の数。株価はこれで上がる。ファイアウォールで遅くした敵をほかの会社が倒したら、半分ずつ分ける')
+    + th('株価', '公開するときに1枚あたり払う額。合併と終わりのボーナス・売却もこの値段で決まる') + th('残り株', '場と山札に残っている株の枚数')
+    + th('公開した株', '各プレイヤーが公開した枚数。◎が筆頭（決算で株価の4倍、終わりに10倍）、○が次点（決算で2倍、終わりに5倍）') + '</tr>';
+  G.cos.forEach(co => {
+    h += `<tr style="opacity:${co.active ? 1 : .4}"><td><span class="sw" style="background:${co.color}"></span>${co.name}${POWERS ? ` <small data-tip="${POWER[co.id].name}：${POWER[co.id].desc}">${POWER[co.id].name}</small>` : ''}</td><td>${'★'.repeat(co.tier + 1)}</td>` +
+      `<td>${co.active ? coSize(co.id) : '-'}</td><td>${co.active ? Math.round(co.kills * 10) / 10 : '-'}</td><td>${price(co)}</td><td>${availOf(co.id)}</td>` +
+      `<td style="text-align:left">${(() => {
+        const hs = G.players.filter(p => p.shares[co.id]).sort((a, b) => b.shares[co.id] - a.shares[co.id]);
+        const top = hs.length ? hs[0].shares[co.id] : 0, second = (hs.map(p => p.shares[co.id]).find(c => c < top));
+        return hs.map(p => { const c = p.shares[co.id]; return `<span style="color:${p.color}">${c === top ? '◎' : c === second ? '○' : ''}${p.name.replace('CPU', 'C')}${c}</span>`; }).join(' ');
+      })()}</td></tr>`;
+  });
+  const cp = G.players.filter(p => p.shares[CENTRAL]).map(p => `<span style="color:${p.color}">${p.name.replace('CPU', 'C')}${p.shares[CENTRAL]}</span>`).join(' ');
+  h += `<tr><td><span class="sw" style="background:${CENTRAL_CO.color}"></span>投資信託</td><td>-</td><td>-</td><td>-</td><td>${centralPrice()}</td><td>${G.centralLeft}</td><td style="text-align:left">${cp}</td></tr>`;
+  h += `<tr><td colspan="7" class="note">投資信託：値段は会社の株価の加重平均。筆頭も配当もなく、終わりにそのときの値段で売る</td></tr>`;
+  el.innerHTML = h;
+
+}
+function renderMarket() {
+  const el = document.getElementById('market'); if (AUTO) { el.innerHTML = ''; return; }
+  const tk = G.taking && G.taking.p === me();
+  el.innerHTML = `<span class="note">${tk ? '株を1枚、手札に入れてください：' : '株の場：'}</span>`;
+  G.market.forEach((id, mi) => {
+    const co = G.cos[id], b = document.createElement('button');
+    b.className = 'btn'; b.style.borderColor = co.color; b.disabled = !tk;
+    b.innerHTML = `${co.name}<br><span class="note">${co.active ? price(co) : 'まだない'}</span>`;
+    b.dataset.tip = co.active ? `${co.name}の株。いまの株価${price(co)}（公開するときに払う）` : `${co.name}はまだ盤にない。手札に入れておけるが、公開できるのは設立されてから`;
+    b.onclick = () => act(G.viewer || 0, { t:'take', mi });
+    el.appendChild(b);
+  });
+  const d = document.createElement('button'); d.className = 'btn'; d.textContent = '山札から'; d.disabled = !tk || !G.deck.length;
+  d.dataset.tip = '山札の一番上を、見ないで手札に入れる。何が来るかわからない';
+  d.onclick = () => act(G.viewer || 0, { t:'take', mi:-1 }); el.appendChild(d);
+  const c = document.createElement('button'); c.className = 'btn'; c.style.borderColor = CENTRAL_CO.color;
+  c.innerHTML = `投資信託<br><span class="note">残り${G.centralLeft}</span>`; c.disabled = !tk || G.centralLeft <= 0;
+  c.dataset.tip = `投資信託。値段は盤にある会社の株価の平均（いま${centralPrice()}）。筆頭も配当もなく、終わりにそのときの値段で売れる`;
+  c.onclick = () => act(G.viewer || 0, { t:'take', mi:-2 }); el.appendChild(c);
+  if (G.exchanging && G.exchanging.p === me()) {
+    el.insertAdjacentHTML('beforeend', '<div class="note" style="width:100%">手札の株1枚を差し出して、投資信託を1口（公開済み、払わない）受け取れます（現物拠出）：</div>');
+    [...new Set(me().cards.filter(x => x !== CENTRAL))].forEach(id => {
+      const b = document.createElement('button'); b.className = 'btn'; b.style.borderColor = G.cos[id].color;
+      b.textContent = `${G.cos[id].name}を交換`; b.onclick = () => act(G.viewer || 0, { t:'exchange', id }); el.appendChild(b);
+    });
+    const no = document.createElement('button'); no.className = 'btn'; no.textContent = '交換しない'; no.onclick = () => act(G.viewer || 0, { t:'exchange', id:null }); el.appendChild(no);
+  }
+  if (G.discarding && G.discarding.p === me()) {
+    el.insertAdjacentHTML('beforeend', `<div class="note" style="width:100%">株の手札は${CARD_MAX}枚まで。捨てる株を選んでください：</div>`);
+    [...new Set(me().cards)].forEach(id => {
+      const b = document.createElement('button'); b.className = 'btn'; b.style.borderColor = coOf(id).color;
+      b.textContent = `${coOf(id).name} ×${me().cards.filter(c => c === id).length}：1枚捨てる`; b.onclick = () => act(G.viewer || 0, { t:'discard', id }); el.appendChild(b);
+    });
+  }
+  const r = document.createElement('button'); r.className = 'btn'; r.textContent = '場を入れ替える';
+  r.disabled = !(tk && canReset(me())); r.dataset.tip = '場の5枚に、盤にある会社の株が1枚もない（どれも公開できない）とき、1回だけ並べ直せる';
+  r.onclick = () => act(G.viewer || 0, { t:'reset' });
+  el.appendChild(r);
+  // 株の手札：公開する
+  const mine = G.actor === me() && !G.over && !G.busy;
+  const ids = [...new Set(me().cards)];
+  const box = document.createElement('div'); box.style.cssText = 'width:100%;display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:4px';
+  box.innerHTML = `<span class="note">株の手札（伏せる）：${ids.length ? '' : 'なし'}</span>`;
+  ids.forEach(id => {
+    const co = coOf(id), n = me().cards.filter(c => c === id).length;
+    const one = document.createElement('button'), all = document.createElement('button');
+    one.className = all.className = 'btn'; one.style.borderColor = all.style.borderColor = co.color;
+    one.textContent = `${co.name} ×${n}：1枚公開`; one.disabled = !(mine && canReveal(me(), id, 1));
+    one.dataset.tip = !coOf(id).active ? `${co.name}はまだ盤にないので公開できない` : `${priceOf(id)}払って公開する（何枚でも時間1）。公開した株だけがボーナスと売却で数えられる。1社なら何枚でも、2社なら1枚ずつ`;
+    one.onclick = () => act(G.viewer || 0, { t:'reveal', id, n:1 });
+    box.appendChild(one);
+    if (n > 1) { all.textContent = `${n}枚公開`; all.disabled = !(mine && canReveal(me(), id, n)); all.onclick = () => act(G.viewer || 0, { t:'reveal', id, n }); box.appendChild(all); }
+  });
+  // 2社に1枚ずつ：2社を選んでから公開する
+  G.pairSel = (G.pairSel || []).filter(id => me().cards.includes(id));
+  if (ids.length >= 2) {
+    const row = document.createElement('div'); row.style.cssText = 'width:100%;display:flex;gap:5px;flex-wrap:wrap;align-items:center';
+    row.innerHTML = '<span class="note">2社に1枚ずつ：</span>';
+    ids.forEach(id => {
+      const b = document.createElement('button'); b.className = 'btn'; b.style.borderColor = coOf(id).color;
+      b.textContent = (G.pairSel.includes(id) ? '✓ ' : '') + coOf(id).name; b.disabled = !mine;
+      b.onclick = () => { G.pairSel = G.pairSel.includes(id) ? G.pairSel.filter(x => x !== id) : [...G.pairSel, id].slice(-2); renderAll(); };
+      row.appendChild(b);
+    });
+    const go = document.createElement('button'); go.className = 'btn'; go.textContent = '選んだ2社を1枚ずつ公開（時間1）';
+    const [a, b2] = G.pairSel; go.disabled = !(mine && G.pairSel.length === 2 && canRevealPair(me(), a, b2));
+    go.onclick = () => { G.pairSel = []; act(G.viewer || 0, { t:'pair', a, b:b2 }); };
+    row.appendChild(go); box.appendChild(row);
+  }
+  if (waveActive()) box.insertAdjacentHTML('beforeend', '<span class="note">敵が来ている間は公開できません</span>');
+  el.appendChild(box);
+}
+function renderLog() { document.getElementById('log').innerHTML = G.log.map(t => `<div>${t}</div>`).join(''); }
+function renderAll() { renderChoice(); renderInfo(); renderTop(); renderTrack(); renderTurn(); renderHand(); renderMarket(); renderCos(); }
+
+document.getElementById('removeBtn').onclick = () => { if (!G.upSel) return; const k = G.upSel; G.upSel = null; act(G.viewer || 0, { t:'remove', k }); };
+document.getElementById('place').onclick = () => {
+  const p = me();
+  if (G.upSel) { const k = G.upSel; G.upSel = null; act(G.viewer || 0, { t:'upgrade', k }); return; }
+  if (G.selected === null) return;
+  const tg = targetOf(p.hand[G.selected]); if (!tg) return;
+  act(G.viewer || 0, { t:'place', idx:G.selected, at:tg });
+};
+document.getElementById('swap').onclick = () => {
+  if (G.swapping && G.swapping.p === me()) { act(G.viewer || 0, { t:'swap', idx:null }); return; }
+  act(G.viewer || 0, { t:'redraw', idx:G.selected !== null ? G.selected : 0 });
+};
+cv.addEventListener('click', ev => {
+  // 盤のマスをタップしたら、そのマスのタイルが手札にあれば選ぶ
+  if (AUTO) return;
+  const r = cv.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
+  let best = null;
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) { const [px, py] = center(x, y), d = Math.hypot(px - mx, py - my); if (!best || d < best.d) best = { x, y, d }; }
+  const placed = G.tiles[key(best.x, best.y)];
+  if (placed) { G.selected = null; G.upSel = key(best.x, best.y); renderAll(); return; }
+  G.upSel = null;
+  // 選んでいるタイルの置ける場所を押したら：その場所を選ぶ。選んだ場所をもう一度押したら置く
+  const sel = G.selected !== null ? me().hand[G.selected] : null;
+  if (sel && canPlace(sel).spots.some(s2 => s2.x === best.x && s2.y === best.y)) {
+    const tg = targetOf(sel);
+    if (tg && tg[0] === best.x && tg[1] === best.y && G.actor === me() && !G.busy) act(G.viewer || 0, { t:'place', idx:G.selected, at:tg });
+    else { G.target = [best.x, best.y]; renderAll(); }
+    return;
+  }
+  const i = me().hand.findIndex(t => AREA_MODE ? t.area === areaOf(best.x, best.y) : t.x === best.x && t.y === best.y);
+  if (i >= 0) { G.selected = i; G.target = null; renderAll(); }
+});
+
+// ===== 行動の入口（何人かで遊ぶため、画面のボタンもネットワークから届いた行動も、ここを通す） =====
+// pid：誰が。a：何をする。決まりに合わない行動は false を返して何もしない
+function netSend(msg) { if (G.net && G.net.send) G.net.send(msg); }
+function act(pid, a) {
+  const p = G.players[pid]; if (!p || G.over || !a) return false;
+  if (G.net && G.net.role === 'client') { if (a.t === 'place') { G.selected = null; G.target = null; } netSend({ type:'act', a }); return true; }   // 参加者は、ホストに送るだけ
+  const turn = G.actor === p && !G.busy && !G.choosing;
+  switch (a.t) {
+    case 'place': {
+      const t = p.hand[a.idx]; if (!turn || !t || !Array.isArray(a.at)) return false;
+      const c = canPlace(t); if (!c.ok || !c.spots.some(s2 => s2.x === a.at[0] && s2.y === a.at[1])) return false;
+      G.busy = true; placeTile(p, a.idx, () => takeStep(p, afterAction), a.at); return true;
+    }
+    case 'upgrade': if (!turn || !canUpgrade(G.tiles[a.k])) return false; G.busy = true; upgradeTile(p, a.k); takeStep(p, afterAction); return true;
+    case 'remove': if (!turn || !canRemove(a.k)) return false; G.busy = true; removeAction(p, a.k); afterAction(); return true;
+    case 'reveal': if (!turn || !(a.n >= 1) || !canReveal(p, a.id, a.n)) return false; G.busy = true; revealShares(p, a.id, a.n); afterAction(); return true;
+    case 'pair': if (!turn || !canRevealPair(p, a.a, a.b)) return false; G.busy = true; revealPair(p, a.a, a.b); afterAction(); return true;
+    case 'redraw': if (!turn || canDoSomething(p) || !p.hand[a.idx || 0]) return false; swapTile(p, a.idx || 0); afterAction(); return true;
+    case 'take': if (!G.taking || G.taking.p !== p || ![-2, -1, 0, 1, 2, 3, 4].includes(a.mi)) return false; finishTake(a.mi); return true;
+    case 'exchange': if (!G.exchanging || G.exchanging.p !== p || (a.id !== null && !p.cards.includes(a.id))) return false; finishExchange(a.id); return true;
+    case 'discard': if (!G.discarding || G.discarding.p !== p || !p.cards.includes(a.id)) return false; finishDiscard(a.id); return true;
+    case 'swap': if (!G.swapping || G.swapping.p !== p || (a.idx !== null && !p.hand[a.idx])) return false; finishSwap(a.idx); return true;
+    case 'reset': if (!G.taking || G.taking.p !== p || !canReset(p)) return false; resetMarket(); p.resetUsed = true; renderAll(); return true;
+    case 'choose': {
+      const c = G.choosing; if (!c || c.p !== p) return false;
+      if ((c.kind === 'found' || c.kind === 'survivor') && !c.data.ids.includes(a.v)) return false;
+      G.choosing = null; shownChoice = 0; hideModal(); c.cb(a.v); return true;
+    }
+  }
+  return false;
+}
+
+// ===== 選択の画面 =====
+function modal(html, buttons) {
+  const box = document.getElementById('mbox'); box.innerHTML = html + '<div class="row"></div>';
+  const row = box.querySelector('.row');
+  buttons.forEach(([t, f, color]) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = t; if (color) b.style.borderColor = color; b.onclick = () => { document.getElementById('modal').style.display = 'none'; f(); }; row.appendChild(b); });
+  document.getElementById('modal').style.display = 'flex';
+}
+// 選んでもらう：G.choosing に「誰に・何を」を置き、その人の画面に出す。答えは act(誰, { t:'choose', v }) で来る
+function requestChoice(p, kind, data, cb) { G.choosing = { p, kind, data, cb, seq:++G.seq }; renderAll(); }
+let shownChoice = 0;
+function renderChoice() {
+  const c = G.choosing;
+  if (!c || c.p !== me()) { if (shownChoice) { shownChoice = 0; hideModal(); } return; }
+  if (shownChoice === c.seq) return;   // 同じ選択の画面は作り直さない（数を変えている途中を消さないため）
+  shownChoice = c.seq;
+  const send = v => act(G.viewer, { t:'choose', v });
+  if (c.kind === 'found') chooseCompany(c.data.ids.map(id => G.cos[id]), send);
+  if (c.kind === 'survivor') chooseSurvivor(c.data.ids, send);
+  if (c.kind === 'dispose') chooseDisposal(me(), G.cos[c.data.co], G.cos[c.data.sv], c.data.pr, c.data.n, c.data.maxPairs, send);
+}
+function hideModal() { document.getElementById('modal').style.display = 'none'; }
+function chooseCompany(free, cb) { modal('<h3>会社を設立する</h3><div class="note">どの会社にしますか（★が多いほど株価が高い）。設立しても株はもらえません。</div>', free.map(c => [`${c.name} ${'★'.repeat(c.tier + 1)}`, () => cb(c.id), c.color])); }
+function chooseSurvivor(ids, cb) { modal('<h3>合併</h3><div class="note">同じ大きさです。どちらを残しますか。</div>', ids.map(id => [G.cos[id].name, () => cb(id), G.cos[id].color])); }
+function chooseDisposal(p, co, sv, pr, n, maxPairs, cb) {
+  // 売る枚数と交換する組の数を選ぶ。残りは持ち続ける
+  let sell = 0, pairs = 0;
+  const draw = () => {
+    const keep = n - sell - pairs * 2;
+    document.getElementById('dispBody').innerHTML =
+      `<div>売る：<b>${sell}</b>枚（${sell * pr}）</div><div>交換：<b>${pairs * 2}</b>枚 → ${sv.name}を${pairs}枚</div><div>持ち続ける：<b>${keep}</b>枚</div>`;
+  };
+  modal(`<h3>${co.name}が吸収された</h3><div class="note">あなたの株 ${n}枚（株価 ${pr}）。${sv.name}の株と2枚→1枚で交換できる（最大${maxPairs}組）。持ち続けた株は、その会社がまた設立されたら生きる</div><div id="dispBody" style="margin-top:8px"></div>`,
+    [['売る＋1', () => {}], ['売る−1', () => {}], ['交換＋1組', () => {}], ['交換−1組', () => {}], ['決める', () => cb({ sell, pairs })]]);
+  // 増やす・減らすのボタンは閉じずに数を変える
+  const btns = document.querySelectorAll('#mbox .row button');
+  const keepOpen = (b, f) => { b.onclick = () => { f(); draw(); }; };
+  keepOpen(btns[0], () => { if (sell + pairs * 2 < n) sell++; });
+  keepOpen(btns[1], () => { if (sell > 0) sell--; });
+  keepOpen(btns[2], () => { if (pairs < maxPairs && sell + (pairs + 1) * 2 <= n) pairs++; });
+  keepOpen(btns[3], () => { if (pairs > 0) pairs--; });
+  draw();
+}
+// ルールのまとめ
+const RULES_HTML = () => `<h3>電脳都市のルール（まとめ）</h3>${POWERS ? `<h4>会社の能力</h4><p class="note">能力はその会社のタワー全部に効きます。吸収された会社の能力は消えます。</p><ul>${POWER.map((w, i) => `<li>${COMPANIES[i].name}（${w.name}）：${w.desc}</li>`).join('')}</ul>` : ''}
+<h4>目的</h4><p>ウイルス（敵）の波を全員で${WAVES}回守りきり、そのとき<b>いちばんお金の多い人</b>の勝ち。ライフが0になったら<b>全員の負け</b>。</p>
+<h4>手番の順番</h4><p>時間トラックで<b>いちばん後ろの人</b>が次に動く。行動するとその時間だけ前へ進む。1つの波で1人が使える時間は、全員の合計が24になるように人数で決まる（4人なら6、2人なら12、6人なら4）。<b>最初の波の前だけは2倍</b>。使い切ったら波が終わるまで待つ。</p>
+<h4>手番でできること（どれか1つ）</h4><ul>
+<li><b>タイルを置く</b>：手札のタイルにはエリアが書いてあり、<b>そのエリアの空いているマスならどこにでも</b>置ける（盤のうすい文字 A〜F がエリア）。置いたマスは壁になり、敵はよけて進む（遠回りさせるほど守りやすい）。入口から出口への道をふさぐ置き方はできない。置いたら<b>株を1枚手札に入れる</b>。<b>2人のときだけ</b>、置いたあとに手札のタイルを1枚入れ替えてもよい（入れ替えたタイルは山の底へ）。</li>
+<li><b>強化する</b>：盤のタワーを押して強化（3段階まで）。誰が置いたタワーでもよい。強化しても株を1枚手札に入れる。</li>
+<li><b>株を公開する</b>：手札の株にお金（株価）を払って表にする。1社なら何枚でも、2社なら1枚ずつ。時間は1回につき1（何枚出しても同じ）。<b>敵が来ている間はできない</b>。</li>
+<li>どれもできないときだけ、タイルを1枚捨てて引き直す（時間1）。</li></ul>
+<h4>色とマーク</h4><p>タイルの<b>色は会社</b>（灰色の点線は会社のないタイル）。<b>マークはタワーの種類</b>。撃つ光線も会社の色。</p>
+<ul>${Object.keys(TYPES).map(k => `<li><img src="${iconUrl(k)}" alt="" style="width:18px;height:18px;vertical-align:-4px;background:#16213d;border-radius:4px"> <b>${TYPES[k].name}</b>：${TYPE_DESC[k]}</li>`).join('')}</ul>
+<h4>株</h4><p>手札の株は伏せていて、まだ数えない。<b>公開した株だけ</b>がボーナスと売却で数えられる。終わりに手札に残った株は価値がない。<b>株の手札は8枚まで</b>で、超えたら捨てる（捨て札の山へ。山札がなくなったら混ぜて山札にする）。</p>
+<h4>会社と株価</h4><p>2枚以上つながったタイルのかたまりに会社を付ける（設立しても株はもらえない）。株価は、その会社のタワーが<b>倒した敵の数</b>で上がる。ファイアウォールで遅くなっている敵をほかの会社のタワーが倒したら、倒した数を半分ずつ分ける。1枚だけでどこにもつながっていないタイルは会社がないので、倒しても誰の株価にもならない。</p>
+<h4>合併</h4><p>会社どうしがつながると、大きい方が小さい方を吸収する（タイル11枚以上の会社は安全で吸収されない）。吸収された会社の筆頭に株価の10倍、次点に5倍のボーナス。公開した株は、売る（株価でお金に）・2枚→1枚で残る会社の株と交換・持ち続けるを選べる。売った株と交換に出した株は<b>山札に戻して混ぜる</b>（捨て札にはしない）。持ち続けた株は公開したまま残り、その会社がまた設立されたらまた数える。手札にあった吸収された会社の株は、そのまま手札に残る（その会社がまた設立されたら公開できる）。</p>
+<h4>決算</h4><p>${DIVIDEND_WAVES.length ? DIVIDEND_WAVES.join('回目と') + '回目の波が終わったとき、盤にある会社ごとに、筆頭に株価の4倍、次点に2倍の配当（ユニオン・パシフィックの配当のように）。' : 'なし'}</p>
+<h4>投資信託</h4><p>値段は盤にある会社の株価の平均。筆頭も配当もなく、終わりにそのときの値段で売れる。株を取ったあと、手札の株1枚を差し出して、投資信託1口を払わずに公開した状態で受け取れる。</p>
+<h4>終わり</h4><p>${WAVES}回守りきったら、盤にある会社すべてでボーナスを出し、公開した株と投資信託をその値段で売る。</p>
+<h4>画面</h4><p>「？」の付いた見出し・数字・ボタンは、カーソルを合わせるか長押しすると説明が出ます。</p>
+<p><label><input type="checkbox" id="guideChk" ${guideOff ? '' : 'checked'}> 押す場所を光らせて案内する</label></p>`;
+function showRules() {
+  modal(RULES_HTML(), [['閉じる', () => {}]]);
+  document.getElementById('guideChk').onchange = e => setGuide(!e.target.checked);
+}
+document.getElementById('helpBtn').onclick = showRules;
+const soundBtn = document.getElementById('soundBtn');
+const drawSoundBtn = () => { soundBtn.textContent = soundOn ? '♪' : '♪×'; soundBtn.style.opacity = soundOn ? 1 : .5; };
+soundBtn.onclick = () => { soundOn = !soundOn; try { localStorage.setItem(SOUND_KEY, soundOn ? '1' : '0'); } catch (e) {} drawSoundBtn(); if (soundOn) sfx('coin'); };
+drawSoundBtn();
+
+// 説明の吹き出し：カーソルを合わせる（パソコン）か、長押し・「？」を押す（スマホ）
+const tipEl = document.getElementById('tip');
+let tipTimer = null, tipHide = null;
+function showTip(el) {
+  tipEl.textContent = el.dataset.tip; tipEl.style.display = 'block';
+  const r = el.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+  tipEl.style.left = Math.max(4, Math.min(innerWidth - w - 4, r.left + r.width / 2 - w / 2)) + 'px';
+  tipEl.style.top = (r.top > h + 10 ? r.top - h - 6 : r.bottom + 6) + 'px';
+}
+const hideTip = () => { tipEl.style.display = 'none'; };
+document.addEventListener('pointerover', e => { const t = e.target.closest('[data-tip]'); if (t && e.pointerType === 'mouse') showTip(t); });
+document.addEventListener('pointerout', e => { if (e.pointerType === 'mouse' && e.target.closest('[data-tip]')) hideTip(); });
+document.addEventListener('pointerdown', e => {
+  const t = e.target.closest('[data-tip]'); clearTimeout(tipTimer);
+  if (!t || e.pointerType === 'mouse') return;
+  if (t.classList.contains('q') || t.tagName === 'TH' || t.tagName === 'SPAN') { showTip(t); clearTimeout(tipHide); tipHide = setTimeout(hideTip, 4000); return; }
+  tipTimer = setTimeout(() => { showTip(t); clearTimeout(tipHide); tipHide = setTimeout(hideTip, 4000); }, 450);
+});
+document.addEventListener('pointerup', () => clearTimeout(tipTimer));
+document.addEventListener('scroll', hideTip, true);
+
+function showResult() { modal(`<h3>${G.lives > 0 ? '最終決算' : '全員の負け'}</h3><pre style="white-space:pre-wrap">${G.result}</pre>`, [['もう一度', () => location.reload()]]); }
+
+
+// ===== 何人かで遊ぶ（PeerJS。ホストが計算し、参加者には様子を送る。テンプレートの「端末間同期」の手順どおり） =====
+const NET_PREFIX = 'denno-toshi-', ROOM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // O/0/I/1 を除いた32文字
+function loadScript(src) { return new Promise((ok, ng) => { const sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = ng; document.head.appendChild(sc); }); }
+const loadPeer = () => window.Peer ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js');
+const loadQR = () => window.qrcode ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js');
+function netFx(f, args) { if (G.net && G.net.role === 'host' && G.started) G.net.fx.push([f, args]); }
+const pendPid = x => x ? x.p.id : -1;
+// 参加者1人ぶんの様子（手札はその人のものだけ）
+function snapshot(seat) {
+  const q = G.players[seat];
+  return { type:'state',
+    tiles:Object.values(G.tiles).map(t => [t.x, t.y, t.type, t.lv]), owner:G.owner,
+    cos:G.cos.map(c => [c.active ? 1 : 0, c.kills]),
+    players:G.players.map(o => ({ name:o.name, color:o.color, money:o.money, shares:o.shares, t:o.t, order:o.order, cpu:o.cpu, resetUsed:o.resetUsed })),
+    hand:q.hand, cards:q.cards, market:G.market, avail:G.cos.map(c => availOf(c.id)), centralLeft:G.centralLeft,
+    lives:G.lives, wave:G.wave, waveTimer:G.waveTimer, sq:G.spawnQueue.length, limit:G.limit, actor:G.actor ? G.actor.id : -1, busy:G.busy,
+    enemies:G.enemies.map(e => [e.id, e.type, e.x / S, e.y / S, e.hp, e.max, e.cell, e.next, e.lure || null]),
+    beams:G.beams.map(b => b.ring ? [1, b.x / S, b.y / S, b.r / S, b.color, b.life] : [0, b.x1 / S, b.y1 / S, b.x2 / S, b.y2 / S, b.color, b.life, b.w]),
+    log:G.log.slice(0, 30), nextWave:G.nextWave || null, lastSettle:G.lastSettle || null, over:G.over, result:G.result,
+    pend:{ taking:pendPid(G.taking), exchanging:pendPid(G.exchanging), discarding:pendPid(G.discarding), swapping:pendPid(G.swapping),
+      choosing:G.choosing ? { pid:G.choosing.p.id, kind:G.choosing.kind, data:G.choosing.data, seq:G.choosing.seq } : null },
+    fx:G.net.fx };
+}
+function netHostTick(dt) {
+  const n = G.net; n.syncT -= dt; if (n.syncT > 0) return; n.syncT = .1;
+  for (const [seat, conn] of Object.entries(n.peers)) if (conn.open) conn.send(snapshot(+seat));
+  n.fx = [];
+}
+// 参加者：届いた様子を写す
+let lastTileCount = -1;
+function applyState(m) {
+  G.tiles = {}; m.tiles.forEach(([x, y, type, lv]) => G.tiles[key(x, y)] = { type, x, y, lv, cool:0 });
+  if (m.tiles.length !== lastTileCount) { lastTileCount = m.tiles.length; G.dist = distanceField(); }
+  G.owner = m.owner; m.cos.forEach(([a, k], i) => { G.cos[i].active = !!a; G.cos[i].kills = k; });
+  m.players.forEach((o, i) => Object.assign(G.players[i], o));
+  me().hand = m.hand; me().cards = m.cards;
+  G.market = m.market; G.availNet = m.avail; G.centralLeft = m.centralLeft;
+  G.lives = m.lives; G.wave = m.wave; G.waveTimer = m.waveTimer; G.spawnQueue = Array(m.sq).fill('normal'); G.limit = m.limit; G.busy = m.busy;
+  G.actor = m.actor >= 0 ? G.players[m.actor] : null;
+  const old = new Map(G.enemies.map(e => [e.id, e]));
+  G.enemies = m.enemies.map(([id, type, x, y, hp, max, cell, next, lure]) => {
+    const e = old.get(id) || { id, x:x * S, y:y * S };
+    Object.assign(e, { type, hp, max, cell, next, lure, tx:x * S, ty:y * S }); return e;
+  });
+  G.beams = m.beams.map(b => b[0] ? { ring:true, x:b[1] * S, y:b[2] * S, r:b[3] * S, color:b[4], life:b[5] } : { x1:b[1] * S, y1:b[2] * S, x2:b[3] * S, y2:b[4] * S, color:b[5], life:b[6], w:b[7] });
+  const logChanged = m.log[0] !== G.log[0]; G.log = m.log; if (logChanged) renderLog();
+  G.nextWave = m.nextWave; G.lastSettle = m.lastSettle;
+  const pp = id => id >= 0 ? { p:G.players[id] } : null;
+  G.taking = pp(m.pend.taking); G.exchanging = pp(m.pend.exchanging); G.discarding = pp(m.pend.discarding); G.swapping = pp(m.pend.swapping);
+  G.choosing = m.pend.choosing ? { p:G.players[m.pend.choosing.pid], kind:m.pend.choosing.kind, data:m.pend.choosing.data, seq:m.pend.choosing.seq } : null;
+  for (const [f, a] of m.fx) {
+    if (f === 'burst') burst(a[0] * S, a[1] * S, a[2], a[3], a[4]);
+    if (f === 'shock') shock(a[0] * S, a[1] * S, a[2]);
+    if (f === 'text') floatText(a[0] * S, a[1] * S, a[2], a[3]);
+    if (f === 'announce') announce(a[0], a[1]);
+    if (f === 'sfx') sfx(a[0], a[1] === null ? undefined : a[1] * S);
+  }
+  if (m.over && !G.over) { G.over = true; G.result = m.result; renderAll(); showResult(); return; }
+  renderAll();
+}
+// ホスト：部屋を作り、参加の申し込みを受ける
+function hostLobby(n, hostName) {
+  const room = Array.from({ length:4 }, () => ROOM_CHARS[rnd(ROOM_CHARS.length)]).join('');
+  G.net = { role:'host', room, peers:{}, fx:[], syncT:0, joined:[], pending:[], hostName:hostName || 'ホスト', n };
+  modal('<h3>部屋を作っています…</h3><p class="note">PeerJS（相手を見つける無料の仲介）につないでいます</p>', [['やめる', () => location.reload()]]);
+  Promise.all([loadPeer(), loadQR()]).then(() => {
+    const peer = new Peer(NET_PREFIX + room); G.net.peer = peer;
+    peer.on('error', err => { if (err.type === 'unavailable-id') { peer.destroy(); hostLobby(n, hostName); } else modal(`<h3>つなげませんでした</h3><p class="note">${err.type}</p>`, [['戻る', () => location.reload()]]); });
+    peer.on('open', () => drawLobby());
+    peer.on('connection', conn => {
+      conn.on('data', d => {
+        if (d.type === 'join' && !G.started) { G.net.pending.push({ conn, name:String(d.name || '参加者').slice(0, 12) }); drawLobby(); }
+        if (d.type === 'act' && G.started) { const seat = Object.entries(G.net.peers).find(([, c]) => c === conn); if (seat) act(+seat[0], d.a); }
+      });
+      conn.on('close', () => {
+        const seat = Object.entries(G.net.peers).find(([, c]) => c === conn);
+        if (seat && G.started) { const q = G.players[+seat[0]]; q.cpu = true; delete G.net.peers[seat[0]]; log(`${q.name} が抜けたので、CPU が引き継ぐ`); }
+        if (!G.started) { G.net.joined = G.net.joined.filter(j => j.conn !== conn); G.net.pending = G.net.pending.filter(j => j.conn !== conn); drawLobby(); }
+      });
+    });
+  }).catch(() => modal('<h3>読み込めませんでした</h3><p class="note">インターネットにつながっているか確かめてください</p>', [['戻る', () => location.reload()]]));
+}
+function drawLobby() {
+  const nt = G.net, url = location.origin + location.pathname + '?room=' + nt.room;
+  let qr = ''; try { const q = qrcode(0, 'M'); q.addData(url); q.make(); qr = q.createSvgTag(4, 0); } catch (e) {}
+  const full = nt.joined.length + 1 >= nt.n;
+  modal(`<h3>部屋 ${nt.room}</h3><div style="background:#fff;display:inline-block;padding:6px;border-radius:6px">${qr}</div>
+    <p class="note">QR を読むか、「部屋に入る」で番号 <b>${nt.room}</b> を入れてもらう。${nt.n}人の部屋で、空いた席は CPU が入る</p>
+    <h4>参加する人</h4><p>${[nt.hostName + '（ホスト）', ...nt.joined.map(j => j.name)].join('、')}</p>
+    ${nt.pending.length ? '<h4>参加の申し込み</h4>' + nt.pending.map((j, i) => `<div style="margin:4px 0">${j.name} <button class="btn" data-ok="${i}" ${full ? 'disabled' : ''}>許可</button> <button class="btn" data-ng="${i}">断る</button></div>`).join('') : ''}`,
+    [['はじめる', () => hostStart()], ['やめる', () => location.reload()]]);
+  document.querySelectorAll('#mbox [data-ok]').forEach(b => b.onclick = () => { const j = nt.pending.splice(+b.dataset.ok, 1)[0]; nt.joined.push(j); drawLobby(); });
+  document.querySelectorAll('#mbox [data-ng]').forEach(b => b.onclick = () => { const j = nt.pending.splice(+b.dataset.ng, 1)[0]; j.conn.send({ type:'reject' }); drawLobby(); });
+}
+function hostStart() {
+  const nt = G.net; NPLAYERS = nt.n;
+  nt.pending.forEach(j => j.conn.send({ type:'reject' })); nt.pending = [];
+  startGame();
+  G.players[0].name = nt.hostName;
+  nt.joined.forEach((j, i) => { const seat = i + 1, q = G.players[seat]; q.cpu = false; q.remote = true; q.name = j.name; nt.peers[seat] = j.conn; });
+  const names = G.players.map(q => q.name);
+  nt.joined.forEach((j, i) => j.conn.send({ type:'start', course:COURSE, n:NPLAYERS, powers:POWERS, seat:i + 1, names }));
+  renderAll();
+}
+// 参加者：部屋に入る
+function joinRoom(room, name) {
+  room = String(room || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+  modal(`<h3>部屋 ${room} に入っています…</h3><p class="note">ホストの許可を待っています</p>`, [['やめる', () => location.reload()]]);
+  loadPeer().then(() => {
+    const peer = new Peer();
+    peer.on('error', err => modal(`<h3>つなげませんでした</h3><p class="note">部屋番号が合っているか確かめてください（${err.type}）</p>`, [['戻る', () => location.reload()]]));
+    peer.on('open', () => {
+      const conn = peer.connect(NET_PREFIX + room, { reliable:true });
+      conn.on('open', () => conn.send({ type:'join', name }));
+      conn.on('data', d => {
+        if (d.type === 'reject') modal('<h3>参加できませんでした</h3><p class="note">ホストに断られたか、もう始まっています</p>', [['戻る', () => location.reload()]]);
+        if (d.type === 'start') {
+          useCourse(d.course); NPLAYERS = d.n; POWERS = !!d.powers; setup(); resize();
+          G.viewer = d.seat; G.net = { role:'client', send:x => conn.send(x), fx:[] };
+          G.players.forEach((q, i) => { q.name = d.names[i]; q.cpu = false; });
+          G.started = true; hideModal(); renderAll(); renderLog();
+        }
+        if (d.type === 'state' && G.started) applyState(d);
+      });
+      conn.on('close', () => { if (!G.over) modal('<h3>ホストとの接続が切れました</h3>', [['最初に戻る', () => location.href = location.pathname]]); });
+    });
+  }).catch(() => modal('<h3>読み込めませんでした</h3><p class="note">インターネットにつながっているか確かめてください</p>', [['戻る', () => location.reload()]]));
+}
+function showJoin(room) {
+  modal(`<h3>部屋に入る</h3><p><input id="roomIn" placeholder="部屋番号（4文字）" value="${room || ''}" style="font-size:16px;width:10em"></p>
+    <p><input id="nameIn" placeholder="名前" value="${(() => { try { return localStorage.getItem('stock-defense-name') || ''; } catch (e) { return ''; } })()}" style="font-size:16px;width:10em"></p>`,
+    [['入る', () => { const nm = document.getElementById('nameIn').value.trim() || '参加者'; try { localStorage.setItem('stock-defense-name', nm); } catch (e) {} joinRoom(document.getElementById('roomIn').value, nm); }], ['戻る', () => showStart()]]);
+}
+
+// ===== ループ =====
+let last = performance.now(), hudTimer = 0;
+function loop(now) {
+  const dt = Math.min(.05, (now - last) / 1000) * SPEED; last = now;
+  if (G.started) G.clock = (G.clock || 0) + dt;
+  const client = G.net && G.net.role === 'client';
+  for (let rest = G.started && !client ? dt : 0; rest > 1e-6; rest -= .05) {
+    const h = Math.min(.05, rest);
+    if (!G.over) { waveTick(h); enemyTick(h); towerTick(h); }
+    turnTick(h);
+  }
+  if (client) for (const e of G.enemies) if (e.tx !== undefined) { const k = Math.min(1, dt * 12); e.x += (e.tx - e.x) * k; e.y += (e.ty - e.y) * k; }
+  if (G.net && G.net.role === 'host' && G.started) netHostTick((now - (G.net.lastNow || now)) / 1000), G.net.lastNow = now;
+  fxTick(dt);
+  hudTimer -= dt; if (G.started && hudTimer <= 0) { hudTimer = .25; renderTop(); renderInfo(); renderTurn(); if (G.actor === me()) renderHand(); }
+  draw();
+  if (window.__probe) window.__probe(G);
+  requestAnimationFrame(loop);
+}
+window.addEventListener('resize', () => { resize(); draw(); });
+function startGame() {
+  setup(); resize(); renderAll(); renderLog();
+  log('始まり：最初の波まで60秒。手札のタイルを置いて迷路を作ろう');
+  G.started = true; announce('電脳都市', COURSES[COURSE].name);
+}
+// 始める前の画面：人数とコースを選ぶ
+function showStart() {
+  let n = NPLAYERS;
+  const body = () => `<h3>電脳都市（プロト）</h3>
+    <p class="note">タイルを置いて迷路を作り、ウイルスの波を全員で${WAVES}回守りきる。タイルのかたまりは会社になり、倒した数で株価が上がる。株を集めて、いちばんお金持ちになった人の勝ち。</p>
+    <h4>人数（あなた＋ほかの人や CPU）</h4><div class="pick">${[2, 3, 4, 5, 6].map(k => `<button class="btn${k === n ? ' on' : ''}" data-n="${k}">${k}人</button>`).join('')}</div>
+    <h4>CPU の強さ</h4><div class="pick">${[['normal', 'ふつう'], ['easy', 'よわい']].map(([k, t]) => `<button class="btn${k === CPU_LEVEL ? ' on' : ''}" data-lv="${k}">${t}</button>`).join('')}</div>
+    <h4>会社の能力</h4><div class="pick">${[[false, 'なし'], [true, 'あり']].map(([k, t]) => `<button class="btn${k === POWERS ? ' on' : ''}" data-pw="${k ? 1 : 0}">${t}</button>`).join('')}</div>
+    <h4>コース</h4><div class="pick">${COURSES.map((c, i) => `<button class="btn${i === COURSE ? ' on' : ''}" data-c="${i}">${c.name}</button>`).join('')}</div>
+    <p class="note">${COURSES[COURSE].note}（後ろに見えている盤）</p>
+    <p class="note">わからないときは、画面右上の「？ ルール」か、「？」の付いた見出しを押してください。はじめは押す場所が光ります。</p>`;
+  const open = () => {
+    modal(body(), [['ひとりで遊ぶ（CPUと）', () => { NPLAYERS = n; startGame(); }],
+      ['部屋を作る', () => { let nm = ''; try { nm = localStorage.getItem('stock-defense-name') || ''; } catch (e) {} hostLobby(n, nm || 'ホスト'); }],
+      ['部屋に入る', () => showJoin('')], ['ルールを読む', () => { showRules(); document.querySelector('#mbox .row button').onclick = () => { document.getElementById('modal').style.display = 'none'; open(); }; }]]);
+    document.querySelectorAll('#mbox [data-n]').forEach(b => b.onclick = () => { n = +b.dataset.n; open(); });
+    document.querySelectorAll('#mbox [data-lv]').forEach(b => b.onclick = () => { CPU_LEVEL = b.dataset.lv; open(); });
+    document.querySelectorAll('#mbox [data-pw]').forEach(b => b.onclick = () => { POWERS = b.dataset.pw === '1'; open(); });
+    document.querySelectorAll('#mbox [data-c]').forEach(b => b.onclick = () => { useCourse(+b.dataset.c); G.dist = distanceField(); open(); });
+  };
+  open();
+}
+useCourse(COURSE); resize(); G.dist = distanceField();
+if (AUTO || PARAMS.has('start')) startGame(); else if (PARAMS.has('room')) showJoin(PARAMS.get('room')); else showStart();
+requestAnimationFrame(loop);
+window.__G = G;
+</script>
+</body>
+</html>
