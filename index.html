@@ -116,6 +116,7 @@
   <div class="grp" id="gLog"><div id="log"></div></div>
 </div>
 <div id="modal"><div class="box" id="mbox"></div></div>
+<button class="btn" id="backChoice" style="display:none;position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:8;box-shadow:0 0 12px #7cf9ff;border-color:#7cf9ff"></button>
 <div id="tip"></div>
 <script>
 'use strict';
@@ -1941,6 +1942,8 @@ function renderCos() {
   const cp = G.players.filter(p => p.shares[CENTRAL]).map(p => `<span style="color:${p.color}">${p.name.replace('CPU', 'C')}${p.shares[CENTRAL]}</span>`).join(' ');
   h += `<tr><td data-tip="値段は会社の株価の加重平均。筆頭も配当もなく、終わりにそのときの値段で売る"><span class="sw" style="background:${CENTRAL_CO.color}"></span>投資信託</td><td>-</td><td>-</td><td>-</td><td>${centralPrice()}</td><td>${G.centralLeft}</td><td style="text-align:left">${cp}</td></tr>`;
   const notYet = G.cos.filter(co => !rowOf(co));
+  if (!AUTO) { const cnt = {}; me().cards.forEach(id => cnt[id] = (cnt[id] || 0) + 1);
+    h += `<tr><td colspan="7" style="text-align:left">あなたの株の手札：${Object.keys(cnt).length ? Object.entries(cnt).map(([id, n]) => { const co = id == CENTRAL ? CENTRAL_CO : G.cos[id]; return `<span style="color:${co.color}">${co.name}${n}</span>`; }).join(' ') : 'なし'}</td></tr>`; }
   if (notYet.length) h += `<tr><td colspan="7" class="note" style="text-align:left">まだない会社：` + notYet.map(co => `<span data-tip="${co.name}：${'★'.repeat(co.tier + 1)}、株価${price(co)}、残り株${availOf(co.id)}${POWERS ? '、' + POWER[co.id].name + '：' + POWER[co.id].desc : ''}"><span class="sw" style="background:${co.color}"></span>${co.name}${'★'.repeat(co.tier + 1)}</span>`).join('　') + '</td></tr>';
   el.innerHTML = h;
 
@@ -2118,19 +2121,27 @@ function modal(html, buttons) {
 // 選んでもらう：G.choosing に「誰に・何を」を置き、その人の画面に出す。答えは act(誰, { t:'choose', v }) で来る
 function requestChoice(p, kind, data, cb) { G.choosing = { p, kind, data, cb, seq:++G.seq }; renderAll(); }
 let shownChoice = 0;
+// 選ぶ画面の途中で、いったん閉じて盤・会社の表・自分の株を見られるようにする
+let peeking = false;
+const CHOICE_NAME = { found:'会社の設立', survivor:'残す会社', dispose:'株の扱い' };
+function peekChoice() { peeking = true; const b = document.getElementById('backChoice'); b.textContent = `${CHOICE_NAME[G.choosing.kind] || '選ぶ画面'}に戻る`; b.style.display = 'block'; renderLayout(); }
+document.getElementById('backChoice').onclick = () => { peeking = false; shownChoice = 0; document.getElementById('backChoice').style.display = 'none'; renderChoice(); };
+// 自分の株：手札の枚数と公開した枚数
+const myShares = id => { const n = me().cards.filter(x => x === id).length, m = me().shares[id]; return n || m ? `あなた：手札${n}・公開${m}` : 'あなたの株：なし'; };
 function renderChoice() {
   const c = G.choosing;
-  if (!c || c.p !== me()) { if (shownChoice) { shownChoice = 0; hideModal(); } return; }
+  if (!c || c.p !== me()) { peeking = false; document.getElementById('backChoice').style.display = 'none'; if (shownChoice) { shownChoice = 0; hideModal(); } return; }
+  if (peeking) return;
   if (shownChoice === c.seq) return;   // 同じ選択の画面は作り直さない（数を変えている途中を消さないため）
   shownChoice = c.seq;
-  const send = v => act(G.viewer, { t:'choose', v });
+  const send = v => act(G.viewer || 0, { t:'choose', v });
   if (c.kind === 'found') chooseCompany(c.data.ids.map(id => G.cos[id]), send);
   if (c.kind === 'survivor') chooseSurvivor(c.data.ids, send);
   if (c.kind === 'dispose') chooseDisposal(me(), G.cos[c.data.co], G.cos[c.data.sv], c.data.pr, c.data.n, c.data.maxPairs, send);
 }
 function hideModal() { document.getElementById('modal').style.display = 'none'; }
-function chooseCompany(free, cb) { modal('<h3>会社を設立する</h3><div class="note">どの会社にしますか（★が多いほど株価が高い）。</div>', free.map(c => [`${c.name} ${'★'.repeat(c.tier + 1)}`, () => cb(c.id), c.color])); }
-function chooseSurvivor(ids, cb) { modal('<h3>合併</h3><div class="note">同じ大きさです。どちらを残しますか。</div>', ids.map(id => [G.cos[id].name, () => cb(id), G.cos[id].color])); }
+function chooseCompany(free, cb) { modal('<h3>会社を設立する</h3><div class="note">どの会社にしますか（★が多いほど株価が高い）。</div>', [...free.map(c => [`${c.name} ${'★'.repeat(c.tier + 1)}${POWERS ? '（' + POWER[c.id].name + '）' : ''}　${myShares(c.id)}`, () => cb(c.id), c.color]), ['盤と会社を見る', peekChoice]]); }
+function chooseSurvivor(ids, cb) { modal('<h3>合併</h3><div class="note">同じ大きさです。どちらを残しますか。</div>', [...ids.map(id => [`${G.cos[id].name}　${myShares(id)}`, () => cb(id), G.cos[id].color]), ['盤と会社を見る', peekChoice]]); }
 function chooseDisposal(p, co, sv, pr, n, maxPairs, cb) {
   // 売る枚数と交換する組の数を選ぶ。残りは持ち続ける
   let sell = 0, pairs = 0;
