@@ -23,7 +23,7 @@
   #wrap { width:100%; max-width:560px; padding:6px; }
   #top { display:flex; gap:8px; align-items:center; font-size:13px; flex-wrap:wrap; padding:4px 2px; }
   #top .big { font-size:16px; font-weight:bold; white-space:nowrap; }
-  @media (max-width:480px) { #top { flex-wrap:nowrap; gap:6px; } #top .big { font-size:14px; } #setupNote { display:none; }
+  @media (max-width:480px) { #top { flex-wrap:nowrap; gap:6px; } #top .big { font-size:14px; } #setupNote { display:none; } #helpBtn .hl { display:none; } #top .btn { white-space:nowrap; }
     /* スマホ：縦に長くならないよう、手札・ボタン・株の場を詰める */
     .tile { min-width:0; flex:1 1 30%; padding:3px 5px; font-size:11px; } .tile b { font-size:13px; } .tile img { width:18px !important; height:18px !important; }
     #acts .btn { padding:5px 8px; font-size:12px; } #market .btn { padding:4px 7px; font-size:12px; }
@@ -55,6 +55,10 @@
   .tile.bad { opacity:.35; }
   button { font-size:16px; }
   .btn { background:#16213d; color:var(--text); border:1px solid #2c3d6b; border-radius:8px; padding:7px 10px; font-size:14px; cursor:pointer; }
+  .shead { width:100%; font-size:12px; color:#9fb0dd; margin:2px 0 4px; }
+  .sgrid { width:100%; display:grid; grid-template-columns:repeat(4, 1fr); gap:5px; }
+  .sgrid .btn { padding:5px 2px; font-size:13px; line-height:1.3; min-height:50px; }
+  .sgrid .btn .note { font-size:11px; }
   #market .btn.on { background:#24407a; box-shadow:0 0 8px #7cf9ff; }
   .btn:disabled { opacity:.35; cursor:default; }
   #acts { display:flex; gap:6px; flex-wrap:wrap; padding:4px 0; }
@@ -80,10 +84,9 @@
   #tabs .btn { flex:1; padding:5px 0; font-size:13px; }
   #tabs .btn.on { background:#24407a; border-color:#7cf9ff; }
   @media (max-width:680px) { #tabs { display:flex; } .grp.hide { display:none; }
-    /* 手札は1段にして横に送る。置く・強化は盤の上のボタンで行うので、下の「置く」は出さない */
-    #hand { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
-    #hand::-webkit-scrollbar { display:none; }
-    #hand .tile { flex:0 0 32.5%; min-width:0; padding:3px 4px; }
+    /* 手札は3枚ずつ2段で、6枚とも見えるように。置く・強化は盤の上のメニューで行うので、下の「置く」は出さない */
+    #hand { gap:4px; }
+    #hand .tile { flex:0 0 calc((100% - 8px) / 3); min-width:0; padding:3px 4px; }
     #place { display:none !important; } }
   .sec .q { color:var(--dim); font-weight:normal; cursor:help; border-bottom:1px dotted var(--dim); margin-left:4px; }
   [data-tip] { cursor:help; }
@@ -105,8 +108,9 @@
     <span id="life" class="big" data-tip="全員で共有のライフ。敵が出口（中枢サーバー）に届くと減り、0になると全員の負け"></span>
     <span id="money" class="big" data-tip="株を公開するときに払うお金。終わりにいちばん多い人の勝ち"></span>
     <span class="note" id="setupNote"></span>
+    <button class="btn" id="pauseBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="一時停止（ひとりで遊ぶときだけ）">⏸</button>
     <button class="btn" id="soundBtn" style="padding:4px 8px;font-size:13px" data-tip="効果音を鳴らす・消す"></button>
-    <button class="btn" id="helpBtn">？ ルール</button>
+    <button class="btn" id="helpBtn">？<span class="hl"> ルール</span></button>
   </div>
   <div style="position:relative"><canvas id="cv"></canvas><div id="bmenu"></div></div>
   <div id="turn"></div>
@@ -127,7 +131,7 @@
   </div>
   <div class="grp" id="gStock">
   <div class="sec">株<span class="q" data-tip="タイルを置くか強化すると、株を1枚手札に入れます（場の5枚・山札の一番上・投資信託から選ぶ）。手札の株はまだ数えません。お金を払って公開した株だけが、ボーナスと売却で数えられます。">？</span></div>
-  <div id="market" style="display:flex;gap:5px;flex-wrap:wrap;padding:4px 0;align-items:center"></div>
+  <div id="market" style="padding:4px 0"></div>
   </div>
   <div class="grp" id="gCos">
   <div class="sec">会社<span class="q" data-tip="つながったタイルのかたまり（2枚以上）に会社が付きます。株価は、その会社のタワーが倒した敵の数で上がります。会社どうしがつながると合併し、吸収された会社の株主にボーナスが出ます。">？</span></div>
@@ -136,6 +140,7 @@
   <div class="grp" id="gLog"><div id="log"></div></div>
 </div>
 <div id="modal"><div class="box" id="mbox"></div></div>
+<div id="pauseOv" style="position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:20"><div style="font-size:28px;font-weight:900;color:#fff;text-shadow:0 0 12px #33f0ff">一時停止中</div><button class="btn" id="resumeBtn" style="font-size:18px;padding:10px 28px">再開する</button></div>
 <button class="btn" id="backChoice" style="display:none;position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:8;box-shadow:0 0 12px #7cf9ff;border-color:#7cf9ff"></button>
 <div id="tip"></div>
 <script>
@@ -460,7 +465,7 @@ function canPlaceAt(t, x, y) {
   const after = { ...G.tiles, [k]: { type:t.type } };
   const d = distanceField(after);
   if (ENTRANCES.some(([a, b]) => d[key(a, b)] === undefined)) return { ok:false, why:'入口から出口への道がふさがる' };
-  for (const e of G.enemies) if (e.cell === k || e.next === k || d[e.cell] === undefined) return { ok:false, why:'敵がいる・敵の道がふさがる' };
+  for (const e of G.enemies) if (e.cell === k || e.next === k || d[e.cell] === undefined) return { ok:false, wait:true, why:'敵が通っている' };   // 敵が通り過ぎれば置ける
   const cos = new Set(neighbors(x, y).map(([a, b]) => G.owner[key(a, b)]).filter(o => o !== undefined));
   const safe = [...cos].filter(id => coSize(id) >= SAFE);
   if (safe.length >= 2) return { ok:false, dead:true, why:'安全な会社どうしはつなげない' };
@@ -475,8 +480,9 @@ const coCap = () => Math.round(CO_CAP * AREA_CELLS.reduce((a, c) => a + (c ? c.l
 function canPlace(t) {
   const res = spotsOf(t).map(([x, y]) => ({ x, y, ...canPlaceAt(t, x, y) }));
   const ok = res.filter(r => r.ok);
-  if (ok.length) return { ok:true, spots:ok };
-  return { ok:false, dead:res.every(r => r.dead), why:res.length ? res[0].why : 'まわりに置けるマスがない', spots:[] };
+  const waits = res.filter(r => r.wait);
+  if (ok.length) return { ok:true, spots:ok, waits };
+  return { ok:false, dead:res.every(r => r.dead), why:res.length ? res[0].why : 'まわりに置けるマスがない', spots:[], waits };
 }
 // 人が選んだ置き場所（なければ印刷されたマス、置けなければ置ける場所の最初）
 function targetOf(t) {
@@ -722,7 +728,7 @@ function takeShare(p, mi) {
 function exchangeCentral(p, id) {
   if (G.centralLeft <= 0 || id === CENTRAL) return;
   p.cards.splice(p.cards.indexOf(id), 1); p.shares[CENTRAL]++; G.centralLeft--; G.stats.exchanged = (G.stats.exchanged || 0) + 1;
-  log(`${p.name}：手札の株1枚を差し出して、投資信託を1口受け取った（現物拠出）`);
+  log(`${p.name}：手札の株1枚を投資信託に替えた`);
 }
 const canExchange = p => G.centralLeft > 0 && p.cards.some(c => c !== CENTRAL);
 // 場に、今ある会社の株が1枚もないときは、1回だけ並べ直せる
@@ -1693,6 +1699,7 @@ function draw() {
     if (!drawSpots.c || drawSpots.ck !== ck || now - drawSpots.at > 1000) { const seen = new Map(); for (const t of me().hand) for (const s2 of canPlace(t).spots) seen.set(key(s2.x, s2.y), s2); drawSpots.c = [...seen.values()]; drawSpots.ck = ck; drawSpots.at = now; }
     for (const s2 of drawSpots.c) { const [qx, qy] = center(s2.x, s2.y); hexPath(qx, qy, S * .9); cx2.strokeStyle = 'rgba(124,249,255,.28)'; cx2.lineWidth = 1.2; cx2.stroke(); }
   }
+  if (G.waitPlace) { const [qx, qy] = center(...G.waitPlace.at), pl = .5 + .5 * Math.sin(performance.now() / 120); hexPath(qx, qy, S * .95); cx2.save(); cx2.setLineDash([5, 4]); cx2.strokeStyle = `rgba(255,233,168,${.4 + .6 * pl})`; cx2.lineWidth = 3; cx2.stroke(); cx2.restore(); cx2.save(); cx2.globalAlpha = .4 + .4 * pl; drawIcon(cx2, G.waitPlace.t.type, qx, qy, S * .42); cx2.restore(); }
   // 置こうとしているタイルの場所
   if (sel) {
     const c = canPlace(sel), tg = chosenOf(sel), pulse = .5 + .5 * Math.sin(performance.now() / 150);
@@ -1852,6 +1859,7 @@ function renderInfo() {
   el.innerHTML = parts.join('');
 }
 function renderTop() {
+  document.getElementById('pauseBtn').style.display = canPause() ? '' : 'none';
   const ac = waveActive();
   document.getElementById('wave').textContent = G.over ? '終了' : ac ? `波 ${G.wave}/${WAVES} 来襲中` : G.wave >= WAVES ? '最後の波' : `次の波 ${G.wave + 1}/${WAVES} まで ${Math.ceil(G.waveTimer)}秒`;
   document.getElementById('life').textContent = '♥ ' + G.lives;
@@ -1881,7 +1889,8 @@ function turnText() {
   if (G.discarding) return [`株の手札が多すぎます。あと${me().cards.length - CARD_MAX}枚捨ててください`, `株の手札は${CARD_MAX}枚まで。下の「株」から捨てる株を選んでください（山札に戻ります）`];
   if (G.swapping) return ['手札のタイルを1枚入れ替えますか', '入れ替えるタイルを手札から押すと、山から1枚引き直します（入れ替えたタイルは山の底へ）。しないなら「入れ替えない」'];
   if (G.taking) return ['株を1枚、手札に入れてください', '下の「株」から、場の会社の株・山札の一番上・投資信託のどれか。お金はかかりません。数えるのは、あとで公開した株だけです'];
-  if (G.exchanging) return ['手札の株を投資信託と交換しますか', '手札の株1枚を差し出すと、投資信託を1口、払わずに公開した状態で受け取れます。いらない株の逃げ道です。しないなら「交換しない」'];
+  if (G.exchanging) return ['いらない株を、投資信託に替えますか', '手札の株を1枚手放すと、投資信託を1口もらえます。お金はかからず、もらった投資信託は最初から公開した状態です。替えないなら「替えない」'];
+  if (G.waitPlace && G.waitPlace.p === me()) return [`建設待ち：敵が通り過ぎたら ${label(...G.waitPlace.at)} に${TYPES[G.waitPlace.t.type].name}が建ちます`, `あと${Math.max(0, Math.ceil(G.waitPlace.until - (G.clock || 0)))}秒で建たなければ取り消します。すぐやめるときは、盤の「やめる」を押す`];
   const sel = G.selected !== null ? me().hand[G.selected] : null, up = G.upSel ? G.tiles[G.upSel] : null;
   if (up) return [`${label(up.x, up.y)} の${TYPES[up.type].name}（${TYPE_SHORT[up.type]}）`, canUpgrade(up) ? `下の「強化」で射程と威力が上がります（時間${TYPES[up.type].time}）。強化したあとも株を1枚もらえます。${left}` : 'このタワーは強化できません。手札のタイルを選び直してください'];
   if (sel && AREA_MODE) { const c = canPlace(sel), tg = chosenOf(sel);
@@ -1946,7 +1955,7 @@ function renderHand() {
     pb.disabled = !(mine && ok && ok.ok && tg);
     pb.textContent = sel ? (ok.ok ? (tg ? `${label(...tg)} に置く（時間${TYPES[sel.type].time}）` : '盤で置くマスを選ぶ') : `置けない：${ok.why}`) : 'タイルを選ぶ（盤の置かれたタイルを押すと強化）';
     if (G.taking) { pb.disabled = true; pb.textContent = '株の場から1枚選んでください'; }
-    if (G.exchanging) { pb.disabled = true; pb.textContent = '投資信託と交換するか選んでください'; }
+    if (G.exchanging) { pb.disabled = true; pb.textContent = '投資信託に替えるか選んでください'; }
   }
   const rb = document.getElementById('removeBtn');
   rb.style.display = REMOVE && G.upSel && G.tiles[G.upSel] ? '' : 'none'; rb.disabled = !(mine && G.upSel && canRemove(G.upSel));
@@ -1957,12 +1966,12 @@ function renderHand() {
 }
 const drawSpots = {};
 // 盤の上のメニュー：空いたマスを押すと、そこに置ける手札が並ぶ。タワーを押すと、強化と効果。押せばその場で行う
-const buildOptions = (x, y) => me().hand.map((t, i) => [t, i]).filter(([t]) => canPlace(t).spots.some(s2 => s2.x === x && s2.y === y));
+const buildOptions = (x, y) => me().hand.map((t, i) => [t, i]).filter(([t]) => { const c = canPlace(t); return [...c.spots, ...c.waits].some(s2 => s2.x === x && s2.y === y); });
 function openMenu(x, y) {
   const k = key(x, y);
   if (G.tiles[k]) { G.menu = { x, y, tower:true }; G.selected = null; G.target = null; G.upSel = k; return true; }
   const opts = buildOptions(x, y); if (!opts.length) return false;
-  G.menu = { x, y }; G.upSel = null; G.target = [x, y];
+  G.menu = { x, y }; G.upSel = null; G.target = canPlace(opts[0][0]).spots.some(s2 => s2.x === x && s2.y === y) ? [x, y] : null;
   if (!opts.some(([, i]) => i === G.selected)) G.selected = opts[0][1];
   return true;
 }
@@ -1970,8 +1979,16 @@ function closeMenu() { G.menu = null; renderMenu(); }
 function renderMenu() {
   const el = document.getElementById('bmenu'), m = G.menu;
   const mine = G.actor === me() && !G.over && !G.busy && !AUTO;
-  const sig = JSON.stringify([m, mine, !!(G.taking || G.exchanging || G.choosing), m && !m.tower && buildOptions(m.x, m.y).map(([t, i]) => i), m && m.tower && G.tiles[key(m.x, m.y)] && G.tiles[key(m.x, m.y)].lv, cv.clientWidth]);
+  const sig = JSON.stringify([m, mine, !!G.waitPlace, !!(G.taking || G.exchanging || G.choosing), m && !m.tower && buildOptions(m.x, m.y).map(([t, i]) => i), m && m.tower && G.tiles[key(m.x, m.y)] && G.tiles[key(m.x, m.y)].lv, cv.clientWidth]);
   if (sig === renderMenu.sig) return; renderMenu.sig = sig;   // 押している途中で作り直さない
+  if (G.waitPlace && G.waitPlace.p === me()) {   // 建設待ち：やめるボタンだけ
+    const w = G.waitPlace, [px, py] = center(...w.at);
+    el.innerHTML = `<div class="mh" style="padding-right:2px">${TYPES[w.t.type].name}：敵が通り過ぎたら建ちます</div><button class="mi" data-cancel="1">やめる</button>`;
+    el.style.display = 'block'; el.querySelector('[data-cancel]').onclick = () => act(G.viewer || 0, { t:'waitcancel' });
+    el.style.left = Math.max(2, Math.min(cv.clientWidth - el.offsetWidth - 2, px - el.offsetWidth / 2)) + 'px';
+    el.style.top = (py - S * 1.2 - el.offsetHeight > 2 ? py - S * 1.2 - el.offsetHeight : py + S * 1.2) + 'px';
+    return;
+  }
   if (!m || G.taking || G.exchanging || G.choosing) { el.style.display = 'none'; return; }
   let h = '<button class="x" data-c="1">×</button>';
   if (m.tower) {
@@ -1983,13 +2000,16 @@ function renderMenu() {
     const opts = buildOptions(m.x, m.y);
     if (!opts.length) { el.style.display = 'none'; return; }
     h += `<div class="mh">${label(m.x, m.y)} に置く${mine ? '' : '（あなたの番になったら）'}</div>`;
+    const wt = opts.length && !canPlace(opts[0][0]).spots.some(s2 => s2.x === m.x && s2.y === m.y);   // 敵が通っているマス
+    if (wt) h += '<div class="mh" style="color:#ffe9a8">敵が通っています。選ぶと、通り過ぎたときに建ちます</div>';
     h += opts.map(([t, i]) => `<button class="mi" data-i="${i}" ${mine ? '' : 'disabled'}><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}<span class="t">時間${TYPES[t.type].time}</span></button>`).join('');
   }
   el.innerHTML = h; el.style.display = 'block';
   el.querySelector('[data-c]').onclick = () => { G.menu = null; G.upSel = null; G.selected = null; G.target = null; renderAll(); };
   el.querySelectorAll('[data-i]').forEach(b => {
     b.onpointerenter = () => { G.selected = +b.dataset.i; };   // 指やカーソルを乗せたタイルの射程を盤に出す
-    b.onclick = () => { const i = +b.dataset.i; G.menu = null; act(G.viewer || 0, { t:'place', idx:i, at:[m.x, m.y] }); };
+    b.onclick = () => { const i = +b.dataset.i, t = me().hand[i]; G.menu = null;
+      act(G.viewer || 0, { t:canPlace(t).spots.some(s2 => s2.x === m.x && s2.y === m.y) ? 'place' : 'waitplace', idx:i, at:[m.x, m.y] }); };
   });
   const up = el.querySelector('[data-up]'); if (up) up.onclick = () => { G.menu = null; G.upSel = null; act(G.viewer || 0, { t:'upgrade', k:key(m.x, m.y) }); };
   // 押したマスのそば（上に入らなければ下）に出す
@@ -2026,44 +2046,37 @@ function renderCos() {
 }
 function renderMarket() {
   const el = document.getElementById('market'); if (AUTO) { el.innerHTML = ''; return; }
-  const tk = G.taking && G.taking.p === me();
-  const showMarket = !MOBILE.matches || tk || (G.exchanging && G.exchanging.p === me()) || (G.discarding && G.discarding.p === me());
-  el.innerHTML = showMarket ? `<span class="note">${tk ? '株を1枚、手札に入れてください：' : '株の場：'}</span>` : '';
-  if (showMarket) {
-  G.market.forEach((id, mi) => {
-    const co = G.cos[id], b = document.createElement('button');
-    b.className = 'btn'; b.style.borderColor = co.color; b.disabled = !tk;
-    b.innerHTML = `${co.name}<br><span class="note">${co.active ? price(co) : 'まだない'}</span>`;
-    b.dataset.tip = co.active ? `${co.name}の株。いまの株価${price(co)}（公開するときに払う）` : `${co.name}はまだ盤にない。手札に入れておけるが、公開できるのは設立されてから`;
-    b.onclick = () => act(G.viewer || 0, { t:'take', mi });
-    el.appendChild(b);
-  });
-  const d = document.createElement('button'); d.className = 'btn'; d.textContent = '山札から'; d.disabled = !tk || !G.deck.length;
-  d.dataset.tip = '山札の一番上を、見ないで手札に入れる。何が来るかわからない';
-  d.onclick = () => act(G.viewer || 0, { t:'take', mi:-1 }); el.appendChild(d);
-  const c = document.createElement('button'); c.className = 'btn'; c.style.borderColor = CENTRAL_CO.color;
-  c.innerHTML = `投資信託<br><span class="note">残り${G.centralLeft}</span>`; c.disabled = !tk || G.centralLeft <= 0;
-  c.dataset.tip = `投資信託。値段は盤にある会社の株価の平均（いま${centralPrice()}）。筆頭も配当もなく、終わりにそのときの値段で売れる`;
-  c.onclick = () => act(G.viewer || 0, { t:'take', mi:-2 }); el.appendChild(c);
-  if (G.exchanging && G.exchanging.p === me()) {
-    el.insertAdjacentHTML('beforeend', '<div class="note" style="width:100%">手札の株1枚を差し出して、投資信託を1口（公開済み、払わない）受け取れます（現物拠出）：</div>');
-    [...new Set(me().cards.filter(x => x !== CENTRAL))].forEach(id => {
-      const b = document.createElement('button'); b.className = 'btn'; b.style.borderColor = G.cos[id].color;
-      b.textContent = `${G.cos[id].name}を交換`; b.onclick = () => act(G.viewer || 0, { t:'exchange', id }); el.appendChild(b);
+  const tk = G.taking && G.taking.p === me(), ex = G.exchanging && G.exchanging.p === me(), dc = G.discarding && G.discarding.p === me();
+  el.innerHTML = '';
+  // 見出し1行＋同じ大きさの札のマス目、の形で並べる
+  const grid = (head, items) => {
+    if (head) el.insertAdjacentHTML('beforeend', `<div class="shead">${head}</div>`);
+    const g = document.createElement('div'); g.className = 'sgrid';
+    items.forEach(([html, color, onclick, enabled, tip]) => {
+      const b = document.createElement('button'); b.className = 'btn'; b.innerHTML = html; if (color) b.style.borderColor = color;
+      b.disabled = !enabled; if (tip) b.dataset.tip = tip; b.onclick = onclick; g.appendChild(b);
     });
-    const no = document.createElement('button'); no.className = 'btn'; no.textContent = '交換しない'; no.onclick = () => act(G.viewer || 0, { t:'exchange', id:null }); el.appendChild(no);
-  }
-  if (G.discarding && G.discarding.p === me()) {
-    el.insertAdjacentHTML('beforeend', `<div class="note" style="width:100%">株の手札は${CARD_MAX}枚まで。捨てる株を選んでください：</div>`);
-    [...new Set(me().cards)].forEach(id => {
-      const b = document.createElement('button'); b.className = 'btn'; b.style.borderColor = coOf(id).color;
-      b.textContent = `${coOf(id).name} ×${me().cards.filter(c => c === id).length}：1枚捨てる`; b.onclick = () => act(G.viewer || 0, { t:'discard', id }); el.appendChild(b);
-    });
-  }
-  const r = document.createElement('button'); r.className = 'btn'; r.textContent = '場を入れ替える';
-  r.disabled = !(tk && canReset(me())); r.dataset.tip = '場の5枚に、盤にある会社の株が1枚もない（どれも公開できない）とき、1回だけ並べ直せる';
-  r.onclick = () => act(G.viewer || 0, { t:'reset' });
-  el.appendChild(r);
+    el.appendChild(g); return g;
+  };
+  // 交換・捨てる：その場面のボタンだけ
+  if (ex) {
+    grid(`手放す株を選ぶ → 投資信託1口（いま${centralPrice()}・公開済み・お金はいらない）`, [
+      ...[...new Set(me().cards.filter(x => x !== CENTRAL))].map(id => { const co = G.cos[id]; return [`${co.name}<br><span class="note">${co.active ? '株価' + price(co) : 'まだない'}</span>`, co.color, () => act(G.viewer || 0, { t:'exchange', id }), true]; }),
+      ['替えない', null, () => act(G.viewer || 0, { t:'exchange', id:null }), true]]);
+  } else if (dc) {
+    grid(`株の手札は${CARD_MAX}枚まで。捨てる株を選ぶ（${me().cards.length - CARD_MAX}枚）`,
+      [...new Set(me().cards)].map(id => [`${coOf(id).name} ×${me().cards.filter(c => c === id).length}<br><span class="note">1枚捨てる</span>`, coOf(id).color, () => act(G.viewer || 0, { t:'discard', id }), true]));
+  } else if (!MOBILE.matches || tk) {
+    // 株の場（5枚）・山札・投資信託
+    grid(tk ? '株を1枚選んで手札に入れる（お金はかからない）' : '株の場', [
+      ...G.market.map((id, mi) => { const co = G.cos[id]; return [`${co.name}<br><span class="note">${co.active ? price(co) : 'まだない'}</span>`, co.color, () => act(G.viewer || 0, { t:'take', mi }), tk,
+        co.active ? `${co.name}の株。いまの株価${price(co)}（公開するときに払う）` : `${co.name}はまだ盤にない。手札に入れておけるが、公開できるのは設立されてから`]; }),
+      ['山札<br><span class="note">何が来るか</span>', null, () => act(G.viewer || 0, { t:'take', mi:-1 }), tk && G.deck.length, '山札の一番上を、見ないで手札に入れる'],
+      [`投資信託<br><span class="note">残り${G.centralLeft}</span>`, CENTRAL_CO.color, () => act(G.viewer || 0, { t:'take', mi:-2 }), tk && G.centralLeft > 0, `投資信託。値段は盤にある会社の株価の平均（いま${centralPrice()}）。筆頭も配当もなく、終わりにそのときの値段で売れる`]]);
+    if (tk && canReset(me())) {
+      const r = document.createElement('button'); r.className = 'btn'; r.textContent = '場を入れ替える（どれも公開できないときの1回だけ）'; r.style.marginTop = '4px';
+      r.onclick = () => act(G.viewer || 0, { t:'reset' }); el.appendChild(r);
+    }
   }
   // 株の手札：押して公開する株を選び（押すたびに1枚ずつ増える）、最後に「公開する」で決める。
   // 1社なら何枚でも、2社なら1枚ずつ。選び方に合わない押し方をしたら、その会社だけを選び直す
@@ -2071,8 +2084,10 @@ function renderMarket() {
   const ids = [...new Set(me().cards)];
   G.revSel = Object.fromEntries(Object.entries(G.revSel || {}).filter(([id, k]) => k > 0 && me().cards.filter(c => c == id).length >= k));
   if (!mine) G.revSel = {};
-  const box = document.createElement('div'); box.style.cssText = 'width:100%;display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:4px';
-  box.innerHTML = `<span class="note">株の手札${ids.length && mine && !waveActive() ? '（押して公開する株を選ぶ）' : ''}：${ids.length ? '' : 'なし'}</span>`;
+  if (ex || dc) return;   // 交換・捨てるの場面は、上のボタンだけ
+  const box = document.createElement('div'); box.style.cssText = 'width:100%;margin-top:6px';
+  box.innerHTML = `<div class="shead">株の手札${ids.length && mine && !waveActive() ? '（押して公開する株を選ぶ）' : ''}${ids.length ? '' : '：なし'}</div>`;
+  const chips = document.createElement('div'); chips.className = 'sgrid'; box.appendChild(chips);
   ids.forEach(id => {
     const co = coOf(id), n = me().cards.filter(c => c === id).length, k = G.revSel[id] || 0;
     const b = document.createElement('button'); b.className = 'btn' + (k ? ' on' : ''); b.style.borderColor = co.color;
@@ -2085,7 +2100,7 @@ function renderMarket() {
       else { const t = { ...sel }; delete t[id]; G.revSel = t; }
       renderMarket();
     };
-    box.appendChild(b);
+    chips.appendChild(b);
   });
   const chosen = Object.entries(G.revSel).map(([id, k]) => [+id, k]);
   if (chosen.length) {
@@ -2152,12 +2167,20 @@ cv.addEventListener('click', ev => {
 
 // ===== 行動の入口（何人かで遊ぶため、画面のボタンもネットワークから届いた行動も、ここを通す） =====
 // pid：誰が。a：何をする。決まりに合わない行動は false を返して何もしない
+const WAIT_LIMIT = 10;   // 建設待ちは10秒まで（ゲームの中の秒）
 function netSend(msg) { if (G.net && G.net.send) G.net.send(msg); }
 function act(pid, a) {
   const p = G.players[pid]; if (!p || G.over || !a) return false;
   if (G.net && G.net.role === 'client') { if (a.t === 'place') { G.selected = null; G.target = null; } netSend({ type:'act', a }); return true; }   // 参加者は、ホストに送るだけ
   const turn = G.actor === p && !G.busy && !G.choosing;
   switch (a.t) {
+    case 'waitplace': {   // （WAIT_LIMIT 秒たっても建たなければ取り消す）   // 敵が通り過ぎたら建てる：その人の手番のまま待つ（時間は建ったときに払う）
+      const t = p.hand[a.idx]; if (!turn || !t || !Array.isArray(a.at)) return false;
+      const r0 = canPlaceAt(t, a.at[0], a.at[1]); if (!r0.ok && !r0.wait) return false;
+      if (spotsOf(t).every(([x, y]) => x !== a.at[0] || y !== a.at[1])) return false;
+      G.waitPlace = { p, t, at:a.at, until:(G.clock || 0) + WAIT_LIMIT }; G.busy = true; G.selected = null; G.target = null; G.menu = null; renderAll(); return true;
+    }
+    case 'waitcancel': if (!G.waitPlace || G.waitPlace.p !== p) return false; G.waitPlace = null; G.busy = false; renderAll(); return true;
     case 'place': {
       const t = p.hand[a.idx]; if (!turn || !t || !Array.isArray(a.at)) return false;
       const c = canPlace(t); if (!c.ok || !c.spots.some(s2 => s2.x === a.at[0] && s2.y === a.at[1])) return false;
@@ -2421,8 +2444,15 @@ function showJoin(room) {
 
 // ===== ループ =====
 let last = performance.now(), hudTimer = 0;
+// 一時停止（ひとりで遊ぶときだけ。何人かで遊ぶときは、ほかの人の画面も止まるので出さない）
+let paused = false;
+const canPause = () => G.started && !G.over && !G.net && !AUTO;
+function setPause(on) { paused = on && canPause(); document.getElementById('pauseOv').style.display = paused ? 'flex' : 'none'; }
+document.getElementById('pauseBtn').onclick = () => setPause(true);
+document.getElementById('resumeBtn').onclick = () => setPause(false);
+document.addEventListener('visibilitychange', () => { if (document.hidden && canPause()) setPause(true); });   // ほかのアプリに切り替えたら止めておく
 function loop(now) {
-  const dt = Math.min(.05, (now - last) / 1000) * SPEED; last = now;
+  const dt = paused ? 0 : Math.min(.05, (now - last) / 1000) * SPEED; last = now;   // 一時停止中は時間を進めない
   if (G.started) G.clock = (G.clock || 0) + dt;
   const client = G.net && G.net.role === 'client';
   for (let rest = G.started && !client ? dt : 0; rest > 1e-6; rest -= .05) {
@@ -2433,6 +2463,12 @@ function loop(now) {
   if (client) for (const e of G.enemies) if (e.tx !== undefined) { const k = Math.min(1, dt * 12); e.x += (e.tx - e.x) * k; e.y += (e.ty - e.y) * k; }
   if (G.net && G.net.role === 'host' && G.started) netHostTick((now - (G.net.lastNow || now)) / 1000), G.net.lastNow = now;
   fxTick(dt);
+  if (G.waitPlace && !G.over) {   // 建設待ち：置けるようになったら建てる。待っても置けない形になったらやめる
+    const w = G.waitPlace, idx = w.p.hand.indexOf(w.t), r0 = idx >= 0 ? canPlaceAt(w.t, w.at[0], w.at[1]) : { ok:false };
+    if (r0.ok) { G.waitPlace = null; G.busy = false; act(G.players.indexOf(w.p), { t:'place', idx, at:w.at }); }
+    else if (!r0.wait) { G.waitPlace = null; G.busy = false; log(`${w.p.name}：${label(...w.at)} には置けなくなった（${r0.why || '手札にない'}）`); renderAll(); }
+    else if ((G.clock || 0) > w.until) { G.waitPlace = null; G.busy = false; log(`${w.p.name}：${label(...w.at)} は敵が通り続けたので、建てるのをやめた`); renderAll(); }
+  }
   hudTimer -= dt; if (G.started && hudTimer <= 0) { hudTimer = .25; renderTop(); renderInfo(); renderTurn(); if (G.actor === me()) renderHand(); }
   draw();
   if (window.__probe) window.__probe(G);
@@ -2453,8 +2489,8 @@ function showStart() {
     <h4>CPU の強さ</h4><div class="pick">${[['normal', 'ふつう'], ['easy', 'よわい']].map(([k, t]) => `<button class="btn${k === CPU_LEVEL ? ' on' : ''}" data-lv="${k}">${t}</button>`).join('')}</div>
     <h4>会社の能力</h4><div class="pick">${[[false, 'なし'], [true, 'あり']].map(([k, t]) => `<button class="btn${k === POWERS ? ' on' : ''}" data-pw="${k ? 1 : 0}">${t}</button>`).join('')}</div>
     <h4>コース</h4><div class="pick">${COURSES.map((c, i) => `<button class="btn${i === COURSE ? ' on' : ''}" data-c="${i}">${c.name}</button>`).join('')}</div>
-    <p class="note">${COURSES[COURSE].note}。選んだコースの盤が後ろに出ます</p>
-    <p class="note">遊び方は、右上の「？ ルール」でいつでも読めます。遊んでいる間は、次に押す場所が光って教えてくれます。</p>`;
+    <div style="border:1px solid #2c3d6b;border-left:4px solid #7cf9ff;border-radius:8px;padding:6px 10px;margin:6px 0 4px;background:#0a1226"><b style="color:#7cf9ff">${COURSES[COURSE].name}</b><span class="note" style="color:var(--text)">：${COURSES[COURSE].note}</span><div class="note">後ろに見えているのが、このコースの盤です</div></div>
+    <p class="note" style="margin-top:14px">遊び方は「ルールを読む」か、遊んでいる間なら右上の「？」でいつでも読めます。遊んでいる間は、次に押す場所が光って教えてくれます。</p>`;
   const open = () => {
     modal(body(), [['ひとりで遊ぶ（CPUと）', () => { NPLAYERS = n; startGame(); }],
       ['部屋を作る', () => { let nm = ''; try { nm = localStorage.getItem('stock-defense-name') || ''; } catch (e) {} hostLobby(n, nm || 'ホスト'); }],
