@@ -150,6 +150,8 @@ const COLS = 12, ROWS = 13;
 const ROWNAME = 'ABCDEFGHIJKLM';
 const PARAMS = new URLSearchParams(location.search);
 const AUTO = PARAMS.has('auto');                 // 全員 CPU（動作確認用）
+// 次の波までの秒数：人が遊ぶときは長め（最初90秒・あとは敵が出きってから45秒）。全員 CPU の試しは 60秒・30秒のまま（難しさはこれで合わせた）
+const FIRST_WAIT = AUTO ? 60 : 90, WAVE_GAP = AUTO ? 30 : 45;
 const SPEED = +(PARAMS.get('speed') || 1);       // 時間の進みを速める（動作確認用）
 // 区切り（使える時間が補充されるとき）：波が始まるとき（start）か、波が終わったとき（end）か。試して決める
 const CYCLE = PARAMS.get('cycle') === 'start' ? 'start' : 'end';  // CPU で比べて「波が終わったとき」に決めた
@@ -177,6 +179,9 @@ const centralPrice = () => {
 };
 const priceOf = id => id === CENTRAL ? centralPrice() : price(G.cos[id]);  // 場に表向きに並べる株券の枚数（ユニオン・パシフィック式）
 let CPU_LEVEL = PARAMS.get('level') === 'easy' ? 'easy' : 'normal';
+// 難しさ（人が遊ぶとき用）：敵の体力の倍率と、最初の3波をさらに柔らかくするか。CPU の試しで合わせた硬さが「ふつう」
+const DIFFS = { easy:{ name:'やさしい', hp:.8, early:.7 }, normal:{ name:'ふつう', hp:1 }, hard:{ name:'むずかしい', hp:1.15 } };
+let DIFF = DIFFS[PARAMS.get('diff')] ? PARAMS.get('diff') : 'normal';
 let NPLAYERS = Math.max(2, Math.min(6, +(PARAMS.get('players') || 4)));
 
 // タイルの種類：時間・射程（マス）・威力・撃つ間隔（秒）・色
@@ -232,7 +237,10 @@ const budget = () => Math.round(24 / NPLAYERS);
 const PLAYER_HP = { 2:.93, 3:.97, 4:1, 5:.98, 6:.97 };
 const playerHp = () => +(PARAMS.get('php') || PLAYER_HP[NPLAYERS] || 1);
 // 敵の体力の伸び：波 n の敵は（6 ＋ HP_GROWTH × n）倍。?hp= で変えて試す
-const HP_GROWTH = +(PARAMS.get('hp') || 8.5);
+// 印のマス（ユーザー）：タイルに書かれたマスに置けば書かれた時間、同じエリアのほかのマスなら CELL_EXTRA だけ多く払う。
+// 余分を払うぶん迷路が作りにくくなるので、敵の硬さを 8.5n から 5.5n に下げた（CPU の試し 4人・ゲートウェイで20回中13回守りきる）。?cell=0 で前の形（エリアのどこでも同じ時間）
+const CELL_EXTRA = PARAMS.has('cell') ? +PARAMS.get('cell') : 1;
+const HP_GROWTH = +(PARAMS.get('hp') || (CELL_EXTRA ? 5.5 : 8.5));
 const SAFE = +(PARAMS.get('safe') || 11), START_MONEY = 3000, HAND = +(PARAMS.get('hand') || 6), LIVES = 10, WAVES = +(PARAMS.get('waves') || 12);   // 12回（ユーザー。20回だと8回目以降は合併が起きず、動きのない後半が長かった）
 // 波の回数を変えたとき：?wavescale=1 なら最後の波の強さ・種類の時期・ボスの割合を20回のときにそろえる（敵が速く強くなる）。
 // ふつうは20回のときと同じ上がり方で、早く終わるだけ
@@ -251,16 +259,16 @@ const wallCol = (x, gaps) => Array.from({ length:ROWS }, (_, y) => [x, y]).filte
 const COURSES = [
   // 壁なし（エリアに置けるので、広い場所に自分で迷路を作る。Desktop Tower Defense と同じ形）。
   // 前は縦の壁3本を置いていた：wall:[...wallCol(3, [2, 10, 11]), ...wallCol(6, [0, 6, 12]), ...wallCol(9, [2, 3, 9])]
-  { name:'ゲートウェイ', hpMul:.97, note:'敵は左の「入」から右の◆へ向かう。じゃまなマスのない、いちばん素直な盤',
+  { name:'ゲートウェイ', hpMul:.97, note:'左の入口から右の出口（◆）へ敵が進む、基本の盤。じゃまなマスはない',
     entrances:[[0, 6], [0, 7]], exit:[11, 6],
     block:[], fast:[[1, 6], [1, 7], [2, 6]], heal:[[10, 5], [10, 6]] },
-  { name:'はさみうち', hpMul:1, early:.7, note:'敵は左上と左下の2か所から来る（10回目までは1回ずつ交互、そのあとは両方から）。数の多い群れがよく来る',
+  { name:'はさみうち', hpMul:1, early:.7, note:'入口が左上と左下の2か所。10回目までは片方ずつ交互に、そのあとは両方から敵が来る。群れの敵が多い',
     entrances:[[0, 0], [0, 12]], exit:[11, 6],
     block:[[4, 3], [4, 9], [8, 6]], fast:[[6, 2], [6, 10]], heal:[[9, 5], [9, 7]] },
-  { name:'縦断', hpMul:.9, note:'敵は上から下へ向かう。真ん中に敵が速くなるマスがある。速い敵がよく来る',
+  { name:'縦断', hpMul:.9, note:'上の入口から下の出口へ敵が進む。真ん中に、敵が速くなるマスがある。速い敵が多い',
     entrances:[[5, 0], [6, 0]], exit:[6, 12],
     block:[[2, 4], [9, 4], [2, 8], [9, 8]], fast:[[6, 6], [5, 6]], heal:[[6, 11], [5, 11]] },
-  { name:'対角', hpMul:.8, early:.7, note:'敵は左上の隅から右下の隅へ向かう。硬い敵がよく来る',
+  { name:'対角', hpMul:.8, early:.7, note:'左上の隅の入口から、右下の隅の出口へ敵が進む。硬い敵が多い',
     entrances:[[0, 0], [1, 0]], exit:[11, 12],
     block:[[3, 3], [8, 9], [6, 6]], fast:[[0, 1], [1, 1], [5, 6], [6, 7]], heal:[[10, 11], [11, 11]] },
 ];
@@ -338,7 +346,7 @@ const G = {
   owner: {},            // 'x,y' -> 会社番号（グループに付いた会社）
   bag: [], players: [], cos: COMPANIES.map((c, i) => ({ ...c, id:i, active:false, kills:0 })),
   enemies: [], particles: [], beams: [], shocks: [], flashes: [], texts: [], banner: null, flash: {}, red: 0,
-  lives: LIVES, wave: 0, waveTimer: 60, spawnQueue: [], spawnTimer: 0, over:false, result:'',
+  lives: LIVES, wave: 0, waveTimer: FIRST_WAIT, spawnQueue: [], spawnTimer: 0, over:false, result:'',
   calib: 1, waveLeaks: 0, limit: 6, roundOrder: [], deck: [], market: [], stats:{ merges:0, bought:0, upgrades:0, placed:0 }, actor: null, busy:false, seq:0, log:[], selected:null, dist:null,
 };
 
@@ -505,7 +513,7 @@ function newCycle() {
   const base = G.limit;
   const behind = G.players.filter(p => p.t < base).sort((a, b) => a.t - b.t || b.order - a.order);
   behind.forEach((p, i) => { p.t = base; p.order = 1e9 - i; });  // 線ちょうどにいた人より先に動く
-  G.players.forEach(p => p.resetUsed = false);
+  G.players.forEach(p => { p.resetUsed = false; p.clock = WAVE_GAP; });
   G.limit = base + budget();
   renderAll();
 }
@@ -515,6 +523,7 @@ function nextActor() {
   const ready = G.players.filter(p => p.t < G.limit);
   return ready.sort((a, b) => a.t - b.t || b.order - a.order)[0] || null;
 }
+const placeTime = (t0, x, y) => TYPES[t0.type].time + (CELL_EXTRA && (x !== t0.x || y !== t0.y) ? CELL_EXTRA : 0);
 function spend(p, time) { p.t += time; p.order = ++G.seq + 100; }
 function waveActive() { return G.spawnQueue.length > 0 || G.enemies.length > 0; }
 
@@ -549,8 +558,9 @@ function placeTile(p, idx, onDone, at) {
   { const pt = G.stats.placedBy = G.stats.placedBy || {}; pt[t.type] = (pt[t.type] || 0) + 1; }
   p.hand.splice(idx, 1); G.selected = null; G.target = null;
   if (G.bag.length) p.hand.push(G.bag.pop());
-  spend(p, TYPES[t.type].time);
-  log(`${p.name}：${label(t.x, t.y)} に${TYPES[t.type].name}を置いた（時間${TYPES[t.type].time}）`);
+  const tm = placeTime(t0, t.x, t.y); spend(p, tm);
+  if (CELL_EXTRA) { const pc = G.stats.printed = G.stats.printed || [0, 0]; pc[tm === TYPES[t.type].time ? 0 : 1]++; }
+  log(`${p.name}：${label(t.x, t.y)} に${TYPES[t.type].name}を置いた（時間${tm}）`);
   G.dist = distanceField();
   burst(...center(t.x, t.y), '#eef3ff', 14, 1.2); shock(...center(t.x, t.y), .8); sfx('place', center(t.x, t.y)[0]);
   resolveGroup(p, t.x, t.y, () => swapStep(p, onDone));
@@ -1119,7 +1129,9 @@ function cpuAct(p) {
       const onPath = new Set(); for (const [x, y] of pathFrom(dist0)) { onPath.add(key(x, y)); for (const [a, b] of neighbors(x, y)) onPath.add(key(a, b)); }
       const inPlan = spots.filter(s2 => PLAN.has(key(s2.x, s2.y)));
       const near = spots.filter(s2 => onPath.has(key(s2.x, s2.y)) && !PLAN.has(key(s2.x, s2.y))), rest = shuffle(spots.filter(s2 => !onPath.has(key(s2.x, s2.y)) && !PLAN.has(key(s2.x, s2.y))));
+      const printed = spots.find(s2 => s2.x === t0.x && s2.y === t0.y);
       spots = PARAMS.get('fast') === '0' ? [...shuffle(inPlan).slice(0, 6), ...shuffle(near).slice(0, 6), ...rest.slice(0, 3)] : [...shuffle(inPlan).slice(0, 4), ...shuffle(near).slice(0, 4), ...rest.slice(0, 2)];
+      if (printed && !spots.includes(printed)) spots.push(printed);
     }
     for (const sp of spots) {
     const t = { ...t0, x:sp.x, y:sp.y };
@@ -1133,7 +1145,7 @@ function cpuAct(p) {
     const growth = defGain(def0, def1) * (stake ? 1 : .2);
     const gco = RT ? guessOwner(t.x, t.y) : undefined, rv = RT ? routeValue(p, sh0, coShares(after, dist1, kk => kk === k ? gco : G.owner[kk])) : 0;
     const plan = planOn(p) && PLAN.has(k) ? PLAN_BONUS : 0;   // 設計図のマスなら高く見る
-    opts.push({ v:safety + (1 - L0) * (growth + stake + bestCard + mergeGain(p, t) + rv) + plan, time:TYPES[t.type].time, run:() => placeTile(p, i, () => takeStep(p, afterAction), [t.x, t.y]) });
+    opts.push({ v:safety + (1 - L0) * (growth + stake + bestCard + mergeGain(p, t) + rv) + plan, time:placeTime(t0, t.x, t.y), run:() => placeTile(p, i, () => takeStep(p, afterAction), [t.x, t.y]) });
     }
   });
   // 取り除く：守りの変化と、経路で株価がどう動くか（自分が株を持つ会社に倒させる道に変わるなら得）
@@ -1274,8 +1286,8 @@ function spawn(type) {
   // はさみうち：1〜10回目の波は左右から交互に、11回目からは両側から
   const ent = COURSE === 1 && G.wave <= 10 ? G.wave % 2 : rnd(ENTRANCES.length), [ex, ey] = ENTRANCES[ent];
   // 最初の3回の波だけ敵を弱くする（?early=0.5 なら波1は半分、波4でふつうに戻る。ふつうは1、入口が隅のコースはコースごとの値）
-  const E = +(PARAMS.get('early') || COURSES[COURSE].early || 1), early = G.wave <= 3 ? E + (1 - E) * (G.wave - 1) / 3 : 1;
-  const def = ENEMY[type], hp = Math.round(def.hp * (6 + effWave(G.wave) * HP_GROWTH) * early * (COURSES[COURSE].hpMul || 1) * playerHp() * (POWERS ? POWER_HP : 1) * 10) / 10;  // 回を追うごとに硬くする（数字は仮）
+  const E = +(PARAMS.get('early') || Math.min(COURSES[COURSE].early || 1, DIFFS[DIFF].early || 1)), early = G.wave <= 3 ? E + (1 - E) * (G.wave - 1) / 3 : 1;
+  const def = ENEMY[type], hp = Math.round(def.hp * (6 + effWave(G.wave) * HP_GROWTH) * early * (COURSES[COURSE].hpMul || 1) * playerHp() * DIFFS[DIFF].hp * (POWERS ? POWER_HP : 1) * 10) / 10;  // 回を追うごとに硬くする（数字は仮）
   const [x, y] = center(ex, ey);
   G.enemies.push({ type, x, y, hp, max:hp, cell:key(ex, ey), next:null, slow:0, id:++G.seq, ent });
 }
@@ -1314,7 +1326,7 @@ function waveTick(dt) {
   }
   if (G.spawnQueue.length) {
     G.spawnTimer -= dt;
-    if (G.spawnTimer <= 0) { spawn(G.spawnQueue.shift()); G.spawnTimer = .8; if (!G.spawnQueue.length) G.waveTimer = 30; }
+    if (G.spawnTimer <= 0) { spawn(G.spawnQueue.shift()); G.spawnTimer = .8; if (!G.spawnQueue.length) G.waveTimer = WAVE_GAP; }
     G.inWave = true;
     return;
   }
@@ -1342,7 +1354,18 @@ function waveTick(dt) {
     if (G.wave < WAVES) { announce(`WAVE ${G.wave} クリア`, '時間が補充された。株を公開できる'); sfx('clear'); }
   }
   if (G.wave >= WAVES) return finish(true);
-  G.waveTimer -= dt;
+  if (AUTO) G.waveTimer -= dt;   // 全員 CPU の試し：今までどおり秒数で次の波
+  else {
+    // 人が遊ぶとき：人それぞれに考える時間（p.clock）があり、自分の番の間だけ減る。切れたら、この波の残りの手番は飛ばす。
+    // 全員の手番が終わり、敵がいなくなったら、3秒後に次の波
+    const a = G.actor;
+    if (a && !a.cpu) {
+      if (a.clock === undefined) a.clock = FIRST_WAIT;
+      a.clock -= dt;
+      if (a.clock <= 0 && !G.busy && !G.choosing) { a.t = Math.max(a.t, G.limit); G.selected = null; G.menu = null; log(`${a.name}：考える時間が切れたので、この波の手番は終わり`); renderAll(); }
+    }
+    if (!nextActor() && !waveActive()) { G.waveTimer = Math.min(G.waveTimer, 3); G.waveTimer -= dt; }   // 一瞬だけ手番の人がいない間を数えないよう、時間トラックで判断する
+  }
   if (G.waveTimer <= 0) { G.wave++; G.lastSettle = null; if (CYCLE === 'start') newCycle(); G.spawnQueue = G.nextWave && G.nextWave.n === G.wave ? G.nextWave.list : makeWave(G.wave); G.spawnTimer = 0;
     if (G.wave < WAVES) G.nextWave = { n:G.wave + 1, list:makeWave(G.wave + 1) }; log(`波 ${G.wave} が来た（${G.spawnQueue.length}体）`);
     announce(`WAVE ${G.wave}`, `${G.spawnQueue.length}体のウイルス` + (G.spawnQueue.includes('big') ? '・大きいのが来る' : ''));
@@ -1699,6 +1722,12 @@ function draw() {
     if (!drawSpots.c || drawSpots.ck !== ck || now - drawSpots.at > 1000) { const seen = new Map(); for (const t of me().hand) for (const s2 of canPlace(t).spots) seen.set(key(s2.x, s2.y), s2); drawSpots.c = [...seen.values()]; drawSpots.ck = ck; drawSpots.at = now; }
     for (const s2 of drawSpots.c) { const [qx, qy] = center(s2.x, s2.y); hexPath(qx, qy, S * .9); cx2.strokeStyle = 'rgba(124,249,255,.28)'; cx2.lineWidth = 1.2; cx2.stroke(); }
   }
+  // 手札の印のマス：そこに置けば安い。タワーの印をうすく出す
+  if (CELL_EXTRA && !AUTO && G.started) for (const t of me().hand) {
+    if (G.tiles[key(t.x, t.y)]) continue;
+    const [qx, qy] = center(t.x, t.y); hexPath(qx, qy, S * .8); cx2.save(); cx2.setLineDash([3, 3]); cx2.strokeStyle = 'rgba(255,233,168,.75)'; cx2.lineWidth = 1.5; cx2.stroke(); cx2.restore();
+    cx2.save(); cx2.globalAlpha = .55; drawIcon(cx2, t.type, qx, qy, S * .38); cx2.restore();
+  }
   if (G.waitPlace) { const [qx, qy] = center(...G.waitPlace.at), pl = .5 + .5 * Math.sin(performance.now() / 120); hexPath(qx, qy, S * .95); cx2.save(); cx2.setLineDash([5, 4]); cx2.strokeStyle = `rgba(255,233,168,${.4 + .6 * pl})`; cx2.lineWidth = 3; cx2.stroke(); cx2.restore(); cx2.save(); cx2.globalAlpha = .4 + .4 * pl; drawIcon(cx2, G.waitPlace.t.type, qx, qy, S * .42); cx2.restore(); }
   // 置こうとしているタイルの場所
   if (sel) {
@@ -1861,7 +1890,14 @@ function renderInfo() {
 function renderTop() {
   document.getElementById('pauseBtn').style.display = canPause() ? '' : 'none';
   const ac = waveActive();
-  document.getElementById('wave').textContent = G.over ? '終了' : ac ? `波 ${G.wave}/${WAVES} 来襲中` : G.wave >= WAVES ? '最後の波' : `次の波 ${G.wave + 1}/${WAVES} まで ${Math.ceil(G.waveTimer)}秒`;
+  { const el = document.getElementById('wave'), mine = me(), n = `次の波 ${G.wave + 1}/${WAVES}`;
+    const done = !mine || mine.t >= G.limit || (mine.clock ?? FIRST_WAIT) <= 0;
+    // 人が遊ぶとき：自分の考える時間はいつも出す。自分の番で減っている間は明るく、ほかの人の番では灰色
+    el.innerHTML = G.over ? '終了' : ac ? `波 ${G.wave}/${WAVES} 来襲中` : G.wave >= WAVES ? '最後の波'
+      : AUTO ? `${n} まで ${Math.ceil(G.waveTimer)}秒`
+      : !nextActor() ? `${n} まで ${Math.max(0, Math.ceil(G.waveTimer))}秒`
+      : done ? `${n}・あなたの番は終わり`
+      : `${n}・考える時間 <span style="color:${G.actor === mine ? '#ffe066' : '#6f7a99'}">${Math.max(0, Math.ceil(mine.clock ?? FIRST_WAIT))}秒</span>`; }
   document.getElementById('life').textContent = '♥ ' + G.lives;
   document.getElementById('money').textContent = AUTO ? '' : '所持金 ' + me().money;
 }
@@ -1892,10 +1928,10 @@ function turnText() {
   if (G.exchanging) return ['いらない株を、投資信託に替えますか', '手札の株を1枚手放すと、投資信託を1口もらえます。お金はかからず、もらった投資信託は最初から公開した状態です。替えないなら「替えない」'];
   if (G.waitPlace && G.waitPlace.p === me()) return [`建設待ち：敵が通り過ぎたら ${label(...G.waitPlace.at)} に${TYPES[G.waitPlace.t.type].name}が建ちます`, `あと${Math.max(0, Math.ceil(G.waitPlace.until - (G.clock || 0)))}秒で建たなければ取り消します。すぐやめるときは、盤の「やめる」を押す`];
   const sel = G.selected !== null ? me().hand[G.selected] : null, up = G.upSel ? G.tiles[G.upSel] : null;
-  if (up) return [`${label(up.x, up.y)} の${TYPES[up.type].name}（${TYPE_SHORT[up.type]}）`, canUpgrade(up) ? `下の「強化」で射程と威力が上がります（時間${TYPES[up.type].time}）。強化したあとも株を1枚もらえます。${left}` : 'このタワーは強化できません。手札のタイルを選び直してください'];
+  if (up) return [`${label(up.x, up.y)} の${TYPES[up.type].name}（${TYPE_SHORT[up.type]}）`, canUpgrade(up) ? `盤のメニューの「強化する」で射程と威力が上がります（時間${TYPES[up.type].time}）。強化したあとも株を1枚もらえます。${left}` : 'このタワーは強化できません。手札のタイルを選び直してください'];
   if (sel && AREA_MODE) { const c = canPlace(sel), tg = chosenOf(sel);
     if (!c.ok) return [`${tileName(sel)}には置けません（${c.why}）`, '別のタイルを選んでください'];
-    if (!tg) return [`${tileName(sel)}の光っているマスに${TYPES[sel.type].name}を置けます`, `${TYPES[sel.type].name}：${TYPE_DESC[sel.type]}。光っているマスを押すと、そこに置けます。${left}`];
+    if (!tg) return [`${tileName(sel)}の光っているマスに${TYPES[sel.type].name}を置けます`, `${TYPES[sel.type].name}：${TYPE_DESC[sel.type]}。光っているマスを押すと、そこに置けます${CELL_EXTRA ? `（点線の印のマスなら時間${TYPES[sel.type].time}、ほかは${TYPES[sel.type].time + CELL_EXTRA}）` : ''}。札をもう一度押すか、光っていないところを押すとやめます。${left}`];
     return [`${label(...tg)} に置くタイルを選んでください`, `盤に出たメニューから選ぶと、その場で置きます。置いたら株を1枚もらえます。${left}`]; }
   if (sel) { const c = canPlace(sel), tg = targetOf(sel); return [c.ok ? `${label(...tg)} に${TYPES[sel.type].name}を置けます` : `${tileName(sel)}${AREA_MODE ? '' : ' のまわり'}には置けません（${c.why}）`, c.ok ? `${AREA_MODE ? tileName(sel) + 'の中の' : label(sel.x, sel.y) + ' か、そのまわりの'}光っているマスに置けます。盤で場所を選び、「置く」かもう一度押す。置いたら株を1枚もらえます。${left}` : '別のタイルを選んでください'];  }
   const can = [];
@@ -1938,9 +1974,9 @@ function renderHand() {
   me().hand.forEach((t, i) => {
     const b = document.createElement('button'), c = canPlace(t);
     b.className = 'tile' + (G.selected === i ? ' sel' : '') + (c.ok ? '' : ' bad');
-    b.innerHTML = `<span class="nm"><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}</span><span class="eff">${TYPE_SHORT[t.type]}</span><span class="tm">時間${TYPES[t.type].time}<span class="ar">エリア${AREA_MODE ? AREA_NAMES[t.area] : label(t.x, t.y)}</span></span>`;
+    b.innerHTML = `<span class="nm"><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}</span><span class="eff">${TYPE_SHORT[t.type]}</span><span class="tm">${CELL_EXTRA ? `印${TYPES[t.type].time}・ほか${TYPES[t.type].time + CELL_EXTRA}` : `時間${TYPES[t.type].time}`}<span class="ar">エリア${AREA_MODE ? AREA_NAMES[t.area] : label(t.x, t.y)}</span></span>`;
     b.dataset.tip = `${TYPES[t.type].name}：${TYPE_DESC[t.type]}` + (TYPES[t.type].range ? `（射程${TYPES[t.type].range}マス）` : '') + `。置くのに時間${TYPES[t.type].time}。` + (c.ok ? '' : `今は置けない：${c.why}`);
-    b.onclick = () => { if (G.swapping && G.swapping.p === me()) { act(G.viewer || 0, { t:'swap', idx:i }); return; } G.selected = i; G.upSel = null; G.target = null; G.menu = null; renderAll(); };
+    b.onclick = () => { if (G.swapping && G.swapping.p === me()) { act(G.viewer || 0, { t:'swap', idx:i }); return; } G.selected = G.selected === i ? null : i; G.upSel = null; G.target = null; G.menu = null; renderAll(); };   // 選んだ札をもう一度押したら、選ぶのをやめる
     el.appendChild(b);
   });
   const sel = G.selected !== null ? me().hand[G.selected] : null, ok = sel && canPlace(sel), tg = sel && chosenOf(sel);
@@ -1953,7 +1989,7 @@ function renderHand() {
   } else {
     pb.style.display = sel && ok.ok && tg ? '' : 'none';
     pb.disabled = !(mine && ok && ok.ok && tg);
-    pb.textContent = sel ? (ok.ok ? (tg ? `${label(...tg)} に置く（時間${TYPES[sel.type].time}）` : '盤で置くマスを選ぶ') : `置けない：${ok.why}`) : 'タイルを選ぶ（盤の置かれたタイルを押すと強化）';
+    pb.textContent = sel ? (ok.ok ? (tg ? `${label(...tg)} に置く（時間${placeTime(sel, ...tg)}）` : '盤で置くマスを選ぶ') : `置けない：${ok.why}`) : 'タイルを選ぶ（盤の置かれたタイルを押すと強化）';
     if (G.taking) { pb.disabled = true; pb.textContent = '株の場から1枚選んでください'; }
     if (G.exchanging) { pb.disabled = true; pb.textContent = '投資信託に替えるか選んでください'; }
   }
@@ -1966,7 +2002,7 @@ function renderHand() {
 }
 const drawSpots = {};
 // 盤の上のメニュー：空いたマスを押すと、そこに置ける手札が並ぶ。タワーを押すと、強化と効果。押せばその場で行う
-const buildOptions = (x, y) => me().hand.map((t, i) => [t, i]).filter(([t]) => { const c = canPlace(t); return [...c.spots, ...c.waits].some(s2 => s2.x === x && s2.y === y); });
+const buildOptions = (x, y) => me().hand.map((t, i) => [t, i]).filter(([t]) => { const c = canPlace(t); return [...c.spots, ...c.waits].some(s2 => s2.x === x && s2.y === y); }).sort((a, b) => placeTime(a[0], x, y) - TYPES[a[0].type].time - (placeTime(b[0], x, y) - TYPES[b[0].type].time));
 function openMenu(x, y) {
   const k = key(x, y);
   if (G.tiles[k]) { G.menu = { x, y, tower:true }; G.selected = null; G.target = null; G.upSel = k; return true; }
@@ -2002,7 +2038,7 @@ function renderMenu() {
     h += `<div class="mh">${label(m.x, m.y)} に置く${mine ? '' : '（あなたの番になったら）'}</div>`;
     const wt = opts.length && !canPlace(opts[0][0]).spots.some(s2 => s2.x === m.x && s2.y === m.y);   // 敵が通っているマス
     if (wt) h += '<div class="mh" style="color:#ffe9a8">敵が通っています。選ぶと、通り過ぎたときに建ちます</div>';
-    h += opts.map(([t, i]) => `<button class="mi" data-i="${i}" ${mine ? '' : 'disabled'}><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}<span class="t">時間${TYPES[t.type].time}</span></button>`).join('');
+    h += opts.map(([t, i]) => `<button class="mi" data-i="${i}" ${mine ? '' : 'disabled'}><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}<span class="t">${CELL_EXTRA && t.x === m.x && t.y === m.y ? '<b style="color:#ffe9a8">印のマス</b> ' : ''}時間${placeTime(t, m.x, m.y)}</span></button>`).join('');
   }
   el.innerHTML = h; el.style.display = 'block';
   el.querySelector('[data-c]').onclick = () => { G.menu = null; G.upSel = null; G.selected = null; G.target = null; renderAll(); };
@@ -2161,7 +2197,7 @@ cv.addEventListener('click', ev => {
   let best = null;
   for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) { const [px, py] = center(x, y), d = Math.hypot(px - mx, py - my); if (!best || d < best.d) best = { x, y, d }; }
   if (G.menu && G.menu.x === best.x && G.menu.y === best.y) { G.menu = null; G.upSel = null; renderAll(); return; }   // 同じマスをもう一度押したら閉じる
-  if (!openMenu(best.x, best.y)) { G.menu = null; G.upSel = null; }
+  if (!openMenu(best.x, best.y)) { G.menu = null; G.upSel = null; G.selected = null; G.target = null; }   // 置けないところを押したら、選ぶのをやめる
   renderAll();
 });
 
@@ -2258,9 +2294,9 @@ function chooseDisposal(p, co, sv, pr, n, maxPairs, cb) {
 // ルールのまとめ
 const RULES_HTML = () => `<h3>電脳都市のルール（まとめ）</h3>${POWERS ? `<h4>会社の能力</h4><p class="note">能力はその会社のタワー全部に効きます。吸収された会社の能力は消えます。</p><ul>${POWER.map((w, i) => `<li>${COMPANIES[i].name}（${w.name}）：${w.desc}</li>`).join('')}</ul>` : ''}
 <h4>目的</h4><p>ウイルス（敵）の波を全員で${WAVES}回守りきり、そのとき<b>いちばんお金の多い人</b>の勝ち。ライフが0になったら<b>全員の負け</b>。</p>
-<h4>手番の順番</h4><p>時間トラックで<b>いちばん後ろの人</b>が次に動く。行動するとその時間だけ前へ進む。1つの波で1人が使える時間は、全員の合計が24になるように人数で決まる（4人なら6、2人なら12、6人なら4）。<b>最初の波の前だけは2倍</b>。使い切ったら波が終わるまで待つ。</p>
+<h4>手番の順番</h4><p>時間トラックで<b>いちばん後ろの人</b>が次に動く。行動するとその時間だけ前へ進む。1つの波で1人が使える時間は、全員の合計が24になるように人数で決まる（4人なら6、2人なら12、6人なら4）。<b>最初の波の前だけは2倍</b>。使い切ったら波が終わるまで待つ。人が遊ぶときは、波ごとに一人ひとりに考える時間（最初は90秒、あとは45秒）がある。自分の番の間だけ減り、なくなったらその波の残りの手番は飛ばす。全員の手番が終わって敵がいなくなったら、次の波が来る。</p>
 <h4>手番でできること（どれか1つ）</h4><ul>
-<li><b>タイルを置く</b>：手札のタイルにはエリアが書いてあり、<b>そのエリアの空いているマスならどこにでも</b>置ける（盤のうすい文字 A〜F がエリア）。置いたマスは壁になり、敵はよけて進む（遠回りさせるほど守りやすい）。入口から出口への道をふさぐ置き方はできない。置いたら<b>株を1枚手札に入れる</b>。<b>2人のときだけ</b>、置いたあとに手札のタイルを1枚入れ替えてもよい（入れ替えたタイルは山の底へ）。</li>
+<li><b>タイルを置く</b>：手札のタイルには<b>印のマス</b>（盤に点線で出る）と、そのマスのエリアが書いてある。${CELL_EXTRA ? `印のマスに置けば書かれた時間、<b>同じエリアのほかの空いているマス</b>なら時間が${CELL_EXTRA}多くかかる` : 'そのエリアの空いているマスならどこにでも置ける'}（盤のうすい文字 A〜F がエリア）。盤の光るマスを押すと、そこに置けるタイルが並ぶ。置いたマスは壁になり、敵はよけて進む（遠回りさせるほど守りやすい）。入口から出口への道をふさぐ置き方はできない。置いたら<b>株を1枚手札に入れる</b>。<b>2人のときだけ</b>、置いたあとに手札のタイルを1枚入れ替えてもよい（入れ替えたタイルは山の底へ）。</li>
 <li><b>強化する</b>：盤のタワーを押して強化（3段階まで）。誰が置いたタワーでもよい。強化しても株を1枚手札に入れる。</li>
 <li><b>株を公開する</b>：手札の株にお金（株価）を払って表にする。1社なら何枚でも、2社なら1枚ずつ。時間は1回につき1（何枚出しても同じ）。<b>敵が来ている間はできない</b>。</li>
 <li>どれもできないときだけ、タイルを1枚捨てて引き直す（時間1）。</li></ul>
@@ -2321,7 +2357,7 @@ function snapshot(seat) {
   return { type:'state',
     tiles:Object.values(G.tiles).map(t => [t.x, t.y, t.type, t.lv]), owner:G.owner,
     cos:G.cos.map(c => [c.active ? 1 : 0, c.kills]),
-    players:G.players.map(o => ({ name:o.name, color:o.color, money:o.money, shares:o.shares, t:o.t, order:o.order, cpu:o.cpu, resetUsed:o.resetUsed })),
+    players:G.players.map(o => ({ name:o.name, color:o.color, money:o.money, shares:o.shares, t:o.t, order:o.order, cpu:o.cpu, resetUsed:o.resetUsed, clock:o.clock })),
     hand:q.hand, cards:q.cards, market:G.market, avail:G.cos.map(c => availOf(c.id)), centralLeft:G.centralLeft,
     lives:G.lives, wave:G.wave, waveTimer:G.waveTimer, sq:G.spawnQueue.length, limit:G.limit, actor:G.actor ? G.actor.id : -1, busy:G.busy,
     enemies:G.enemies.map(e => [e.id, e.type, e.x / S, e.y / S, e.hp, e.max, e.cell, e.next, e.lure || null]),
@@ -2409,7 +2445,7 @@ function hostStart() {
   G.players[0].name = nt.hostName;
   nt.joined.forEach((j, i) => { const seat = i + 1, q = G.players[seat]; q.cpu = false; q.remote = true; q.name = j.name; nt.peers[seat] = j.conn; });
   const names = G.players.map(q => q.name);
-  nt.joined.forEach((j, i) => j.conn.send({ type:'start', course:COURSE, n:NPLAYERS, powers:POWERS, seat:i + 1, names }));
+  nt.joined.forEach((j, i) => j.conn.send({ type:'start', course:COURSE, n:NPLAYERS, powers:POWERS, diff:DIFF, seat:i + 1, names }));
   renderAll();
 }
 // 参加者：部屋に入る
@@ -2425,7 +2461,7 @@ function joinRoom(room, name) {
       conn.on('data', d => {
         if (d.type === 'reject') modal('<h3>参加できませんでした</h3><p class="note">ホストに断られたか、もう始まっています</p>', [['戻る', () => location.reload()]]);
         if (d.type === 'start') {
-          useCourse(d.course); NPLAYERS = d.n; POWERS = !!d.powers; setup(); resize();
+          useCourse(d.course); NPLAYERS = d.n; POWERS = !!d.powers; DIFF = DIFFS[d.diff] ? d.diff : 'normal'; setup(); resize();
           G.viewer = d.seat; G.net = { role:'client', send:x => conn.send(x), fx:[] };
           G.players.forEach((q, i) => { q.name = d.names[i]; q.cpu = false; });
           G.started = true; hideModal(); renderAll(); renderLog();
@@ -2477,8 +2513,21 @@ function loop(now) {
 window.addEventListener('resize', () => { resize(); draw(); });
 function startGame() {
   setup(); resize(); renderAll(); renderLog();
-  log('始まり：最初の波まで60秒。手札のタイルを置いて迷路を作ろう');
+  log(`始まり：最初の波まで${FIRST_WAIT}秒。手札のタイルを置いて迷路を作ろう`);
   G.started = true; announce('電脳都市', COURSES[COURSE].name);
+}
+// コースの小さな盤の図：入口（桃）・出口（白）・じゃまなマス（灰）・速くなるマス（黄）・回復するマス（緑）
+function courseMini(i) {
+  const c = COURSES[i], r = 7, w = Math.sqrt(3) * r, cv0 = document.createElement('canvas');
+  cv0.width = Math.ceil(w * (COLS + .5)) + 2; cv0.height = Math.ceil(r * 1.5 * (ROWS - 1) + 2 * r) + 2;
+  const g = cv0.getContext('2d'), has = (list, x, y) => (list || []).some(([a, b]) => a === x && b === y);
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    const cx = 1 + w * (x + .5 + (y & 1) * .5), cy = 1 + r + y * r * 1.5;
+    g.beginPath(); for (let k = 0; k < 6; k++) { const a = Math.PI / 180 * (60 * k - 30); g.lineTo(cx + r * .92 * Math.cos(a), cy + r * .92 * Math.sin(a)); } g.closePath();
+    const col = has(c.entrances, x, y) ? '#ff4dff' : c.exit[0] === x && c.exit[1] === y ? '#ffffff' : has(c.block, x, y) ? '#55607e' : has(c.fast, x, y) ? '#c9a83a' : has(c.heal, x, y) ? '#3a9a5a' : null;
+    g.fillStyle = col || '#13203f'; g.fill(); g.strokeStyle = '#2a3a66'; g.lineWidth = 1; g.stroke();
+  }
+  return cv0.toDataURL();
 }
 // 始める前の画面：人数とコースを選ぶ
 function showStart() {
@@ -2486,10 +2535,11 @@ function showStart() {
   const body = () => `<h3>電脳都市</h3>
     <p class="note">タイルを置いて迷路を作り、ウイルスの波を全員で${WAVES}回守りきる。タイルのかたまりは会社になり、倒した数で株価が上がる。株を集めて、いちばんお金持ちになった人の勝ち。</p>
     <h4>人数（あなた＋ほかの人や CPU）</h4><div class="pick">${[2, 3, 4, 5, 6].map(k => `<button class="btn${k === n ? ' on' : ''}" data-n="${k}">${k}人</button>`).join('')}</div>
+    <h4>難しさ</h4><div class="pick">${Object.entries(DIFFS).map(([k, d]) => `<button class="btn${k === DIFF ? ' on' : ''}" data-df="${k}">${d.name}</button>`).join('')}</div>
     <h4>CPU の強さ</h4><div class="pick">${[['normal', 'ふつう'], ['easy', 'よわい']].map(([k, t]) => `<button class="btn${k === CPU_LEVEL ? ' on' : ''}" data-lv="${k}">${t}</button>`).join('')}</div>
     <h4>会社の能力</h4><div class="pick">${[[false, 'なし'], [true, 'あり']].map(([k, t]) => `<button class="btn${k === POWERS ? ' on' : ''}" data-pw="${k ? 1 : 0}">${t}</button>`).join('')}</div>
     <h4>コース</h4><div class="pick">${COURSES.map((c, i) => `<button class="btn${i === COURSE ? ' on' : ''}" data-c="${i}">${c.name}</button>`).join('')}</div>
-    <div style="border:1px solid #2c3d6b;border-left:4px solid #7cf9ff;border-radius:8px;padding:6px 10px;margin:6px 0 4px;background:#0a1226"><b style="color:#7cf9ff">${COURSES[COURSE].name}</b><span class="note" style="color:var(--text)">：${COURSES[COURSE].note}</span><div class="note">後ろに見えているのが、このコースの盤です</div></div>
+    <div style="border:1px solid #2c3d6b;border-left:4px solid #7cf9ff;border-radius:8px;padding:6px 10px;margin:6px 0 4px;background:#0a1226"><div style="display:flex;gap:10px;align-items:center"><img src="${courseMini(COURSE)}" alt="" style="width:110px;flex:none"><div><b style="color:#7cf9ff">${COURSES[COURSE].name}</b><div class="note" style="color:var(--text);margin-top:2px">${COURSES[COURSE].note}。</div></div></div><div class="note" style="margin-top:4px;font-size:11px"><span style="color:#ff4dff">■</span>入口 <span style="color:#fff">■</span>出口 <span style="color:#8a94b4">■</span>置けない <span style="color:#e0bc40">■</span>敵が速くなる <span style="color:#4cc070">■</span>敵が回復する</div></div>
     <p class="note" style="margin-top:14px">遊び方は「ルールを読む」か、遊んでいる間なら右上の「？」でいつでも読めます。遊んでいる間は、次に押す場所が光って教えてくれます。</p>`;
   const open = () => {
     modal(body(), [['ひとりで遊ぶ（CPUと）', () => { NPLAYERS = n; startGame(); }],
@@ -2497,6 +2547,7 @@ function showStart() {
       ['部屋に入る', () => showJoin('')], ['ルールを読む', () => { showRules(); document.querySelector('#mbox .row button').onclick = () => { document.getElementById('modal').style.display = 'none'; open(); }; }]]);
     document.querySelectorAll('#mbox [data-n]').forEach(b => b.onclick = () => { n = +b.dataset.n; open(); });
     document.querySelectorAll('#mbox [data-lv]').forEach(b => b.onclick = () => { CPU_LEVEL = b.dataset.lv; open(); });
+    document.querySelectorAll('#mbox [data-df]').forEach(b => b.onclick = () => { DIFF = b.dataset.df; open(); });
     document.querySelectorAll('#mbox [data-pw]').forEach(b => b.onclick = () => { POWERS = b.dataset.pw === '1'; open(); });
     document.querySelectorAll('#mbox [data-c]').forEach(b => b.onclick = () => { useCourse(+b.dataset.c); G.dist = distanceField(); open(); });
   };
