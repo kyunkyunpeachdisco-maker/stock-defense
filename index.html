@@ -36,11 +36,26 @@
   #hand { display:flex; gap:5px; flex-wrap:wrap; padding:4px 0; }
   .tile { border:2px solid #2c3d6b; border-radius:8px; padding:4px 6px; font-size:12px; background:#0a0f1d; color:var(--text); cursor:pointer; min-width:96px; text-align:left; white-space:nowrap; }
   .tile b { font-size:15px; display:block; }
+  /* 札：タワーの印と名前を大きく、エリアは右上の小さな印 */
+  .tile { position:relative; }
+  .tile .ar { float:right; font-size:11px; font-weight:bold; color:#05070d; background:#9fb0dd; border-radius:9px; padding:0 6px; line-height:17px; }
+  .tile .nm { display:flex; align-items:center; gap:3px; font-size:12px; font-weight:bold; white-space:nowrap; letter-spacing:-.5px; }
+  .tile .nm img { width:17px; height:17px; flex:none; }
+  .tile .tm { display:block; font-size:11px; color:var(--dim); }
+  /* 盤の上のメニュー（タワーディフェンスのように、押したマスのそばに出す） */
+  #bmenu { position:absolute; z-index:5; display:none; background:#0c1630f2; border:2px solid #7cf9ff; border-radius:12px; padding:6px; box-shadow:0 0 16px #7cf9ff88; min-width:150px; max-width:230px; }
+  #bmenu .mh { font-size:12px; color:var(--dim); padding:0 22px 4px 2px; }
+  #bmenu .mi { display:flex; align-items:center; gap:6px; width:100%; margin:3px 0; padding:7px 8px; font-size:14px; text-align:left; background:#16213d; color:var(--text); border:1px solid #2c3d6b; border-radius:8px; }
+  #bmenu .mi img { width:20px; height:20px; }
+  #bmenu .mi .t { margin-left:auto; font-size:12px; color:var(--dim); }
+  #bmenu .mi:disabled { opacity:.45; }
+  #bmenu .x { position:absolute; top:2px; right:6px; background:none; border:none; color:var(--dim); font-size:18px; }
   .tile .eff { display:block; color:#ffe9a8; font-size:11px; white-space:normal; line-height:1.3; margin:1px 0; }
   .tile.sel { background:#1c2b52; border-color:#7cf9ff; box-shadow:0 0 10px #7cf9ff; }
   .tile.bad { opacity:.35; }
   button { font-size:16px; }
   .btn { background:#16213d; color:var(--text); border:1px solid #2c3d6b; border-radius:8px; padding:7px 10px; font-size:14px; cursor:pointer; }
+  #market .btn.on { background:#24407a; box-shadow:0 0 8px #7cf9ff; }
   .btn:disabled { opacity:.35; cursor:default; }
   #acts { display:flex; gap:6px; flex-wrap:wrap; padding:4px 0; }
   table { width:100%; border-collapse:collapse; font-size:12px; }
@@ -64,7 +79,12 @@
   #tabs { display:none; gap:4px; margin:4px 0 2px; }
   #tabs .btn { flex:1; padding:5px 0; font-size:13px; }
   #tabs .btn.on { background:#24407a; border-color:#7cf9ff; }
-  @media (max-width:680px) { #tabs { display:flex; } .grp.hide { display:none; } }
+  @media (max-width:680px) { #tabs { display:flex; } .grp.hide { display:none; }
+    /* 手札は1段にして横に送る。置く・強化は盤の上のボタンで行うので、下の「置く」は出さない */
+    #hand { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+    #hand::-webkit-scrollbar { display:none; }
+    #hand .tile { flex:0 0 32.5%; min-width:0; padding:3px 4px; }
+    #place { display:none !important; } }
   .sec .q { color:var(--dim); font-weight:normal; cursor:help; border-bottom:1px dotted var(--dim); margin-left:4px; }
   [data-tip] { cursor:help; }
   #tip { position:fixed; z-index:20; max-width:280px; background:#18254a; border:1px solid #4d6bb3; color:var(--text); font-size:12px; line-height:1.5; padding:6px 8px; border-radius:6px; pointer-events:none; display:none; }
@@ -88,7 +108,7 @@
     <button class="btn" id="soundBtn" style="padding:4px 8px;font-size:13px" data-tip="効果音を鳴らす・消す"></button>
     <button class="btn" id="helpBtn">？ ルール</button>
   </div>
-  <canvas id="cv"></canvas>
+  <div style="position:relative"><canvas id="cv"></canvas><div id="bmenu"></div></div>
   <div id="turn"></div>
   <div id="info" class="note" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:2px 2px 4px"></div>
   <div id="tabs"><button class="btn on" data-tab="op">操作</button><button class="btn" data-tab="cos">会社</button><button class="btn" data-tab="log">記録</button></div>
@@ -1666,6 +1686,13 @@ function draw() {
   // 入口と出口
   for (const [x, y] of ENTRANCES) mark(x, y, '#ff4dff', '入');
   mark(EXIT[0], EXIT[1], '#ffffff', '◆');
+  // 自分の番で何も選んでいないとき：手札のどれかを置けるマスを、うすく光らせる（押すと置けるタイルのメニューが出る）
+  if (!sel && !G.upSel && !AUTO && G.actor === me() && !G.busy) {
+    // 置けるかの判定は重いので、盤か手札が変わったとき（と1秒ごと）だけ数え直す
+    const ck = Object.keys(G.tiles).length + JSON.stringify(me().hand), now = performance.now();
+    if (!drawSpots.c || drawSpots.ck !== ck || now - drawSpots.at > 1000) { const seen = new Map(); for (const t of me().hand) for (const s2 of canPlace(t).spots) seen.set(key(s2.x, s2.y), s2); drawSpots.c = [...seen.values()]; drawSpots.ck = ck; drawSpots.at = now; }
+    for (const s2 of drawSpots.c) { const [qx, qy] = center(s2.x, s2.y); hexPath(qx, qy, S * .9); cx2.strokeStyle = 'rgba(124,249,255,.28)'; cx2.lineWidth = 1.2; cx2.stroke(); }
+  }
   // 置こうとしているタイルの場所
   if (sel) {
     const c = canPlace(sel), tg = chosenOf(sel), pulse = .5 + .5 * Math.sin(performance.now() / 150);
@@ -1859,11 +1886,11 @@ function turnText() {
   if (up) return [`${label(up.x, up.y)} の${TYPES[up.type].name}（${TYPE_SHORT[up.type]}）`, canUpgrade(up) ? `下の「強化」で射程と威力が上がります（時間${TYPES[up.type].time}）。強化したあとも株を1枚もらえます。${left}` : 'このタワーは強化できません。手札のタイルを選び直してください'];
   if (sel && AREA_MODE) { const c = canPlace(sel), tg = chosenOf(sel);
     if (!c.ok) return [`${tileName(sel)}には置けません（${c.why}）`, '別のタイルを選んでください'];
-    if (!tg) return [`${tileName(sel)}の光っているマスに${TYPES[sel.type].name}を置けます`, `${TYPES[sel.type].name}：${TYPE_DESC[sel.type]}。置きたいマスを押してください。${left}`];
-    return [`${label(...tg)} に${TYPES[sel.type].name}を置きます`, `同じマスをもう一度押すか「置く」で決定。ほかの光っているマスを押すと変えられます。置いたら株を1枚もらえます。${left}`]; }
+    if (!tg) return [`${tileName(sel)}の光っているマスに${TYPES[sel.type].name}を置けます`, `${TYPES[sel.type].name}：${TYPE_DESC[sel.type]}。光っているマスを押すと、そこに置けます。${left}`];
+    return [`${label(...tg)} に置くタイルを選んでください`, `盤に出たメニューから選ぶと、その場で置きます。置いたら株を1枚もらえます。${left}`]; }
   if (sel) { const c = canPlace(sel), tg = targetOf(sel); return [c.ok ? `${label(...tg)} に${TYPES[sel.type].name}を置けます` : `${tileName(sel)}${AREA_MODE ? '' : ' のまわり'}には置けません（${c.why}）`, c.ok ? `${AREA_MODE ? tileName(sel) + 'の中の' : label(sel.x, sel.y) + ' か、そのまわりの'}光っているマスに置けます。盤で場所を選び、「置く」かもう一度押す。置いたら株を1枚もらえます。${left}` : '別のタイルを選んでください'];  }
   const can = [];
-  if (me().hand.some(t => canPlace(t).ok)) can.push('タイルを置く（手札から選ぶ）');
+  if (me().hand.some(t => canPlace(t).ok)) can.push('タイルを置く（盤の光るマスを押す）');
   if (Object.values(G.tiles).some(t => canUpgrade(t))) can.push('タワーを強化する（盤のタワーを押す）');
   if ([...new Set(me().cards)].some(id => canReveal(me(), id, 1))) can.push('手札の株を公開する（お金を払う）');
   if (!can.length) return ['あなたの番：できることがありません', '「タイルを捨てて引き直す」を押してください（時間1）'];
@@ -1892,24 +1919,30 @@ function renderGuide() {
   if (id) document.getElementById(id).classList.add('glow');
 }
 function renderHand() {
-  const el = document.getElementById('hand'); el.innerHTML = '';
-  if (AUTO) return;
+  const el = document.getElementById('hand');
+  if (AUTO) { el.innerHTML = ''; return; }
   const mine = G.actor === me() && !G.over && !G.busy;
+  // 0.25秒ごとにも呼ばれるので、中身が変わらないときは作り直さない（作り直すと、押している途中のボタンが消えてタップが空振りする）
+  const sig = JSON.stringify([me().hand, G.selected, G.target, G.upSel, mine, !!(G.swapping && G.swapping.p === me()), !!G.taking, !!G.exchanging, me().hand.map(t => canPlace(t).ok), G.upSel && G.tiles[G.upSel] && G.tiles[G.upSel].lv, waveActive(), me().money, me().cards.length, cv.clientWidth]);
+  if (sig === renderHand.sig) return; renderHand.sig = sig;
+  el.innerHTML = '';
   me().hand.forEach((t, i) => {
     const b = document.createElement('button'), c = canPlace(t);
     b.className = 'tile' + (G.selected === i ? ' sel' : '') + (c.ok ? '' : ' bad');
-    b.innerHTML = `<img src="${iconUrl(t.type)}" alt="" style="width:22px;height:22px;float:right;margin-left:4px"><b>${tileName(t)}</b>${TYPES[t.type].name}<span class="eff">${TYPE_SHORT[t.type]}</span><span class="note">時間${TYPES[t.type].time}</span>`;
+    b.innerHTML = `<span class="nm"><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}</span><span class="eff">${TYPE_SHORT[t.type]}</span><span class="tm">時間${TYPES[t.type].time}<span class="ar">エリア${AREA_MODE ? AREA_NAMES[t.area] : label(t.x, t.y)}</span></span>`;
     b.dataset.tip = `${TYPES[t.type].name}：${TYPE_DESC[t.type]}` + (TYPES[t.type].range ? `（射程${TYPES[t.type].range}マス）` : '') + `。置くのに時間${TYPES[t.type].time}。` + (c.ok ? '' : `今は置けない：${c.why}`);
-    b.onclick = () => { if (G.swapping && G.swapping.p === me()) { act(G.viewer || 0, { t:'swap', idx:i }); return; } G.selected = i; G.upSel = null; G.target = null; renderAll(); };
+    b.onclick = () => { if (G.swapping && G.swapping.p === me()) { act(G.viewer || 0, { t:'swap', idx:i }); return; } G.selected = i; G.upSel = null; G.target = null; G.menu = null; renderAll(); };
     el.appendChild(b);
   });
   const sel = G.selected !== null ? me().hand[G.selected] : null, ok = sel && canPlace(sel), tg = sel && chosenOf(sel);
   const pb = document.getElementById('place');
   const up = G.upSel ? G.tiles[G.upSel] : null;
   if (up) {
+    pb.style.display = '';
     pb.disabled = !(mine && canUpgrade(up));
     pb.textContent = canUpgrade(up) ? `${label(up.x, up.y)} の${TYPES[up.type].name}を強化（段階${up.lv}→${up.lv + 1}、時間${TYPES[up.type].time}）` : (up.type === 'node' ? 'ノードは強化できない' : 'これ以上強化できない');
   } else {
+    pb.style.display = sel && ok.ok && tg ? '' : 'none';
     pb.disabled = !(mine && ok && ok.ok && tg);
     pb.textContent = sel ? (ok.ok ? (tg ? `${label(...tg)} に置く（時間${TYPES[sel.type].time}）` : '盤で置くマスを選ぶ') : `置けない：${ok.why}`) : 'タイルを選ぶ（盤の置かれたタイルを押すと強化）';
     if (G.taking) { pb.disabled = true; pb.textContent = '株の場から1枚選んでください'; }
@@ -1918,8 +1951,51 @@ function renderHand() {
   const rb = document.getElementById('removeBtn');
   rb.style.display = REMOVE && G.upSel && G.tiles[G.upSel] ? '' : 'none'; rb.disabled = !(mine && G.upSel && canRemove(G.upSel));
   const sb = document.getElementById('swap');
-  if (G.swapping && G.swapping.p === me()) { sb.disabled = false; sb.textContent = '入れ替えない'; }
-  else { sb.textContent = 'タイルを捨てて引き直す（時間1）'; sb.disabled = !(mine && !canDoSomething(me())); }
+  if (G.swapping && G.swapping.p === me()) { sb.style.display = ''; sb.disabled = false; sb.textContent = '入れ替えない'; }
+  else { sb.textContent = 'タイルを捨てて引き直す（時間1）'; sb.disabled = !(mine && !canDoSomething(me())); sb.style.display = sb.disabled ? 'none' : ''; }
+  renderMenu();
+}
+const drawSpots = {};
+// 盤の上のメニュー：空いたマスを押すと、そこに置ける手札が並ぶ。タワーを押すと、強化と効果。押せばその場で行う
+const buildOptions = (x, y) => me().hand.map((t, i) => [t, i]).filter(([t]) => canPlace(t).spots.some(s2 => s2.x === x && s2.y === y));
+function openMenu(x, y) {
+  const k = key(x, y);
+  if (G.tiles[k]) { G.menu = { x, y, tower:true }; G.selected = null; G.target = null; G.upSel = k; return true; }
+  const opts = buildOptions(x, y); if (!opts.length) return false;
+  G.menu = { x, y }; G.upSel = null; G.target = [x, y];
+  if (!opts.some(([, i]) => i === G.selected)) G.selected = opts[0][1];
+  return true;
+}
+function closeMenu() { G.menu = null; renderMenu(); }
+function renderMenu() {
+  const el = document.getElementById('bmenu'), m = G.menu;
+  const mine = G.actor === me() && !G.over && !G.busy && !AUTO;
+  const sig = JSON.stringify([m, mine, !!(G.taking || G.exchanging || G.choosing), m && !m.tower && buildOptions(m.x, m.y).map(([t, i]) => i), m && m.tower && G.tiles[key(m.x, m.y)] && G.tiles[key(m.x, m.y)].lv, cv.clientWidth]);
+  if (sig === renderMenu.sig) return; renderMenu.sig = sig;   // 押している途中で作り直さない
+  if (!m || G.taking || G.exchanging || G.choosing) { el.style.display = 'none'; return; }
+  let h = '<button class="x" data-c="1">×</button>';
+  if (m.tower) {
+    const t = G.tiles[key(m.x, m.y)]; if (!t) { el.style.display = 'none'; return; }
+    h += `<div class="mh"><b style="color:var(--text)">${TYPES[t.type].name}</b>（段階${t.lv}）<br>${TYPE_SHORT[t.type]}</div>`;
+    if (canUpgrade(t)) h += `<button class="mi" data-up="1" ${mine ? '' : 'disabled'}><img src="${iconUrl(t.type)}" alt="">強化する<span class="t">時間${TYPES[t.type].time}</span></button>`;
+    else h += `<div class="mh">${t.type === 'node' ? 'ノードは強化できない' : 'これ以上強化できない'}</div>`;
+  } else {
+    const opts = buildOptions(m.x, m.y);
+    if (!opts.length) { el.style.display = 'none'; return; }
+    h += `<div class="mh">${label(m.x, m.y)} に置く${mine ? '' : '（あなたの番になったら）'}</div>`;
+    h += opts.map(([t, i]) => `<button class="mi" data-i="${i}" ${mine ? '' : 'disabled'}><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}<span class="t">時間${TYPES[t.type].time}</span></button>`).join('');
+  }
+  el.innerHTML = h; el.style.display = 'block';
+  el.querySelector('[data-c]').onclick = () => { G.menu = null; G.upSel = null; G.selected = null; G.target = null; renderAll(); };
+  el.querySelectorAll('[data-i]').forEach(b => {
+    b.onpointerenter = () => { G.selected = +b.dataset.i; };   // 指やカーソルを乗せたタイルの射程を盤に出す
+    b.onclick = () => { const i = +b.dataset.i; G.menu = null; act(G.viewer || 0, { t:'place', idx:i, at:[m.x, m.y] }); };
+  });
+  const up = el.querySelector('[data-up]'); if (up) up.onclick = () => { G.menu = null; G.upSel = null; act(G.viewer || 0, { t:'upgrade', k:key(m.x, m.y) }); };
+  // 押したマスのそば（上に入らなければ下）に出す
+  const [px, py] = center(m.x, m.y), w = el.offsetWidth, hh = el.offsetHeight, W = cv.clientWidth, H = cv.clientHeight;
+  el.style.left = Math.max(2, Math.min(W - w - 2, px - w / 2)) + 'px';
+  el.style.top = Math.max(2, py - S * 1.2 - hh > 2 ? py - S * 1.2 - hh : Math.min(H - hh - 2, py + S * 1.2)) + 'px';
 }
 function renderCos() {
   const el = document.getElementById('cos');
@@ -1951,7 +2027,9 @@ function renderCos() {
 function renderMarket() {
   const el = document.getElementById('market'); if (AUTO) { el.innerHTML = ''; return; }
   const tk = G.taking && G.taking.p === me();
-  el.innerHTML = `<span class="note">${tk ? '株を1枚、手札に入れてください：' : '株の場：'}</span>`;
+  const showMarket = !MOBILE.matches || tk || (G.exchanging && G.exchanging.p === me()) || (G.discarding && G.discarding.p === me());
+  el.innerHTML = showMarket ? `<span class="note">${tk ? '株を1枚、手札に入れてください：' : '株の場：'}</span>` : '';
+  if (showMarket) {
   G.market.forEach((id, mi) => {
     const co = G.cos[id], b = document.createElement('button');
     b.className = 'btn'; b.style.borderColor = co.color; b.disabled = !tk;
@@ -1986,42 +2064,45 @@ function renderMarket() {
   r.disabled = !(tk && canReset(me())); r.dataset.tip = '場の5枚に、盤にある会社の株が1枚もない（どれも公開できない）とき、1回だけ並べ直せる';
   r.onclick = () => act(G.viewer || 0, { t:'reset' });
   el.appendChild(r);
-  // 株の手札：公開する
+  }
+  // 株の手札：押して公開する株を選び（押すたびに1枚ずつ増える）、最後に「公開する」で決める。
+  // 1社なら何枚でも、2社なら1枚ずつ。選び方に合わない押し方をしたら、その会社だけを選び直す
   const mine = G.actor === me() && !G.over && !G.busy;
   const ids = [...new Set(me().cards)];
+  G.revSel = Object.fromEntries(Object.entries(G.revSel || {}).filter(([id, k]) => k > 0 && me().cards.filter(c => c == id).length >= k));
+  if (!mine) G.revSel = {};
   const box = document.createElement('div'); box.style.cssText = 'width:100%;display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:4px';
-  box.innerHTML = `<span class="note">株の手札（伏せる）：${ids.length ? '' : 'なし'}</span>`;
+  box.innerHTML = `<span class="note">株の手札${ids.length && mine && !waveActive() ? '（押して公開する株を選ぶ）' : ''}：${ids.length ? '' : 'なし'}</span>`;
   ids.forEach(id => {
-    const co = coOf(id), n = me().cards.filter(c => c === id).length;
-    const one = document.createElement('button'), all = document.createElement('button');
-    one.className = all.className = 'btn'; one.style.borderColor = all.style.borderColor = co.color;
-    one.textContent = `${co.name} ×${n}：1枚公開`; one.disabled = !(mine && canReveal(me(), id, 1));
-    one.dataset.tip = !coOf(id).active ? `${co.name}はまだ盤にないので公開できない` : `${priceOf(id)}払って公開する（何枚でも時間1）。公開した株だけがボーナスと売却で数えられる。1社なら何枚でも、2社なら1枚ずつ`;
-    one.onclick = () => act(G.viewer || 0, { t:'reveal', id, n:1 });
-    box.appendChild(one);
-    if (n > 1) { all.textContent = `${n}枚公開`; all.disabled = !(mine && canReveal(me(), id, n)); all.onclick = () => act(G.viewer || 0, { t:'reveal', id, n }); box.appendChild(all); }
+    const co = coOf(id), n = me().cards.filter(c => c === id).length, k = G.revSel[id] || 0;
+    const b = document.createElement('button'); b.className = 'btn' + (k ? ' on' : ''); b.style.borderColor = co.color;
+    b.innerHTML = `${co.name} ${k ? `<b>${k}</b>/` : '×'}${n}<br><span class="note">${co.active ? priceOf(id) : 'まだない'}</span>`;
+    b.disabled = !(mine && !waveActive() && co.active);
+    b.onclick = () => {
+      const sel = G.revSel, others = Object.keys(sel).filter(x => x != id);
+      if (!k) G.revSel = others.length === 1 && sel[others[0]] === 1 ? { ...sel, [id]:1 } : { [id]:1 };
+      else if (!others.length && k < n) G.revSel = { [id]:k + 1 };
+      else { const t = { ...sel }; delete t[id]; G.revSel = t; }
+      renderMarket();
+    };
+    box.appendChild(b);
   });
-  // 2社に1枚ずつ：2社を選んでから公開する
-  G.pairSel = (G.pairSel || []).filter(id => me().cards.includes(id));
-  if (ids.length >= 2) {
-    const row = document.createElement('div'); row.style.cssText = 'width:100%;display:flex;gap:5px;flex-wrap:wrap;align-items:center';
-    row.innerHTML = '<span class="note">2社に1枚ずつ：</span>';
-    ids.forEach(id => {
-      const b = document.createElement('button'); b.className = 'btn'; b.style.borderColor = coOf(id).color;
-      b.textContent = (G.pairSel.includes(id) ? '✓ ' : '') + coOf(id).name; b.disabled = !mine;
-      b.onclick = () => { G.pairSel = G.pairSel.includes(id) ? G.pairSel.filter(x => x !== id) : [...G.pairSel, id].slice(-2); renderAll(); };
-      row.appendChild(b);
-    });
-    const go = document.createElement('button'); go.className = 'btn'; go.textContent = '選んだ2社を1枚ずつ公開（時間1）';
-    const [a, b2] = G.pairSel; go.disabled = !(mine && G.pairSel.length === 2 && canRevealPair(me(), a, b2));
-    go.onclick = () => { G.pairSel = []; act(G.viewer || 0, { t:'pair', a, b:b2 }); };
-    row.appendChild(go); box.appendChild(row);
+  const chosen = Object.entries(G.revSel).map(([id, k]) => [+id, k]);
+  if (chosen.length) {
+    const cost = chosen.reduce((a, [id, k]) => a + priceOf(id) * k, 0);
+    const ok = chosen.length === 1 ? canReveal(me(), chosen[0][0], chosen[0][1]) : canRevealPair(me(), chosen[0][0], chosen[1][0]);
+    const row = document.createElement('div'); row.style.cssText = 'width:100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap';
+    row.innerHTML = `<span class="note">${chosen.map(([id, k]) => coOf(id).name + '×' + k).join('と')}を公開：${cost}払う${ok ? '' : '（お金が足りない）'}</span>`;
+    const go = document.createElement('button'); go.className = 'btn'; go.style.borderColor = '#7cf9ff'; go.textContent = `公開する（時間1）`; go.disabled = !ok;
+    go.onclick = () => { const c2 = chosen; G.revSel = {}; if (c2.length === 1) act(G.viewer || 0, { t:'reveal', id:c2[0][0], n:c2[0][1] }); else act(G.viewer || 0, { t:'pair', a:c2[0][0], b:c2[1][0] }); };
+    const no = document.createElement('button'); no.className = 'btn'; no.textContent = 'やめる'; no.onclick = () => { G.revSel = {}; renderMarket(); };
+    row.appendChild(go); row.appendChild(no); box.appendChild(row);
   }
-  if (waveActive()) box.insertAdjacentHTML('beforeend', '<span class="note">敵が来ている間は公開できません</span>');
+  if (waveActive() && ids.length) box.insertAdjacentHTML('beforeend', '<span class="note">敵が来ている間は公開できません</span>');
   el.appendChild(box);
 }
 function renderLog() { document.getElementById('log').innerHTML = G.log.map(t => `<div>${t}</div>`).join(''); }
-function renderAll() { renderChoice(); renderInfo(); renderTop(); renderTrack(); renderTurn(); renderHand(); renderMarket(); renderCos(); renderLayout(); }
+function renderAll() { renderChoice(); renderInfo(); renderTop(); renderTrack(); renderTurn(); renderHand(); renderMarket(); renderCos(); renderLayout(); renderMenu(); }
 // スマホの表示：タブと、今の手順に要るまとまりだけを出す（PC はいつも全部）
 const MOBILE = window.matchMedia('(max-width:680px)');
 let tab = 'op', lastActor = null;
@@ -2059,24 +2140,14 @@ document.getElementById('swap').onclick = () => {
   act(G.viewer || 0, { t:'redraw', idx:G.selected !== null ? G.selected : 0 });
 };
 cv.addEventListener('click', ev => {
-  // 盤のマスをタップしたら、そのマスのタイルが手札にあれば選ぶ
+  // 盤のマスを押したら：空いたマスなら置ける手札のメニュー、タワーなら強化のメニューを、そのそばに出す
   if (AUTO) return;
   const r = cv.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
   let best = null;
   for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) { const [px, py] = center(x, y), d = Math.hypot(px - mx, py - my); if (!best || d < best.d) best = { x, y, d }; }
-  const placed = G.tiles[key(best.x, best.y)];
-  if (placed) { G.selected = null; G.upSel = key(best.x, best.y); renderAll(); return; }
-  G.upSel = null;
-  // 選んでいるタイルの置ける場所を押したら：その場所を選ぶ。選んだ場所をもう一度押したら置く
-  const sel = G.selected !== null ? me().hand[G.selected] : null;
-  if (sel && canPlace(sel).spots.some(s2 => s2.x === best.x && s2.y === best.y)) {
-    const tg = chosenOf(sel);
-    if (tg && tg[0] === best.x && tg[1] === best.y && G.actor === me() && !G.busy) act(G.viewer || 0, { t:'place', idx:G.selected, at:tg });
-    else { G.target = [best.x, best.y]; renderAll(); }
-    return;
-  }
-  const i = me().hand.findIndex(t => AREA_MODE ? t.area === areaOf(best.x, best.y) : t.x === best.x && t.y === best.y);
-  if (i >= 0) { G.selected = i; G.target = AREA_MODE && canPlace(me().hand[i]).spots.some(s2 => s2.x === best.x && s2.y === best.y) ? [best.x, best.y] : null; renderAll(); }   // エリアで置くときは、押したマスをそのまま置き場所の候補にする
+  if (G.menu && G.menu.x === best.x && G.menu.y === best.y) { G.menu = null; G.upSel = null; renderAll(); return; }   // 同じマスをもう一度押したら閉じる
+  if (!openMenu(best.x, best.y)) { G.menu = null; G.upSel = null; }
+  renderAll();
 });
 
 // ===== 行動の入口（何人かで遊ぶため、画面のボタンもネットワークから届いた行動も、ここを通す） =====
