@@ -21,6 +21,12 @@
   html, body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif; }
   body { min-height:100dvh; display:flex; flex-direction:column; align-items:center; }
   #wrap { width:100%; max-width:560px; padding:6px; }
+  html, body { overflow-x:hidden; }   /* どれかが長くなっても、ページの幅は画面の幅のまま */
+  #top { min-width:0; }
+  #top #wave { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:0 1 auto; }
+  #top #life, #top #money { flex:none; }
+  .tile { overflow:hidden; }
+  @media (max-width:360px) { .tile .nm { font-size:11px; letter-spacing:-.6px; } .tile .eff, .tile .tm { font-size:10px; } }
   #top { display:flex; gap:8px; align-items:center; font-size:13px; flex-wrap:wrap; padding:4px 2px; }
   #top .big { font-size:16px; font-weight:bold; white-space:nowrap; }
   @media (max-width:480px) { #top { flex-wrap:nowrap; gap:6px; } #top .big { font-size:14px; } #setupNote { display:none; } #helpBtn .hl { display:none; } #top .btn { white-space:nowrap; }
@@ -59,6 +65,10 @@
   .sgrid { width:100%; display:grid; grid-template-columns:repeat(4, 1fr); gap:5px; }
   .sgrid .btn { padding:5px 2px; font-size:13px; line-height:1.3; min-height:50px; }
   .sgrid .btn .note { font-size:11px; }
+  .peek { display:flex; flex-wrap:wrap; gap:4px; }
+  .peek span { border:1px solid #2c3d6b; border-radius:6px; padding:2px 6px; font-size:12px; color:var(--text); background:#0c1222; }
+  .peek small { margin-left:4px; color:var(--dim); font-size:10px; }
+  .sgrid .btn .pw { font-size:11px; color:#ffe9a8; }
   #market .btn.on { background:#24407a; box-shadow:0 0 8px #7cf9ff; }
   .btn:disabled { opacity:.35; cursor:default; }
   #acts { display:flex; gap:6px; flex-wrap:wrap; padding:4px 0; }
@@ -368,6 +378,7 @@ function setup() {
   types.length = cells.length; shuffle(types);
   const all = cells.map(([x, y], i) => ({ x, y, type:types[i], area:areaOf(x, y) }));
   G.bag = shuffle(all.filter(t => !isClosed(t.x, t.y))); G.later = all.filter(t => isClosed(t.x, t.y));
+  G.players = [];   // つなぎ直しなどで2回目の準備になっても、人の並びが増えないように
   for (let i = 0; i < NPLAYERS; i++) {
     G.players.push({ id:i, name: i === 0 && !AUTO ? 'あなた' : 'CPU' + (AUTO ? i + 1 : i), cpu: AUTO || i > 0,
       color:['#ffffff', '#7cf9ff', '#ff9a3c', '#b07cff', '#6dff9a', '#ff4d6d'][i], money:START_MONEY, shares:Array(8).fill(0),
@@ -1890,14 +1901,14 @@ function renderInfo() {
 function renderTop() {
   document.getElementById('pauseBtn').style.display = canPause() ? '' : 'none';
   const ac = waveActive();
-  { const el = document.getElementById('wave'), mine = me(), n = `次の波 ${G.wave + 1}/${WAVES}`;
+  { const el = document.getElementById('wave'), mine = me(), n = `波${G.wave + 1}/${WAVES}`;
     const done = !mine || mine.t >= G.limit || (mine.clock ?? FIRST_WAIT) <= 0;
     // 人が遊ぶとき：自分の考える時間はいつも出す。自分の番で減っている間は明るく、ほかの人の番では灰色
     el.innerHTML = G.over ? '終了' : ac ? `波 ${G.wave}/${WAVES} 来襲中` : G.wave >= WAVES ? '最後の波'
-      : AUTO ? `${n} まで ${Math.ceil(G.waveTimer)}秒`
-      : !nextActor() ? `${n} まで ${Math.max(0, Math.ceil(G.waveTimer))}秒`
-      : done ? `${n}・あなたの番は終わり`
-      : `${n}・考える時間 <span style="color:${G.actor === mine ? '#ffe066' : '#6f7a99'}">${Math.max(0, Math.ceil(mine.clock ?? FIRST_WAIT))}秒</span>`; }
+      : AUTO ? `${n}まで ${Math.ceil(G.waveTimer)}秒`
+      : !nextActor() ? `${n}まで ${Math.max(0, Math.ceil(G.waveTimer))}秒`
+      : done ? `${n}まで・番は終わり`
+      : `${n}まで <span data-tip="あなたの考える時間。自分の番の間だけ減る" style="color:${G.actor === mine ? '#ffe066' : '#6f7a99'}">${Math.max(0, Math.ceil(mine.clock ?? FIRST_WAIT))}秒</span>`; }
   document.getElementById('life').textContent = '♥ ' + G.lives;
   document.getElementById('money').textContent = AUTO ? '' : '所持金 ' + me().money;
 }
@@ -2068,10 +2079,10 @@ function renderCos() {
       `<td style="text-align:left">${(() => {
         const hs = G.players.filter(p => p.shares[co.id]).sort((a, b) => b.shares[co.id] - a.shares[co.id]);
         const top = hs.length ? hs[0].shares[co.id] : 0, second = (hs.map(p => p.shares[co.id]).find(c => c < top));
-        return hs.map(p => { const c = p.shares[co.id]; return `<span style="color:${p.color}">${c === top ? '◎' : c === second ? '○' : ''}${p.name.replace('CPU', 'C')}${c}</span>`; }).join(' ');
+        return hs.map(p => { const c = p.shares[co.id]; return `<span style="color:${p.color}">${c === top ? '◎' : c === second ? '○' : ''}${p.name.replace('CPU', 'C')}×${c}</span>`; }).join(' ');
       })()}</td></tr>`;
   });
-  const cp = G.players.filter(p => p.shares[CENTRAL]).map(p => `<span style="color:${p.color}">${p.name.replace('CPU', 'C')}${p.shares[CENTRAL]}</span>`).join(' ');
+  const cp = G.players.filter(p => p.shares[CENTRAL]).map(p => `<span style="color:${p.color}">${p.name.replace('CPU', 'C')}×${p.shares[CENTRAL]}</span>`).join(' ');
   h += `<tr><td data-tip="値段は会社の株価の加重平均。筆頭も配当もなく、終わりにそのときの値段で売る"><span class="sw" style="background:${CENTRAL_CO.color}"></span>投資信託</td><td>-</td><td>-</td><td>-</td><td>${centralPrice()}</td><td>${G.centralLeft}</td><td style="text-align:left">${cp}</td></tr>`;
   const notYet = G.cos.filter(co => !rowOf(co));
   if (!AUTO) { const cnt = {}; me().cards.forEach(id => cnt[id] = (cnt[id] || 0) + 1);
@@ -2080,6 +2091,9 @@ function renderCos() {
   el.innerHTML = h;
 
 }
+// 能力ありのとき、株の札に会社の能力を出す（名前は札に、中身は長押しの吹き出しに）
+const powerLine = id => POWERS && id !== CENTRAL ? `<br><span class="pw">${POWER[id].name}</span>` : '';
+const powerTip = id => POWERS && id !== CENTRAL ? `。能力「${POWER[id].name}」：${POWER[id].desc}` : '';
 function renderMarket() {
   const el = document.getElementById('market'); if (AUTO) { el.innerHTML = ''; return; }
   const tk = G.taking && G.taking.p === me(), ex = G.exchanging && G.exchanging.p === me(), dc = G.discarding && G.discarding.p === me();
@@ -2097,22 +2111,25 @@ function renderMarket() {
   // 交換・捨てる：その場面のボタンだけ
   if (ex) {
     grid(`手放す株を選ぶ → 投資信託1口（いま${centralPrice()}・公開済み・お金はいらない）`, [
-      ...[...new Set(me().cards.filter(x => x !== CENTRAL))].map(id => { const co = G.cos[id]; return [`${co.name}<br><span class="note">${co.active ? '株価' + price(co) : 'まだない'}</span>`, co.color, () => act(G.viewer || 0, { t:'exchange', id }), true]; }),
+      ...[...new Set(me().cards.filter(x => x !== CENTRAL))].map(id => { const co = G.cos[id]; return [`${co.name}<br><span class="note">${co.active ? '株価' + price(co) : 'まだない'}</span>${powerLine(id)}`, co.color, () => act(G.viewer || 0, { t:'exchange', id }), true]; }),
       ['替えない', null, () => act(G.viewer || 0, { t:'exchange', id:null }), true]]);
   } else if (dc) {
     grid(`株の手札は${CARD_MAX}枚まで。捨てる株を選ぶ（${me().cards.length - CARD_MAX}枚）`,
-      [...new Set(me().cards)].map(id => [`${coOf(id).name} ×${me().cards.filter(c => c === id).length}<br><span class="note">1枚捨てる</span>`, coOf(id).color, () => act(G.viewer || 0, { t:'discard', id }), true]));
+      [...new Set(me().cards)].map(id => [`${coOf(id).name} ×${me().cards.filter(c => c === id).length}<br><span class="note">1枚捨てる</span>${powerLine(id)}`, coOf(id).color, () => act(G.viewer || 0, { t:'discard', id }), true]));
   } else if (!MOBILE.matches || tk) {
     // 株の場（5枚）・山札・投資信託
     grid(tk ? '株を1枚選んで手札に入れる（お金はかからない）' : '株の場', [
-      ...G.market.map((id, mi) => { const co = G.cos[id]; return [`${co.name}<br><span class="note">${co.active ? price(co) : 'まだない'}</span>`, co.color, () => act(G.viewer || 0, { t:'take', mi }), tk,
-        co.active ? `${co.name}の株。いまの株価${price(co)}（公開するときに払う）` : `${co.name}はまだ盤にない。手札に入れておけるが、公開できるのは設立されてから`]; }),
+      ...G.market.map((id, mi) => { const co = G.cos[id]; return [`${co.name}<br><span class="note">${co.active ? price(co) : 'まだない'}</span>${powerLine(id)}`, co.color, () => act(G.viewer || 0, { t:'take', mi }), tk,
+        (co.active ? `${co.name}の株。いまの株価${price(co)}（公開するときに払う）` : `${co.name}はまだ盤にない。手札に入れておけるが、公開できるのは設立されてから`) + powerTip(id)]; }),
       ['山札<br><span class="note">何が来るか</span>', null, () => act(G.viewer || 0, { t:'take', mi:-1 }), tk && G.deck.length, '山札の一番上を、見ないで手札に入れる'],
       [`投資信託<br><span class="note">残り${G.centralLeft}</span>`, CENTRAL_CO.color, () => act(G.viewer || 0, { t:'take', mi:-2 }), tk && G.centralLeft > 0, `投資信託。値段は盤にある会社の株価の平均（いま${centralPrice()}）。筆頭も配当もなく、終わりにそのときの値段で売れる`]]);
     if (tk && canReset(me())) {
       const r = document.createElement('button'); r.className = 'btn'; r.textContent = '場を入れ替える（どれも公開できないときの1回だけ）'; r.style.marginTop = '4px';
       r.onclick = () => act(G.viewer || 0, { t:'reset' }); el.appendChild(r);
     }
+  } else if (G.actor === me() && !G.over) {
+    // スマホの自分の番：置く・強化したらもらえる株を、押せない見本として小さく1行で
+    el.insertAdjacentHTML('beforeend', `<div class="shead">置いたらもらえる株（どれか1枚）</div><div class="peek">${G.market.map(id => { const co = G.cos[id]; return `<span style="border-color:${co.color}">${co.name}<small>${co.active ? price(co) : 'まだない'}${POWERS ? '・' + POWER[id].name : ''}</small></span>`; }).join('')}<span>山札</span><span style="border-color:${CENTRAL_CO.color}">投資信託</span></div>`);
   }
   // 株の手札：押して公開する株を選び（押すたびに1枚ずつ増える）、最後に「公開する」で決める。
   // 1社なら何枚でも、2社なら1枚ずつ。選び方に合わない押し方をしたら、その会社だけを選び直す
@@ -2127,7 +2144,8 @@ function renderMarket() {
   ids.forEach(id => {
     const co = coOf(id), n = me().cards.filter(c => c === id).length, k = G.revSel[id] || 0;
     const b = document.createElement('button'); b.className = 'btn' + (k ? ' on' : ''); b.style.borderColor = co.color;
-    b.innerHTML = `${co.name} ${k ? `<b>${k}</b>/` : '×'}${n}<br><span class="note">${co.active ? priceOf(id) : 'まだない'}</span>`;
+    b.innerHTML = `${co.name} ${k ? `<b>${k}</b>/` : '×'}${n}<br><span class="note">${co.active ? priceOf(id) : 'まだない'}</span>${powerLine(id)}`;
+    if (POWERS && id !== CENTRAL) b.dataset.tip = `${co.name}${powerTip(id)}`;
     b.disabled = !(mine && !waveActive() && co.active);
     b.onclick = () => {
       const sel = G.revSel, others = Object.keys(sel).filter(x => x != id);
@@ -2170,7 +2188,7 @@ function renderLayout() {
     if (pick) show.gStock = 1;                         // 株を取る・交換する・捨てる：株だけ
     else {
       show.gHand = 1;                                   // タイルの手札はいつも（ほかの人の番でも次の手を考えられるように）
-      if (G.actor === me() && me().cards.length) show.gStock = 1;   // 自分の番で株を持っていれば、公開できるように
+      if (G.actor === me()) show.gStock = 1;   // 自分の番：もらえる株の見本と、株の手札（公開できるように）
     }
   }
   ['gTrack', 'gHand', 'gStock', 'gCos', 'gLog'].forEach(id => document.getElementById(id).classList.toggle('hide', MOBILE.matches && !show[id]));
@@ -2413,18 +2431,26 @@ function hostLobby(n, hostName) {
     const peer = new Peer(NET_PREFIX + room); G.net.peer = peer;
     peer.on('error', err => { if (err.type === 'unavailable-id') { peer.destroy(); hostLobby(n, hostName); } else modal(`<h3>つなげませんでした</h3><p class="note">${err.type}</p>`, [['戻る', () => location.reload()]]); });
     peer.on('open', () => drawLobby());
-    peer.on('connection', conn => {
-      conn.on('data', d => {
-        if (d.type === 'join' && !G.started) { G.net.pending.push({ conn, name:String(d.name || '参加者').slice(0, 12) }); drawLobby(); }
-        if (d.type === 'act' && G.started) { const seat = Object.entries(G.net.peers).find(([, c]) => c === conn); if (seat) act(+seat[0], d.a); }
-      });
-      conn.on('close', () => {
-        const seat = Object.entries(G.net.peers).find(([, c]) => c === conn);
-        if (seat && G.started) { const q = G.players[+seat[0]]; q.cpu = true; delete G.net.peers[seat[0]]; log(`${q.name} が抜けたので、CPU が引き継ぐ`); }
-        if (!G.started) { G.net.joined = G.net.joined.filter(j => j.conn !== conn); G.net.pending = G.net.pending.filter(j => j.conn !== conn); drawLobby(); }
-      });
-    });
+    peer.on('connection', hostConn);
   }).catch(() => modal('<h3>読み込めませんでした</h3><p class="note">インターネットにつながっているか確かめてください</p>', [['戻る', () => location.reload()]]));
+}
+// ホスト：参加者からのつなぎ。入る（始まる前）・戻る（合言葉つき）・行動・切れる
+function hostConn(conn) {
+  conn.on('data', d => {
+    if (d.type === 'join' && !G.started) { G.net.pending.push({ conn, name:String(d.name || '参加者').slice(0, 12) }); drawLobby(); }
+    if (d.type === 'rejoin' && G.started && G.net.keys && G.net.keys[d.seat] && G.net.keys[d.seat] === d.key) {
+      const seat = +d.seat, q = G.players[seat];
+      G.net.peers[seat] = conn; q.cpu = false; q.remote = true;
+      conn.send({ type:'start', course:COURSE, n:NPLAYERS, powers:POWERS, diff:DIFF, seat, names:G.players.map(o => o.name), room:G.net.room, key:d.key });
+      conn.send(snapshot(seat)); log(`${q.name} が戻った`); renderAll();
+    }
+    if (d.type === 'act' && G.started) { const seat = Object.entries(G.net.peers).find(([, c]) => c === conn); if (seat) act(+seat[0], d.a); }
+  });
+  conn.on('close', () => {
+    const seat = Object.entries(G.net.peers).find(([, c]) => c === conn);
+    if (seat && G.started) { const q = G.players[+seat[0]]; q.cpu = true; delete G.net.peers[seat[0]]; log(`${q.name} が抜けたので、戻るまで CPU が代わりに打つ`); }
+    if (!G.started) { G.net.joined = G.net.joined.filter(j => j.conn !== conn); G.net.pending = G.net.pending.filter(j => j.conn !== conn); drawLobby(); }
+  });
 }
 function drawLobby() {
   const nt = G.net, url = location.origin + location.pathname + '?room=' + nt.room;
@@ -2445,32 +2471,46 @@ function hostStart() {
   G.players[0].name = nt.hostName;
   nt.joined.forEach((j, i) => { const seat = i + 1, q = G.players[seat]; q.cpu = false; q.remote = true; q.name = j.name; nt.peers[seat] = j.conn; });
   const names = G.players.map(q => q.name);
-  nt.joined.forEach((j, i) => j.conn.send({ type:'start', course:COURSE, n:NPLAYERS, powers:POWERS, diff:DIFF, seat:i + 1, names }));
+  nt.keys = {}; nt.joined.forEach((j, i) => nt.keys[i + 1] = Math.random().toString(36).slice(2, 10));
+  nt.joined.forEach((j, i) => j.conn.send({ type:'start', course:COURSE, n:NPLAYERS, powers:POWERS, diff:DIFF, seat:i + 1, names, room:nt.room, key:nt.keys[i + 1] }));
   renderAll();
 }
 // 参加者：部屋に入る
-function joinRoom(room, name) {
+function joinRoom(room, name, back) {   // back：戻るときの { seat, key }
   room = String(room || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
-  modal(`<h3>部屋 ${room} に入っています…</h3><p class="note">ホストの許可を待っています</p>`, [['やめる', () => location.reload()]]);
+  modal(back ? `<h3>部屋 ${room} に戻っています…</h3><p class="note">ホストにつないでいます</p>` : `<h3>部屋 ${room} に入っています…</h3><p class="note">ホストの許可を待っています</p>`, [['やめる', () => { clearNetSave(); location.href = location.pathname; }]]);
   loadPeer().then(() => {
     const peer = new Peer();
-    peer.on('error', err => modal(`<h3>つなげませんでした</h3><p class="note">部屋番号が合っているか確かめてください（${err.type}）</p>`, [['戻る', () => location.reload()]]));
+    peer.on('error', err => { if (back && err.type === 'peer-unavailable') { peer.destroy(); return retryJoin(room, name, back); }   // ホストが部屋を開き直すのを待つ
+      modal(`<h3>つなげませんでした</h3><p class="note">部屋番号が合っているか確かめてください（${err.type}）</p>`, [['戻る', () => location.reload()]]); });
     peer.on('open', () => {
       const conn = peer.connect(NET_PREFIX + room, { reliable:true });
-      conn.on('open', () => conn.send({ type:'join', name }));
+      conn.on('open', () => conn.send(back ? { type:'rejoin', seat:back.seat, key:back.key } : { type:'join', name }));
       conn.on('data', d => {
         if (d.type === 'reject') modal('<h3>参加できませんでした</h3><p class="note">ホストに断られたか、もう始まっています</p>', [['戻る', () => location.reload()]]);
         if (d.type === 'start') {
           useCourse(d.course); NPLAYERS = d.n; POWERS = !!d.powers; DIFF = DIFFS[d.diff] ? d.diff : 'normal'; setup(); resize();
           G.viewer = d.seat; G.net = { role:'client', send:x => conn.send(x), fx:[] };
           G.players.forEach((q, i) => { q.name = d.names[i]; q.cpu = false; });
-          G.started = true; hideModal(); renderAll(); renderLog();
+          G.started = true; hideModal(); renderAll(); renderLog(); retryCount = 0;
+          if (d.key) { try { localStorage.setItem(NET_SAVE_KEY, JSON.stringify({ role:'client', room:d.room || room, seat:d.seat, key:d.key, name })); } catch (e) {} }
         }
         if (d.type === 'state' && G.started) applyState(d);
       });
-      conn.on('close', () => { if (!G.over) modal('<h3>ホストとの接続が切れました</h3>', [['最初に戻る', () => location.href = location.pathname]]); });
+      conn.on('close', () => {   // ホストが切れた：開き直すのを待って、つなぎ直す
+        if (G.over) return;
+        const sv = loadNetSave(); if (sv && sv.role === 'client') { peer.destroy(); retryJoin(sv.room, sv.name, sv); return; }
+        modal('<h3>ホストとの接続が切れました</h3>', [['最初に戻る', () => location.href = location.pathname]]);
+      });
     });
   }).catch(() => modal('<h3>読み込めませんでした</h3><p class="note">インターネットにつながっているか確かめてください</p>', [['戻る', () => location.reload()]]));
+}
+// 戻る：ホストが部屋を開き直すまで、3秒ごとに1分ほどつなぎ直す
+let retryCount = 0;
+function retryJoin(room, name, back) {
+  if (++retryCount > 20) { modal('<h3>ホストに戻れませんでした</h3><p class="note">ホストが部屋を開き直していないかもしれません</p>', [['もう一度', () => { retryCount = 0; retryJoin(room, name, back); }], ['最初に戻る', () => { clearNetSave(); location.href = location.pathname; }]]); return; }
+  modal(`<h3>ホストとつなぎ直しています…（${retryCount}回目）</h3><p class="note">ホストが部屋を開き直すと、自動でつながります</p>`, [['最初に戻る', () => { clearNetSave(); location.href = location.pathname; }]]);
+  setTimeout(() => joinRoom(room, name, back), 3000);
 }
 function showJoin(room) {
   modal(`<h3>部屋に入る</h3><p><input id="roomIn" placeholder="部屋番号（4文字）" value="${room || ''}" style="font-size:16px;width:10em"></p>
@@ -2487,6 +2527,7 @@ function setPause(on) { paused = on && canPause(); document.getElementById('paus
 document.getElementById('pauseBtn').onclick = () => setPause(true);
 document.getElementById('resumeBtn').onclick = () => setPause(false);
 document.addEventListener('visibilitychange', () => { if (document.hidden && canPause()) setPause(true); });   // ほかのアプリに切り替えたら止めておく
+let saveTimer = 2;
 function loop(now) {
   const dt = paused ? 0 : Math.min(.05, (now - last) / 1000) * SPEED; last = now;   // 一時停止中は時間を進めない
   if (G.started) G.clock = (G.clock || 0) + dt;
@@ -2505,12 +2546,52 @@ function loop(now) {
     else if (!r0.wait) { G.waitPlace = null; G.busy = false; log(`${w.p.name}：${label(...w.at)} には置けなくなった（${r0.why || '手札にない'}）`); renderAll(); }
     else if ((G.clock || 0) > w.until) { G.waitPlace = null; G.busy = false; log(`${w.p.name}：${label(...w.at)} は敵が通り続けたので、建てるのをやめた`); renderAll(); }
   }
+  saveTimer -= dt; if (saveTimer <= 0) { saveTimer = 2; if (G.over && G.started && !AUTO) { clearSave(); clearNetSave(); } else saveGame(); }
   hudTimer -= dt; if (G.started && hudTimer <= 0) { hudTimer = .25; renderTop(); renderInfo(); renderTurn(); if (G.actor === me()) renderHand(); }
   draw();
   if (window.__probe) window.__probe(G);
   requestAnimationFrame(loop);
 }
 window.addEventListener('resize', () => { resize(); draw(); });
+// 続きから遊ぶ：ひとりで遊ぶときだけ、波と波の間（敵がいなくて、選ぶ途中でもないとき）に、この端末に保存する
+const SAVE_KEY = 'stock-defense-save';
+const SAVE_FIELDS = ['tiles', 'owner', 'bag', 'later', 'players', 'cos', 'lives', 'wave', 'waveTimer', 'calib', 'waveLeaks', 'limit', 'roundOrder', 'deck', 'market', 'discards',
+  'centralLeft', 'stats', 'seq', 'log', 'nextWave', 'lastSettle', 'planKey', 'planScore', 'clock', 'revLog', 'mergeLog', 'removed', 'wormNext'];
+const canSave = () => G.started && !G.over && !AUTO && !(G.net && G.net.role === 'client') && !waveActive() && !G.busy && !G.choosing && !G.taking && !G.exchanging && !G.discarding && !G.swapping && !G.waitPlace;
+function saveGame() {
+  if (!canSave()) return;
+  const g = {}; SAVE_FIELDS.forEach(k => { if (G[k] !== undefined) g[k] = G[k]; });
+  const net = G.net && G.net.role === 'host' ? { room:G.net.room, hostName:G.net.hostName, keys:G.net.keys, remote:G.players.map(q => !!q.remote) } : null;   // ホストなら部屋の情報も
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v:1, at:Date.now(), course:COURSE, n:NPLAYERS, powers:POWERS, diff:DIFF, level:CPU_LEVEL, plan:[...PLAN], g, net })); } catch (e) {}
+}
+function loadSave() { try { const sv = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return sv && sv.v === 1 ? sv : null; } catch (e) { return null; } }
+const NET_SAVE_KEY = 'stock-defense-net';   // 参加者：どの部屋のどの席か（読み込み直したら戻るため）
+function loadNetSave() { try { return JSON.parse(localStorage.getItem(NET_SAVE_KEY) || 'null'); } catch (e) { return null; } }
+function clearNetSave() { try { localStorage.removeItem(NET_SAVE_KEY); } catch (e) {} }
+function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+function resumeGame(sv) {
+  useCourse(sv.course); NPLAYERS = sv.n; POWERS = !!sv.powers; DIFF = DIFFS[sv.diff] ? sv.diff : 'normal'; CPU_LEVEL = sv.level === 'easy' ? 'easy' : 'normal';
+  setup(); resize();
+  Object.assign(G, sv.g); PLAN = new Set(sv.plan || []);
+  G.dist = distanceField(); G.actor = null; G.busy = false; G.selected = null; G.menu = null;
+  G.started = true; renderAll(); renderLog();
+  log(`続きから：${sv.g.wave ? `波${sv.g.wave}のあと` : '最初の波の前'}から再開`);
+  announce('続きから', `次は波 ${G.wave + 1}`);
+}
+// ホスト：保存したところから、同じ部屋番号で部屋を開き直す。参加者が戻るまでは CPU が代わりに打つ
+function reopenHost(sv) {
+  resumeGame(sv);
+  G.players.forEach((q, i) => { if (sv.net.remote[i]) { q.remote = true; q.cpu = true; } });
+  G.net = { role:'host', room:sv.net.room, peers:{}, fx:[], syncT:0, joined:[], pending:[], hostName:sv.net.hostName, n:NPLAYERS, keys:sv.net.keys || {} };
+  let tries = 0;
+  const open = () => loadPeer().then(() => {
+    const peer = new Peer(NET_PREFIX + sv.net.room); G.net.peer = peer;
+    peer.on('open', () => { hideModal(); log(`部屋 ${sv.net.room} を開き直した。参加者が戻るまで CPU が代わりに打つ`); });
+    peer.on('error', err => { if (err.type === 'unavailable-id' && ++tries < 20) { peer.destroy(); modal(`<h3>部屋 ${sv.net.room} を開き直しています…（${tries}回目）</h3><p class="note">前の部屋が閉じるのを待っています</p>`, []); setTimeout(open, 3000); } });
+    peer.on('connection', hostConn);
+  });
+  open();
+}
 function startGame() {
   setup(); resize(); renderAll(); renderLog();
   log(`始まり：最初の波まで${FIRST_WAIT}秒。手札のタイルを置いて迷路を作ろう`);
@@ -2542,7 +2623,11 @@ function showStart() {
     <div style="border:1px solid #2c3d6b;border-left:4px solid #7cf9ff;border-radius:8px;padding:6px 10px;margin:6px 0 4px;background:#0a1226"><div style="display:flex;gap:10px;align-items:center"><img src="${courseMini(COURSE)}" alt="" style="width:110px;flex:none"><div><b style="color:#7cf9ff">${COURSES[COURSE].name}</b><div class="note" style="color:var(--text);margin-top:2px">${COURSES[COURSE].note}。</div></div></div><div class="note" style="margin-top:4px;font-size:11px"><span style="color:#ff4dff">■</span>入口 <span style="color:#fff">■</span>出口 <span style="color:#8a94b4">■</span>置けない <span style="color:#e0bc40">■</span>敵が速くなる <span style="color:#4cc070">■</span>敵が回復する</div></div>
     <p class="note" style="margin-top:14px">遊び方は「ルールを読む」か、遊んでいる間なら右上の「？」でいつでも読めます。遊んでいる間は、次に押す場所が光って教えてくれます。</p>`;
   const open = () => {
-    modal(body(), [['ひとりで遊ぶ（CPUと）', () => { NPLAYERS = n; startGame(); }],
+    const sv = loadSave();
+    const ns = loadNetSave();
+    modal(body(), [...(ns && ns.role === 'client' ? [[`部屋 ${ns.room} に戻る（席${ns.seat + 1}）`, () => joinRoom(ns.room, ns.name, ns)]] : []),
+      ...(sv ? [[sv.net ? `部屋 ${sv.net.room} を開き直す（ホスト・${sv.g.wave ? `波${sv.g.wave}のあと` : '最初の波の前'}）` : `続きから（${sv.g.wave ? `波${sv.g.wave}のあと` : '最初の波の前'}・${sv.n}人・${COURSES[sv.course].name}）`, () => sv.net ? reopenHost(sv) : resumeGame(sv)]] : []),
+      ['ひとりで遊ぶ（CPUと）', () => { clearSave(); clearNetSave(); NPLAYERS = n; startGame(); }],
       ['部屋を作る', () => { let nm = ''; try { nm = localStorage.getItem('stock-defense-name') || ''; } catch (e) {} hostLobby(n, nm || 'ホスト'); }],
       ['部屋に入る', () => showJoin('')], ['ルールを読む', () => { showRules(); document.querySelector('#mbox .row button').onclick = () => { document.getElementById('modal').style.display = 'none'; open(); }; }]]);
     document.querySelectorAll('#mbox [data-n]').forEach(b => b.onclick = () => { n = +b.dataset.n; open(); });
