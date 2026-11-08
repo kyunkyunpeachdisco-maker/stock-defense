@@ -121,7 +121,7 @@
     <span id="money" class="big" data-tip="株を公開するときに払うお金。終わりにいちばん多い人の勝ち"></span>
     <span class="note" id="setupNote"></span>
     <button class="btn" id="pauseBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="一時停止（ひとりで遊ぶときだけ）">⏸</button>
-    <button class="btn" id="ffBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="早回し（ひとりで遊ぶときだけ）。押すたびに 1倍 → 2倍 → 3倍。考える時間は早回しの分だけ遅く減る">▶</button>
+    <button class="btn" id="ffBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="早回し（ひとりで遊ぶときだけ）。押すたびに 1倍 → 2倍 → 3倍。持ち時間（秒）は早回ししても本当の秒で減る">▶</button>
     <button class="btn" id="soundBtn" style="padding:4px 8px;font-size:13px" data-tip="効果音を鳴らす・消す"></button>
     <button class="btn" id="helpBtn">？<span class="hl"> ルール</span></button>
   </div>
@@ -243,7 +243,7 @@ const COMPANIES = [
   { name:'オメガ',   tier:2, color:'#ff4d6d' }, { name:'ヘリオス', tier:2, color:'#ffffff' },
 ];
 // 会社の能力モード（?powers=1 か開始画面）：能力はその会社のタイル全部に効く。筆頭の権限ではない。吸収された会社の能力は消える
-let POWERS = PARAMS.get('powers') === '1';
+let POWERS = PARAMS.get('powers') !== '0';   // 会社の能力は初めからあり（ユーザー）。?powers=0 でなし
 const PW = { rapid:.75, splash:.5, link:.1, range:.4, slow:.2, pierce:1.4, fame:1.1 };   // 数字は CPU の試しで合わせる。?pw=rapid:.8,fame:1.1 で上書き
 (PARAMS.get('pw') || '').split(',').filter(Boolean).forEach(x => { const [k, v] = x.split(':'); PW[k] = +v; });
 const POWER = [
@@ -1478,7 +1478,7 @@ function waveTick(dt) {
     if (a && !a.cpu) {
       if (a.clock === undefined) a.clock = FIRST_WAIT;
       if (!NO_LIMIT) a.clock -= dt / FF;   // 考える時間は、早回ししても本当の秒で減る
-      if (a.clock <= 0 && !G.busy && !G.choosing) { a.t = Math.max(a.t, G.limit); G.selected = null; G.menu = null; log(`${a.name}：考える時間が切れたので、この波の手番は終わり`); renderAll(); }
+      if (a.clock <= 0 && !G.busy && !G.choosing) { a.t = Math.max(a.t, G.limit); G.selected = null; G.menu = null; log(`${a.name}：持ち時間が切れたので、この波の手番は終わり`); renderAll(); }
     }
     if (!nextActor() && !waveActive()) { G.waveTimer = Math.min(G.waveTimer, 3); G.waveTimer -= dt; }   // 一瞬だけ手番の人がいない間を数えないよう、時間トラックで判断する
   }
@@ -2085,7 +2085,7 @@ function renderTop() {
       : !nextActor() ? `${n}まで ${Math.max(0, Math.ceil(G.waveTimer))}秒`
       : done ? `${n}まで・番は終わり`
       : NO_LIMIT ? `${n}まで・${G.actor === mine ? 'あなたの番' : 'みんなの番のあと'}`
-      : `${n}まで <span data-tip="あなたの考える時間。自分の番の間だけ減る" style="color:${G.actor === mine ? '#ffe066' : '#6f7a99'}">${Math.max(0, Math.ceil(mine.clock ?? FIRST_WAIT))}秒</span>`; }
+      : `${n}まで <span data-tip="あなたの持ち時間（秒）。自分の番の間だけ減る" style="color:${G.actor === mine ? '#ffe066' : '#6f7a99'}">${Math.max(0, Math.ceil(mine.clock ?? FIRST_WAIT))}秒</span>`; }
   document.getElementById('life').textContent = '♥ ' + G.lives;
   document.getElementById('money').textContent = AUTO ? '' : '所持金 ' + me().money + (me().bank ? `（預かり ${me().bank}）` : '');
 }
@@ -2508,7 +2508,7 @@ function chooseDisposal(p, co, sv, pr, n, maxPairs, cb) {
 // ルールのまとめ
 const RULES_HTML = () => `<h3>電脳都市のルール（まとめ）</h3>${POWERS ? `<h4>会社の能力</h4><p class="note">能力はその会社のタワー全部に効きます。吸収された会社の能力は消えます。</p><ul>${POWER.map((w, i) => `<li>${COMPANIES[i].name}（${w.name}）：${w.desc}</li>`).join('')}</ul>` : ''}
 <h4>目的</h4><p>ウイルス（敵）の波を全員で${WAVES}回守りきり、そのとき<b>いちばんお金の多い人</b>の勝ち。ライフが0になったら<b>全員の負け</b>。</p>
-<h4>手番の順番</h4><p>時間トラックで<b>いちばん後ろの人</b>が次に動く。行動するとその時間だけ前へ進む。1つの波で1人が使える時間は、全員の合計が24になるように人数で決まる（4人なら6、2人なら12、6人なら4）。<b>最初の波の前だけは2倍</b>。使い切ったら波が終わるまで待つ。開始画面で「考える時間：あり」を選んだときは、波ごとに一人ひとりに考える時間（最初は90秒、あとは45秒）がある。自分の番の間だけ減り、なくなったらその波の残りの手番は飛ばす。全員の手番が終わって敵がいなくなったら、次の波が来る。</p>
+<h4>手番の順番</h4><p>時間トラックで<b>いちばん後ろの人</b>が次に動く。行動するとその時間だけ前へ進む。1つの波で1人が使える時間は、全員の合計が24になるように人数で決まる（4人なら6、2人なら12、6人なら4）。<b>最初の波の前だけは2倍</b>。使い切ったら波が終わるまで待つ。開始画面で「持ち時間：あり」を選んだときは、波ごとに一人ひとりに持ち時間（最初の波の前は90秒、あとは45秒）がある。自分の番の間だけ減り、なくなったらその波の残りの手番は飛ばす。全員の手番が終わって敵がいなくなったら、次の波が来る。</p>
 <h4>手番でできること（どれか1つ）</h4><ul>
 <li><b>タイルを置く</b>：手札のタイルには<b>印のマス</b>（盤に点線で出る）と、そのマスのエリアが書いてある。${CELL_EXTRA ? `<b>同じエリアの空いているマス</b>なら、札の時間で置ける。<b>印のマスに置けば時間が${CELL_EXTRA}少ない</b>` : 'そのエリアの空いているマスならどこにでも置ける'}（盤のうすい文字 A〜F がエリア）。盤の光るマスを押すと、そこに置けるタイルが並ぶ。置いたマスは壁になり、敵はよけて進む（遠回りさせるほど守りやすい）。入口から出口への道をふさぐ置き方はできない。置いたら<b>株を1枚手札に入れる</b>。<b>2人のときだけ</b>、置いたあとに手札のタイルを1枚入れ替えてもよい（入れ替えたタイルは山の底へ）。</li>
 <li><b>強化する</b>：盤のタワーを押して強化（3段階まで）。誰が置いたタワーでもよい。強化しても株を1枚手札に入れる。</li>
@@ -2523,7 +2523,7 @@ const RULES_HTML = () => `<h3>電脳都市のルール（まとめ）</h3>${POWE
 <h4>決算</h4><p>${DIVIDEND_WAVES.length ? DIVIDEND_WAVES.join('回目と') + '回目の波が終わったとき、盤にある会社ごとに、筆頭に株価の4倍、次点に2倍の配当。' + (DIV_BANK ? '配当は<b>終わりまで預かり</b>で、株を買うのには使えない（所持金の横に「預かり」と出る）。終わりに所持金に足す。' : '') : 'なし'}</p>
 <h4>投資信託</h4><p>値段は盤にある会社の株価の平均。筆頭も配当もなく、終わりにそのときの値段で売れる。株を取ったあと、手札の株1枚を差し出して、投資信託1口を払わずに公開した状態で受け取れる。</p>
 <h4>終わり</h4><p>${WAVES}回守りきったら、盤にある会社すべてでボーナスを出し、公開した株と投資信託をその値段で売る。</p>
-<h4>画面</h4><p>ひとりで遊ぶときは、上の「⏸」で一時停止、「▶」で早回し（押すたびに1倍・2倍・3倍）。考える時間は早回ししても本当の秒で減る。「？」の付いた見出し・数字・ボタンは、カーソルを合わせるか長押しすると説明が出ます。</p>
+<h4>画面</h4><p>ひとりで遊ぶときは、上の「⏸」で一時停止、「▶」で早回し（押すたびに1倍・2倍・3倍）。持ち時間は早回ししても本当の秒で減る。「？」の付いた見出し・数字・ボタンは、カーソルを合わせるか長押しすると説明が出ます。</p>
 <p><label><input type="checkbox" id="guideChk" ${guideOff ? '' : 'checked'}> 押す場所を光らせて案内する</label></p>`;
 function showRules() {
   modal(RULES_HTML(), [['閉じる', () => {}]]);
@@ -2835,9 +2835,9 @@ function showStart() {
     modal(`<h3>${mode === 'host' ? '部屋を作る' : 'ひとりで遊ぶ'}：ルールを選ぶ</h3>` +
       line('人数', [2, 3, 4, 5, 6].map(k => [k, k + '人']), 'n', n) +
       line('難しさ', Object.entries(DIFFS).map(([k, d]) => [k, d.name]), 'df', DIFF) +
-      line('考える時間', [[0, 'あり'], [1, 'なし']], 'nl', NO_LIMIT ? 1 : 0) +
+      line('持ち時間', [[0, 'あり'], [1, '制限なし']], 'nl', NO_LIMIT ? 1 : 0) +
       line('CPU の強さ', [['strong', 'つよい'], ['normal', 'ふつう'], ['easy', 'よわい']], 'lv', CPU_LEVEL) +
-      line('会社の能力', [[0, 'なし'], [1, 'あり']], 'pw', POWERS ? 1 : 0) +
+      line('会社の能力', [[1, 'あり'], [0, 'なし']], 'pw', POWERS ? 1 : 0) +
       `<p class="note">${mode === 'host' ? '人数は、ほかの人と CPU を合わせた数。空いた席は CPU が入る。' : '人数は、あなたと CPU を合わせた数。'}</p>`,
       [['次へ（コースを選ぶ）', courses], ['戻る', title]]);
     const on = (a, f) => document.querySelectorAll(`#mbox [data-${a}]`).forEach(b => b.onclick = () => { f(b.dataset[a]); rules(); });
