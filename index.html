@@ -2058,11 +2058,17 @@ function pathFlow(dist) {
   }
   return seg;
 }
+// 描くのは、はっきりした分かれ道（敵の3割以上が通る）と、入口ごとにいちばん多く通る道だけ。
+// 広く開いた盤では敵が何本にも薄く散らばり、全部描くと線だらけで読めなかった（ユーザー）
 function drawFlow(seg, rgb, alpha) {
+  const out = new Map(); for (const [sk, f] of seg) { const k1 = sk.split('|')[0]; if (!out.has(k1)) out.set(k1, []); out.get(k1).push([sk, f]); }
+  const show = new Set([...seg].filter(([, f]) => f * ENTRANCES.length >= .3).map(([sk]) => sk));
+  for (const [ex, ey] of ENTRANCES) { let k = key(ex, ey), guard = 0; while (out.has(k) && guard++ < 300) { const [sk] = out.get(k).reduce((a, b) => b[1] > a[1] ? b : a); show.add(sk); k = sk.split('|')[1]; } }
   cx2.save(); cx2.lineCap = 'round'; cx2.setLineDash([2, S * .8]); cx2.lineDashOffset = -performance.now() / 40;
   for (const [sk, f] of seg) {
+    if (!show.has(sk)) continue;
     const [k1, k2] = sk.split('|'), [a1, b1] = warp(...center(...k1.split(',').map(Number))), [a2, b2] = warp(...center(...k2.split(',').map(Number)));
-    const w = Math.min(1, f * ENTRANCES.length);   // 1本の道を1として
+    const w = Math.max(.5, Math.min(1, f * ENTRANCES.length));   // 1本の道を1として（いちばん多く通る道は散らばっていても見えるように）
     cx2.strokeStyle = `rgba(${rgb},${(.25 + .45 * w) * alpha})`; cx2.lineWidth = 1.2 + 2 * w;
     cx2.beginPath(); cx2.moveTo(a1, b1); cx2.lineTo(a2, b2); cx2.stroke();
   }
