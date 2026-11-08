@@ -47,6 +47,7 @@
   .tile .ar { float:right; font-size:11px; font-weight:bold; color:#05070d; background:#9fb0dd; border-radius:9px; padding:0 6px; line-height:17px; }
   .tile .nm { display:flex; align-items:center; gap:3px; font-size:12px; font-weight:bold; white-space:nowrap; letter-spacing:-.5px; }
   .tile .nm img { width:17px; height:17px; flex:none; }
+  .tile .pf { margin-left:4px; font-size:10px; color:#ff9a9a; }
   .tile .tm { display:block; font-size:11px; color:var(--dim); }
   /* 盤の上のメニュー（タワーディフェンスのように、押したマスのそばに出す） */
   #bmenu { position:absolute; z-index:5; display:none; background:#0c1630f2; border:2px solid #7cf9ff; border-radius:12px; padding:6px; box-shadow:0 0 16px #7cf9ff88; min-width:150px; max-width:230px; }
@@ -108,6 +109,7 @@
   #modal .box p, #modal .box li { font-size:13px; line-height:1.6; margin:2px 0; }
   #modal .box ul { padding-left:18px; margin:2px 0; }
   .pick { display:flex; gap:6px; flex-wrap:wrap; margin:4px 0; }
+  #mbox .btn.on { background:#24407a; border-color:#7cf9ff; box-shadow:0 0 8px #7cf9ff66; }
   .pick .btn.on { background:#24407a; border-color:#7cf9ff; }
 </style>
 </head>
@@ -119,6 +121,7 @@
     <span id="money" class="big" data-tip="株を公開するときに払うお金。終わりにいちばん多い人の勝ち"></span>
     <span class="note" id="setupNote"></span>
     <button class="btn" id="pauseBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="一時停止（ひとりで遊ぶときだけ）">⏸</button>
+    <button class="btn" id="ffBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="早回し（ひとりで遊ぶときだけ）。押すたびに 1倍 → 2倍 → 3倍。考える時間は早回しの分だけ遅く減る">▶</button>
     <button class="btn" id="soundBtn" style="padding:4px 8px;font-size:13px" data-tip="効果音を鳴らす・消す"></button>
     <button class="btn" id="helpBtn">？<span class="hl"> ルール</span></button>
   </div>
@@ -136,6 +139,7 @@
   <div id="acts">
     <button class="btn" id="place" disabled>このタイルを置く</button>
     <button class="btn" id="swap">タイルを捨てて引き直す（時間1）</button>
+    <button class="btn" id="renewBtn" style="display:none"></button>
     <button class="btn" id="removeBtn" style="display:none">取り除く（時間2）</button>
   </div>
   </div>
@@ -543,6 +547,8 @@ function nextActor() {
   const ready = G.players.filter(p => p.t < G.limit);
   return ready.sort((a, b) => a.t - b.t || b.order - a.order)[0] || null;
 }
+// 手柄の分け方（?credit=dmg で、その敵を削った量の割合で分ける。試し中。ふつうはとどめを刺したタワー）
+const CREDIT_DMG = PARAMS.get('credit') === 'dmg';
 const normalTime = type => TYPES[type].time + CELL_EXTRA;   // 札に出すふつうの時間（印のマスならこれより CELL_EXTRA 少ない）
 const placeTime = (t0, x, y) => TYPES[t0.type].time + (CELL_EXTRA && (x !== t0.x || y !== t0.y) ? CELL_EXTRA : 0);
 function spend(p, time) { p.t += time; p.order = ++G.seq + 100; }
@@ -1030,8 +1036,15 @@ function coShares(tiles, dist, ownerOf) {
     });
     for (const [mult, w] of [[.6, .3], [1, .5], [2.6, .2]]) {
       let hp = base * mult; count += w;
+      const acc = {};   // ?credit=dmg のとき：ここまでに会社ごとに削った量
       for (const cell of cells) {
         const dmg = cell.hit.reduce((s2, t) => s2 + t.dps * cell.time, 0) / crowd;
+        if (CREDIT_DMG) {
+          const f = dmg > 0 ? Math.min(1, hp / dmg) : 0;
+          for (const t of cell.hit) acc[t.co] = (acc[t.co] || 0) + t.dps * cell.time / crowd * f;
+          if (dmg >= hp && dmg > 0) { const tot = Object.values(acc).reduce((a, b) => a + b, 0) || 1; for (const [k, v] of Object.entries(acc)) by[k] = (by[k] || 0) + w * v / tot; hp = 0; break; }
+          hp -= dmg; continue;
+        }
         if (dmg >= hp && dmg > 0) {
           for (const t of cell.hit) {
             const part = w * t.dps * cell.time / crowd / dmg;   // このマスでの手柄を、与えた量で分ける
@@ -1255,6 +1268,31 @@ function swapTile(p, idx) {
 }
 function replaceDead(p) {
   p.hand.forEach((t, i) => { if (canPlace(t).dead && G.bag.length) { p.hand[i] = G.bag.pop(); } });
+  autoRenew(p);
+}
+// 手札の印のマスが全部埋まっていたら、時間を使わずに手札を全部入れ替える（ユーザー）
+function autoRenew(p) {
+  if (!CELL_EXTRA || !p.hand.length || !p.hand.every(printedFilled) || G.bag.length < p.hand.length) return;
+  renewTiles(p, p.hand.map((t, i) => i)); G.stats.renewFree = (G.stats.renewFree || 0) + 1;
+  log(`${p.name}：手札の印のマスが全部使えなくなったので、手札を全部入れ替えた`); renderAll();
+}
+// 印のマスが使えないタイル：もう埋まっているか、置くと道がふさがるなどで置けない（ほかのマスにはふつうの時間で置ける）。
+// 敵が通っているだけなら、通り過ぎれば置けるので使える扱い。盤が変わるまで覚えておく（判定は重いので）
+const printedMemo = { k:null, m:new Map() };
+const printedFilled = t => {
+  if (!CELL_EXTRA) return false;
+  const k = key(t.x, t.y); if (G.tiles[k]) return true;
+  const mk = Object.keys(G.tiles).length + '|' + Object.keys(G.owner).length;
+  if (printedMemo.k !== mk) { printedMemo.k = mk; printedMemo.m.clear(); }
+  if (!printedMemo.m.has(k)) { const r0 = canPlaceAt(t, t.x, t.y); printedMemo.m.set(k, !r0.ok && !r0.wait); }
+  return printedMemo.m.get(k);
+};
+// 入れ替え：指定のタイルを山の底に戻して、同じ枚数を引き直す
+function renewTiles(p, idxs) {
+  const out = idxs.map(i => p.hand[i]);
+  p.hand = p.hand.filter((t, i) => !idxs.includes(i));
+  out.forEach(t => G.bag.unshift(t));
+  for (let k = 0; k < out.length && G.bag.length; k++) p.hand.push(G.bag.pop());
 }
 function pathCells() {
   // 入口から出口への今の道（敵が通るマス）
@@ -1278,6 +1316,7 @@ function turnTick(dt) {
   const p = nextActor();
   if (G.actor !== p) { G.actor = p; renderAll(); if (!p) return; if (p.cpu) cpuTimer = 2; else replaceDead(p); }  // CPU が考える時間は、ゲームの中の2秒（人が決めるのと同じくらい）
   if (!p) return;
+  if (!p.cpu && !G.busy && !G.choosing) autoRenew(p);   // 自分の番の途中で全部埋まったときも
   if (p.cpu) { cpuTimer -= dt; if (cpuTimer <= 0) { G.busy = true; const t0 = performance.now(); cpuAct(p); const ms = performance.now() - t0; G.stats.cpuMs = (G.stats.cpuMs || 0) + ms; G.stats.cpuN = (G.stats.cpuN || 0) + 1; G.stats.cpuMax = Math.max(G.stats.cpuMax || 0, ms); } }
 }
 
@@ -1319,11 +1358,15 @@ function spawn(type) {
 // 4回目と8回目の波が終わったとき、盤にある会社ごとに、筆頭に株価の4倍、次点に2倍。?dividend=0 でなし
 const DIVIDEND_WAVES = PARAMS.get('dividend') === '0' ? [] : [4, 8];
 const DIV_M1 = 4, DIV_M2 = 2;
+// 配当は終わりまで預かる（ユーザー）：決算で額は決まるが、使えるお金にはせず、終わりにまとめて受け取る
+// （ユニオン・パシフィックの配当が得点なのと同じ。配当で株をさらに買えて大会社の筆頭が雪だるまになるのを防ぐ。?dividend=cash で前の形）
+const DIV_BANK = PARAMS.get('dividend') !== 'cash';
 function settle() {
   const before = G.players.map(q => q.money);
   for (const co of G.cos.filter(c => c.active)) bonuses(co, DIV_M1, DIV_M2, '決算の配当', '決算の配当');
   G.stats.settles = (G.stats.settles || 0) + 1;
   const got = G.players.map((q, i) => q.money - before[i]);
+  if (DIV_BANK) G.players.forEach((q, i) => { q.money -= got[i]; q.bank = (q.bank || 0) + got[i]; });
   announce('決算', G.players.map((q, i) => got[i] ? `${q.name.replace('CPU', 'C')} +${got[i]}` : '').filter(Boolean).join('  ') || '配当なし');
   G.lastSettle = `前回の決算（${G.wave}回目のあと）：` + G.players.map((q, i) => `<span style="color:${q.color}">${q.name.replace('CPU', 'C')} +${got[i]}</span>`).join(' ');
   sfx('coin'); log(`決算（${G.wave}回目の波のあと）：` + G.players.map((q, i) => `${q.name} +${got[i]}`).join('、'));
@@ -1366,7 +1409,7 @@ function waveTick(dt) {
       return [path.length, Math.round(path.reduce((s2, [x, y]) => s2 + towers.filter(t => cellDist(...t.c, ...center(x, y)) <= t.range).reduce((a, t) => a + t.dps, 0), 0))];
     })]);
     (G.stats.coSnap = G.stats.coSnap || []).push([G.wave, G.cos.map(c => c.active ? [coSize(c.id), Math.round(c.kills)] : null), Object.keys(G.tiles).filter(k => G.owner[k] === undefined).length]);
-    (G.stats.worth = G.stats.worth || []).push([G.wave, G.players.map(q => q.money + G.cos.reduce((s2, c) => s2 + (c.active ? q.shares[c.id] * price(c) : 0), 0) + q.shares[CENTRAL] * centralPrice())]);
+    (G.stats.worth = G.stats.worth || []).push([G.wave, G.players.map(q => q.money + (q.bank || 0) + G.cos.reduce((s2, c) => s2 + (c.active ? q.shares[c.id] * price(c) : 0), 0) + q.shares[CENTRAL] * centralPrice())]);
     G.calib = G.waveLeaks ? G.calib * 1.4 : Math.max(1, G.calib * .95); G.waveLeaks = 0;
     if (EXPAND) expandCheck();
     if (!EXPAND && PARAMS.get('replan') !== '0' && PARAMS.get('maze') !== '0') {
@@ -1385,7 +1428,7 @@ function waveTick(dt) {
     const a = G.actor;
     if (a && !a.cpu) {
       if (a.clock === undefined) a.clock = FIRST_WAIT;
-      if (!NO_LIMIT) a.clock -= dt;
+      if (!NO_LIMIT) a.clock -= dt / FF;   // 考える時間は、早回ししても本当の秒で減る
       if (a.clock <= 0 && !G.busy && !G.choosing) { a.t = Math.max(a.t, G.limit); G.selected = null; G.menu = null; log(`${a.name}：考える時間が切れたので、この波の手番は終わり`); renderAll(); }
     }
     if (!nextActor() && !waveActive()) { G.waveTimer = Math.min(G.waveTimer, 3); G.waveTimer -= dt; }   // 一瞬だけ手番の人がいない間を数えないよう、時間トラックで判断する
@@ -1481,7 +1524,8 @@ function towerTick(dt) {
     const hit = power ? G.enemies.filter(e => !e.dead && cellDist(target.x, target.y, e.x, e.y) <= Math.max(VX.splash, ty.splash || 0)) : t.type === 'burst' ? G.enemies.filter(e => !e.dead && cellDist(target.x, target.y, e.x, e.y) <= ty.splash) : hasPower(coId, 1) ? G.enemies.filter(e => !e.dead && cellDist(target.x, target.y, e.x, e.y) <= .8) : [target];
     if (t.type === 'burst') burst(target.x, target.y, bc, 22, 1.4);
     for (const e of hit) {
-      e.hp -= dmg * (hasPower(coId, 1) && t.type !== 'burst' && e !== target ? PW.splash : 1) * (hasPower(coId, 5) && (e.type === 'hard' || e.type === 'big') ? PW.pierce : 1);
+      const dealt = Math.min(Math.max(0, e.hp), dmg * (hasPower(coId, 1) && t.type !== 'burst' && e !== target ? PW.splash : 1) * (hasPower(coId, 5) && (e.type === 'hard' || e.type === 'big') ? PW.pierce : 1));
+      e.hp -= dealt; if (CREDIT_DMG) { const dk = coId ?? -1; (e.dmgBy = e.dmgBy || {})[dk] = (e.dmgBy[dk] || 0) + dealt; }
       if (hasPower(coId, 4)) { if (!(e.slow > 0)) { e.slowAmt = PW.slow; e.slowTile = key(t.x, t.y); } e.slow = Math.max(e.slow || 0, .5); }   // 減速で遅くした敵も、ファイアウォールと同じく手柄を分ける
       hitSpark(e.x, e.y, t.type === 'scan' ? '#ffffff' : bc, t.type === 'scan' ? 14 : 5);
       vortexAbsorb(e, e.hp <= 0 && !e.dead);
@@ -1496,7 +1540,17 @@ function towerTick(dt) {
         // ハニーポットで寄せた敵なら、そのハニーポットの会社も等分に入る（Claude の案）
         const fwCo = e.slow > 0 && e.slowTile ? G.owner[e.slowTile] : undefined, luCo = e.lureBy ? G.owner[e.lureBy] : undefined;
         const who = [coId]; for (const c2 of [fwCo, luCo]) if (c2 !== undefined && !who.includes(c2)) who.push(c2);
-        const shares = who.map(c2 => [c2, 1 / who.length]);
+        let shares = who.map(c2 => [c2, 1 / who.length]);
+        if (CREDIT_DMG && e.dmgBy) {   // 削った量の割合で分ける。遅くした・寄せた会社には、削った量の合計の半分ずつを足してから分ける
+          const w = { ...e.dmgBy }, tot = Object.values(w).reduce((a, b) => a + b, 0) || 1;
+          for (const c2 of [fwCo, luCo]) if (c2 !== undefined) w[c2] = (w[c2] || 0) + tot * .5;
+          const sum = Object.values(w).reduce((a, b) => a + b, 0) || 1;
+          shares = Object.entries(w).map(([k, v]) => [k === '-1' ? undefined : +k, v / sum]);
+        }
+        // 記録：倒れた場所（入口0〜出口9）と、会社ごとの倒した場所
+        { const en = Math.max(1, ...ENTRANCES.map(([a, b]) => G.dist[key(a, b)] || 1)), pos = Math.max(0, Math.min(9, Math.floor((1 - (G.dist[e.cell] ?? 0) / en) * 10)));
+          const kp = G.stats.killPos = G.stats.killPos || Array(10).fill(0); kp[pos]++;
+          if (coId !== undefined) { const kc = G.stats.killPosCo = G.stats.killPosCo || {}; kc[coId] = kc[coId] || [0, 0]; kc[coId][0] += pos; kc[coId][1]++; } }
         const kb = G.stats.killsBy = G.stats.killsBy || {};
         for (const [id, n] of shares) {
           kb[id ?? -1] = (kb[id ?? -1] || 0) + n;
@@ -1547,6 +1601,7 @@ function finish(win) {
   const tp = centralPrice();
   for (const p of G.players) if (p.shares[CENTRAL]) { p.money += p.shares[CENTRAL] * tp; earn(p, '投資信託の売却', p.shares[CENTRAL] * tp); }
   log(`投資信託を ${tp} で売った`);
+  G.players.forEach(q => { if (q.bank) { q.money += q.bank; earn(q, '預かりの配当', q.bank); q.bank = 0; } });
   const rank = [...G.players].sort((a, b) => b.money - a.money);
   G.result = rank.map((p, i) => `${i + 1}位 ${p.name} ${p.money}`).join('\n');
   log('結果：' + rank[0].name + 'の勝ち');
@@ -1805,7 +1860,7 @@ function draw() {
   }
   // 手札の印のマス：そこに置けば安い。タワーの印をうすく出す
   if (CELL_EXTRA && !AUTO && G.started) for (const t of me().hand) {
-    if (G.tiles[key(t.x, t.y)]) continue;
+    if (printedFilled(t)) continue;   // 埋まっている・置けない印のマスは描かない
     const [qx, qy] = center(t.x, t.y); hexPath(qx, qy, S * .8); cx2.save(); cx2.setLineDash([3, 3]); cx2.strokeStyle = 'rgba(255,233,168,.75)'; cx2.lineWidth = 1.5; cx2.stroke(); cx2.restore();
     cx2.save(); cx2.globalAlpha = .3; drawIcon(cx2, t.type, qx, qy + S * .12, S * .32); cx2.globalAlpha = .9; cx2.fillStyle = '#ffe9a8'; cx2.font = `bold ${S * .38}px sans-serif`; cx2.textAlign = 'center'; cx2.textBaseline = 'middle'; cx2.fillText('印', qx, qy - S * .38); cx2.restore();   // まだ置いていない：うすい印と「印」の字
   }
@@ -1971,6 +2026,7 @@ function renderInfo() {
 }
 function renderTop() {
   document.getElementById('pauseBtn').style.display = canPause() ? '' : 'none';
+  document.getElementById('ffBtn').style.display = canPause() ? '' : 'none';
   const ac = waveActive();
   { const el = document.getElementById('wave'), mine = me(), n = `波${G.wave + 1}/${WAVES}`;
     const done = !mine || mine.t >= G.limit || (!NO_LIMIT && (mine.clock ?? FIRST_WAIT) <= 0);
@@ -1982,7 +2038,7 @@ function renderTop() {
       : NO_LIMIT ? `${n}まで・${G.actor === mine ? 'あなたの番' : 'みんなの番のあと'}`
       : `${n}まで <span data-tip="あなたの考える時間。自分の番の間だけ減る" style="color:${G.actor === mine ? '#ffe066' : '#6f7a99'}">${Math.max(0, Math.ceil(mine.clock ?? FIRST_WAIT))}秒</span>`; }
   document.getElementById('life').textContent = '♥ ' + G.lives;
-  document.getElementById('money').textContent = AUTO ? '' : '所持金 ' + me().money;
+  document.getElementById('money').textContent = AUTO ? '' : '所持金 ' + me().money + (me().bank ? `（預かり ${me().bank}）` : '');
 }
 function renderTrack() {
   const el = document.getElementById('track'), max = Math.max(...G.players.map(p => p.t)), min = Math.min(...G.players.map(p => p.t));
@@ -2046,18 +2102,19 @@ function renderGuide() {
   else if (!canDoSomething(me())) id = 'swap';
   if (id) document.getElementById(id).classList.add('glow');
 }
+document.getElementById('renewBtn').onclick = () => act(G.viewer || 0, { t:'renew' });
 function renderHand() {
   const el = document.getElementById('hand');
   if (AUTO) { el.innerHTML = ''; return; }
   const mine = G.actor === me() && !G.over && !G.busy;
   // 0.25秒ごとにも呼ばれるので、中身が変わらないときは作り直さない（作り直すと、押している途中のボタンが消えてタップが空振りする）
-  const sig = JSON.stringify([me().hand, G.selected, G.target, G.upSel, mine, !!(G.swapping && G.swapping.p === me()), !!G.taking, !!G.exchanging, me().hand.map(t => canPlace(t).ok), G.upSel && G.tiles[G.upSel] && G.tiles[G.upSel].lv, waveActive(), me().money, me().cards.length, cv.clientWidth]);
+  const sig = JSON.stringify([me().hand, G.selected, G.target, G.upSel, mine, !!(G.swapping && G.swapping.p === me()), !!G.taking, !!G.exchanging, me().hand.map(t => canPlace(t).ok), me().hand.map(printedFilled), G.upSel && G.tiles[G.upSel] && G.tiles[G.upSel].lv, waveActive(), me().money, me().cards.length, cv.clientWidth]);
   if (sig === renderHand.sig) return; renderHand.sig = sig;
   el.innerHTML = '';
   me().hand.forEach((t, i) => {
     const b = document.createElement('button'), c = canPlace(t);
     b.className = 'tile' + (G.selected === i ? ' sel' : '') + (c.ok ? '' : ' bad');
-    b.innerHTML = `<span class="nm"><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}</span><span class="eff">${TYPE_SHORT[t.type]}</span><span class="tm">時間${normalTime(t.type)}<span class="ar">エリア${AREA_MODE ? AREA_NAMES[t.area] : label(t.x, t.y)}</span></span>`;
+    b.innerHTML = `<span class="nm"><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}</span><span class="eff">${TYPE_SHORT[t.type]}</span><span class="tm">時間${normalTime(t.type)}${printedFilled(t) ? '<span class="pf">印×</span>' : ''}<span class="ar">エリア${AREA_MODE ? AREA_NAMES[t.area] : label(t.x, t.y)}</span></span>`;
     b.dataset.tip = `${TYPES[t.type].name}：${TYPE_DESC[t.type]}` + (TYPES[t.type].range ? `（射程${TYPES[t.type].range}マス）` : '') + `。置くのに時間${normalTime(t.type)}${CELL_EXTRA ? `（印のマスなら${CELL_EXTRA}少ない）` : ''}。` + (c.ok ? '' : `今は置けない：${c.why}`);
     b.onclick = () => { if (G.swapping && G.swapping.p === me()) { act(G.viewer || 0, { t:'swap', idx:i }); return; } G.selected = G.selected === i ? null : i; G.upSel = null; G.target = null; G.menu = null; renderAll(); };   // 選んだ札をもう一度押したら、選ぶのをやめる
     el.appendChild(b);
@@ -2081,6 +2138,8 @@ function renderHand() {
   const sb = document.getElementById('swap');
   if (G.swapping && G.swapping.p === me()) { sb.style.display = ''; sb.disabled = false; sb.textContent = '入れ替えない'; }
   else { sb.textContent = 'タイルを捨てて引き直す（時間1）'; sb.disabled = !(mine && !canDoSomething(me())); sb.style.display = sb.disabled ? 'none' : ''; }
+  const nb = document.getElementById('renewBtn'), nf = me().hand.filter(printedFilled).length;
+  nb.style.display = mine && nf && !G.swapping ? '' : 'none'; nb.textContent = `印が使えないタイルを入れ替える（${nf}枚・時間1）`;
   renderMenu();
 }
 const drawSpots = {};
@@ -2317,6 +2376,11 @@ function act(pid, a) {
     case 'remove': if (!turn || !canRemove(a.k)) return false; G.busy = true; removeAction(p, a.k); afterAction(); return true;
     case 'reveal': if (!turn || !(a.n >= 1) || !canReveal(p, a.id, a.n)) return false; G.busy = true; revealShares(p, a.id, a.n); afterAction(); return true;
     case 'pair': if (!turn || !canRevealPair(p, a.a, a.b)) return false; G.busy = true; revealPair(p, a.a, a.b); afterAction(); return true;
+    case 'renew': {   // 印が埋まったタイルを全部入れ替える（時間1）
+      const idxs = p.hand.map((t, i) => printedFilled(t) ? i : -1).filter(i => i >= 0);
+      if (!turn || !idxs.length) return false;
+      renewTiles(p, idxs); spend(p, 1); log(`${p.name}：印が使えないタイルを${idxs.length}枚入れ替えた（時間1）`); G.stats.renew = (G.stats.renew || 0) + 1; afterAction(); return true;
+    }
     case 'redraw': if (!turn || canDoSomething(p) || !p.hand[a.idx || 0]) return false; swapTile(p, a.idx || 0); afterAction(); return true;
     case 'take': if (!G.taking || G.taking.p !== p || ![-2, -1, 0, 1, 2, 3, 4].includes(a.mi)) return false; finishTake(a.mi); return true;
     case 'exchange': if (!G.exchanging || G.exchanging.p !== p || (a.id !== null && !p.cards.includes(a.id))) return false; finishExchange(a.id); return true;
@@ -2364,22 +2428,32 @@ function hideModal() { document.getElementById('modal').style.display = 'none'; 
 function chooseCompany(free, cb) { modal('<h3>会社を設立する</h3><div class="note">どの会社にしますか（★が多いほど株価が高い）。</div>', [...free.map(c => [`${c.name} ${'★'.repeat(c.tier + 1)}${POWERS ? '（' + POWER[c.id].name + '）' : ''}　${myShares(c.id)}`, () => cb(c.id), c.color]), ['盤と会社を見る', peekChoice]]); }
 function chooseSurvivor(ids, cb) { modal('<h3>合併</h3><div class="note">同じ大きさです。どちらを残しますか。</div>', [...ids.map(id => [`${G.cos[id].name}　${myShares(id)}`, () => cb(id), G.cos[id].color]), ['盤と会社を見る', peekChoice]]); }
 function chooseDisposal(p, co, sv, pr, n, maxPairs, cb) {
-  // 売る枚数と交換する組の数を選ぶ。残りは持ち続ける
+  // 吸収された会社の株：売る・交換する（2枚→残る会社の株1枚）・持ち続ける。
+  // 1枚だけで交換できないときは2択。何枚かあるときは、売る・交換を「− 数 ＋」で選び、よく使う選び方はボタン1つで
+  const head = `<h3>${co.name}が${sv.name}に吸収された</h3><div class="note">あなたの${co.name}株：<b style="color:var(--text)">${n}枚</b>（株価 ${pr}）</div>`;
+  const keepNote = `${co.name}がまた立ったら使える`;
+  if (n === 1 && maxPairs === 0) {
+    modal(head, [[`売る（+${pr}）`, () => cb({ sell:1, pairs:0 })], [`持ち続ける（${keepNote}）`, () => cb({ sell:0, pairs:0 })]]);
+    return;
+  }
   let sell = 0, pairs = 0;
+  const row = (k, label, val, note) => `<div style="display:flex;align-items:center;gap:8px;margin:6px 0"><span style="width:3em;flex:none">${label}</span><button class="btn" data-m="${k}" style="width:2.4em">−</button><b style="min-width:2em;text-align:center">${val}</b><button class="btn" data-p="${k}" style="width:2.4em">＋</button><span class="note">${note}</span></div>`;
   const draw = () => {
     const keep = n - sell - pairs * 2;
     document.getElementById('dispBody').innerHTML =
-      `<div>売る：<b>${sell}</b>枚（${sell * pr}）</div><div>交換：<b>${pairs * 2}</b>枚 → ${sv.name}を${pairs}枚</div><div>持ち続ける：<b>${keep}</b>枚</div>`;
+      row('s', '売る', sell, `1枚 ${pr}`) +
+      (maxPairs ? row('x', '交換', pairs, `2枚 → ${sv.name}株1枚（${maxPairs}組まで）`) : '') +
+      `<div style="margin-top:6px">持ち続ける：<b>${keep}</b>枚 <span class="note">（${keepNote}）</span></div><div>もらうお金：<b style="color:#ffe066">${sell * pr}</b>${pairs ? `　${sv.name}株：<b>${pairs}</b>枚` : ''}</div>`;
+    document.querySelectorAll('#dispBody [data-m],#dispBody [data-p]').forEach(b => b.onclick = () => {
+      const up = !!b.dataset.p, k = b.dataset.p || b.dataset.m;
+      if (k === 's') sell = Math.max(0, Math.min(n - pairs * 2, sell + (up ? 1 : -1)));
+      else pairs = Math.max(0, Math.min(maxPairs, Math.floor((n - sell) / 2), pairs + (up ? 1 : -1)));
+      draw();
+    });
   };
-  modal(`<h3>${co.name}が吸収された</h3><div class="note">あなたの株 ${n}枚（株価 ${pr}）。${sv.name}の株と2枚→1枚で交換できる（最大${maxPairs}組）。持ち続けた株は、その会社がまた設立されたら生きる</div><div id="dispBody" style="margin-top:8px"></div>`,
-    [['売る＋1', () => {}], ['売る−1', () => {}], ['交換＋1組', () => {}], ['交換−1組', () => {}], ['決める', () => cb({ sell, pairs })]]);
-  // 増やす・減らすのボタンは閉じずに数を変える
-  const btns = document.querySelectorAll('#mbox .row button');
-  const keepOpen = (b, f) => { b.onclick = () => { f(); draw(); }; };
-  keepOpen(btns[0], () => { if (sell + pairs * 2 < n) sell++; });
-  keepOpen(btns[1], () => { if (sell > 0) sell--; });
-  keepOpen(btns[2], () => { if (pairs < maxPairs && sell + (pairs + 1) * 2 <= n) pairs++; });
-  keepOpen(btns[3], () => { if (pairs > 0) pairs--; });
+  const presets = [['全部売る', () => cb({ sell:n, pairs:0 })], ['全部持ち続ける', () => cb({ sell:0, pairs:0 })]];
+  if (maxPairs) presets.push(['できるだけ交換', () => { const pp = Math.min(maxPairs, Math.floor(n / 2)); cb({ sell:0, pairs:pp }); }]);
+  modal(head + '<div id="dispBody" style="margin-top:6px"></div>', [['この内容で決める', () => cb({ sell, pairs })], ...presets]);
   draw();
 }
 // ルールのまとめ
@@ -2390,16 +2464,17 @@ const RULES_HTML = () => `<h3>電脳都市のルール（まとめ）</h3>${POWE
 <li><b>タイルを置く</b>：手札のタイルには<b>印のマス</b>（盤に点線で出る）と、そのマスのエリアが書いてある。${CELL_EXTRA ? `<b>同じエリアの空いているマス</b>なら、札の時間で置ける。<b>印のマスに置けば時間が${CELL_EXTRA}少ない</b>` : 'そのエリアの空いているマスならどこにでも置ける'}（盤のうすい文字 A〜F がエリア）。盤の光るマスを押すと、そこに置けるタイルが並ぶ。置いたマスは壁になり、敵はよけて進む（遠回りさせるほど守りやすい）。入口から出口への道をふさぐ置き方はできない。置いたら<b>株を1枚手札に入れる</b>。<b>2人のときだけ</b>、置いたあとに手札のタイルを1枚入れ替えてもよい（入れ替えたタイルは山の底へ）。</li>
 <li><b>強化する</b>：盤のタワーを押して強化（3段階まで）。誰が置いたタワーでもよい。強化しても株を1枚手札に入れる。</li>
 <li><b>株を公開する</b>：手札の株にお金（株価）を払って表にする。1社なら何枚でも、2社なら1枚ずつ。時間は1回につき1（何枚出しても同じ）。<b>敵が来ている間はできない</b>。</li>
+<li>印のマスが埋まった（か、道がふさがるなどで置けなくなった）タイルを、まとめて入れ替える（時間1）。手札の印のマスが全部そうなったら、時間を使わずに手札を全部入れ替える。</li>
 <li>どれもできないときだけ、タイルを1枚捨てて引き直す（時間1）。</li></ul>
 <h4>色とマーク</h4><p>タイルの<b>色は会社</b>（灰色は会社のないタイル）。<b>黄色の点線に「印」</b>は、あなたの手札のタイルの印のマス（まだ置いていない）。<b>マークはタワーの種類</b>。撃つ光線も会社の色。</p>
 <ul>${Object.keys(TYPES).map(k => `<li><img src="${iconUrl(k)}" alt="" style="width:18px;height:18px;vertical-align:-4px;background:#16213d;border-radius:4px"> <b>${TYPES[k].name}</b>：${TYPE_DESC[k]}</li>`).join('')}</ul>
 <h4>株</h4><p>手札の株は伏せていて、まだ数えない。<b>公開した株だけ</b>がボーナスと売却で数えられる。終わりに手札に残った株は価値がない。<b>株の手札は8枚まで</b>で、超えたら捨てる（捨て札の山へ。山札がなくなったら混ぜて山札にする）。</p>
 <h4>会社と株価</h4><p>2枚以上つながったタイルのかたまりに会社を付ける。株価は、その会社のタワーが<b>倒した敵の数</b>で上がる。ファイアウォールで遅くなっている敵をほかの会社のタワーが倒したら、倒した数を半分ずつ分ける。1枚だけでどこにもつながっていないタイルは会社がないので、倒しても誰の株価にもならない。</p>
 <h4>合併</h4><p>会社どうしがつながると、大きい方が小さい方を吸収する（タイル11枚以上の会社は安全で吸収されない）。吸収された会社の筆頭に株価の10倍、次点に5倍のボーナス。公開した株は、売る（株価でお金に）・2枚→1枚で残る会社の株と交換・持ち続けるを選べる。売った株と交換に出した株は<b>山札に戻して混ぜる</b>（捨て札にはしない）。持ち続けた株は公開したまま残り、その会社がまた設立されたらまた数える。手札にあった吸収された会社の株は、そのまま手札に残る（その会社がまた設立されたら公開できる）。</p>
-<h4>決算</h4><p>${DIVIDEND_WAVES.length ? DIVIDEND_WAVES.join('回目と') + '回目の波が終わったとき、盤にある会社ごとに、筆頭に株価の4倍、次点に2倍の配当。' : 'なし'}</p>
+<h4>決算</h4><p>${DIVIDEND_WAVES.length ? DIVIDEND_WAVES.join('回目と') + '回目の波が終わったとき、盤にある会社ごとに、筆頭に株価の4倍、次点に2倍の配当。' + (DIV_BANK ? '配当は<b>終わりまで預かり</b>で、株を買うのには使えない（所持金の横に「預かり」と出る）。終わりに所持金に足す。' : '') : 'なし'}</p>
 <h4>投資信託</h4><p>値段は盤にある会社の株価の平均。筆頭も配当もなく、終わりにそのときの値段で売れる。株を取ったあと、手札の株1枚を差し出して、投資信託1口を払わずに公開した状態で受け取れる。</p>
 <h4>終わり</h4><p>${WAVES}回守りきったら、盤にある会社すべてでボーナスを出し、公開した株と投資信託をその値段で売る。</p>
-<h4>画面</h4><p>「？」の付いた見出し・数字・ボタンは、カーソルを合わせるか長押しすると説明が出ます。</p>
+<h4>画面</h4><p>ひとりで遊ぶときは、上の「⏸」で一時停止、「▶」で早回し（押すたびに1倍・2倍・3倍）。考える時間は早回ししても本当の秒で減る。「？」の付いた見出し・数字・ボタンは、カーソルを合わせるか長押しすると説明が出ます。</p>
 <p><label><input type="checkbox" id="guideChk" ${guideOff ? '' : 'checked'}> 押す場所を光らせて案内する</label></p>`;
 function showRules() {
   modal(RULES_HTML(), [['閉じる', () => {}]]);
@@ -2597,13 +2672,17 @@ let last = performance.now(), hudTimer = 0;
 // 一時停止（ひとりで遊ぶときだけ。何人かで遊ぶときは、ほかの人の画面も止まるので出さない）
 let paused = false;
 const canPause = () => G.started && !G.over && !G.net && !AUTO;
+// 早回し（ひとりで遊ぶときだけ）：ゲームの時間を2倍・3倍で進める
+let FF = 1;
+const drawFF = () => { const b = document.getElementById('ffBtn'); b.textContent = FF === 1 ? '▶' : '▶' + FF; b.style.color = FF > 1 ? '#ffe066' : ''; };
+document.getElementById('ffBtn').onclick = () => { FF = FF % 3 + 1; drawFF(); };
 function setPause(on) { paused = on && canPause(); document.getElementById('pauseOv').style.display = paused ? 'flex' : 'none'; }
 document.getElementById('pauseBtn').onclick = () => setPause(true);
 document.getElementById('resumeBtn').onclick = () => setPause(false);
 document.addEventListener('visibilitychange', () => { if (document.hidden && canPause()) setPause(true); });   // ほかのアプリに切り替えたら止めておく
 let saveTimer = 2;
 function loop(now) {
-  const dt = paused ? 0 : Math.min(.05, (now - last) / 1000) * SPEED; last = now;   // 一時停止中は時間を進めない
+  const dt = paused ? 0 : Math.min(.05, (now - last) / 1000) * SPEED * FF; last = now;   // 一時停止中は時間を進めない
   if (G.started) G.clock = (G.clock || 0) + dt;
   const client = G.net && G.net.role === 'client';
   for (let rest = G.started && !client ? dt : 0; rest > 1e-6; rest -= .05) {
@@ -2685,34 +2764,47 @@ function courseMini(i) {
   return cv0.toDataURL();
 }
 // 始める前の画面：人数とコースを選ぶ
+// 始める前の画面：タイトル → ルールを選ぶ → コースを選ぶ → 開始（ひとりで遊ぶ・部屋を作る）
 function showStart() {
-  let n = NPLAYERS;
-  const body = () => `<h3>電脳都市</h3>
-    <p class="note">タイルを置いて迷路を作り、ウイルスの波を全員で${WAVES}回守りきる。タイルのかたまりは会社になり、倒した数で株価が上がる。株を集めて、いちばんお金持ちになった人の勝ち。</p>
-    <h4>人数（あなた＋ほかの人や CPU）</h4><div class="pick">${[2, 3, 4, 5, 6].map(k => `<button class="btn${k === n ? ' on' : ''}" data-n="${k}">${k}人</button>`).join('')}</div>
-    <h4>難しさ</h4><div class="pick">${Object.entries(DIFFS).map(([k, d]) => `<button class="btn${k === DIFF ? ' on' : ''}" data-df="${k}">${d.name}</button>`).join('')}</div>
-    <h4>考える時間</h4><div class="pick">${[[false, 'あり'], [true, 'なし']].map(([k, t]) => `<button class="btn${k === NO_LIMIT ? ' on' : ''}" data-nl="${k ? 1 : 0}">${t}</button>`).join('')}</div>
-    <h4>CPU の強さ</h4><div class="pick">${[['normal', 'ふつう'], ['easy', 'よわい']].map(([k, t]) => `<button class="btn${k === CPU_LEVEL ? ' on' : ''}" data-lv="${k}">${t}</button>`).join('')}</div>
-    <h4>会社の能力</h4><div class="pick">${[[false, 'なし'], [true, 'あり']].map(([k, t]) => `<button class="btn${k === POWERS ? ' on' : ''}" data-pw="${k ? 1 : 0}">${t}</button>`).join('')}</div>
-    <h4>コース</h4><div class="pick">${COURSES.map((c, i) => `<button class="btn${i === COURSE ? ' on' : ''}" data-c="${i}">${c.name}</button>`).join('')}</div>
-    <div style="border:1px solid #2c3d6b;border-left:4px solid #7cf9ff;border-radius:8px;padding:6px 10px;margin:6px 0 4px;background:#0a1226"><div style="display:flex;gap:10px;align-items:center"><img src="${courseMini(COURSE)}" alt="" style="width:110px;flex:none"><div><b style="color:#7cf9ff">${COURSES[COURSE].name}</b><div class="note" style="color:var(--text);margin-top:2px">${COURSES[COURSE].note}。</div></div></div><div class="note" style="margin-top:4px;font-size:11px"><span style="color:#ff4dff">■</span>入口 <span style="color:#fff">■</span>出口 <span style="color:#8a94b4">■</span>置けない <span style="color:#e0bc40">■</span>敵が速くなる <span style="color:#4cc070">■</span>敵が回復する</div></div>
-    <p class="note" style="margin-top:14px">遊び方は「ルールを読む」か、遊んでいる間なら右上の「？」でいつでも読めます。遊んでいる間は、次に押す場所が光って教えてくれます。</p>`;
-  const open = () => {
-    const sv = loadSave();
-    const ns = loadNetSave();
-    modal(body(), [...(ns && ns.role === 'client' ? [[`部屋 ${ns.room} に戻る（席${ns.seat + 1}）`, () => joinRoom(ns.room, ns.name, ns)]] : []),
-      ...(sv ? [[sv.net ? `部屋 ${sv.net.room} を開き直す（ホスト・${sv.g.wave ? `波${sv.g.wave}のあと` : '最初の波の前'}）` : `続きから（${sv.g.wave ? `波${sv.g.wave}のあと` : '最初の波の前'}・${sv.n}人・${COURSES[sv.course].name}）`, () => sv.net ? reopenHost(sv) : resumeGame(sv)]] : []),
-      ['ひとりで遊ぶ（CPUと）', () => { clearSave(); clearNetSave(); NPLAYERS = n; startGame(); }],
-      ['部屋を作る', () => { let nm = ''; try { nm = localStorage.getItem('stock-defense-name') || ''; } catch (e) {} hostLobby(n, nm || 'ホスト'); }],
-      ['部屋に入る', () => showJoin('')], ['ルールを読む', () => { showRules(); document.querySelector('#mbox .row button').onclick = () => { document.getElementById('modal').style.display = 'none'; open(); }; }]]);
-    document.querySelectorAll('#mbox [data-n]').forEach(b => b.onclick = () => { n = +b.dataset.n; open(); });
-    document.querySelectorAll('#mbox [data-lv]').forEach(b => b.onclick = () => { CPU_LEVEL = b.dataset.lv; open(); });
-    document.querySelectorAll('#mbox [data-df]').forEach(b => b.onclick = () => { DIFF = b.dataset.df; open(); });
-    document.querySelectorAll('#mbox [data-nl]').forEach(b => b.onclick = () => { NO_LIMIT = b.dataset.nl === '1'; open(); });
-    document.querySelectorAll('#mbox [data-pw]').forEach(b => b.onclick = () => { POWERS = b.dataset.pw === '1'; open(); });
-    document.querySelectorAll('#mbox [data-c]').forEach(b => b.onclick = () => { useCourse(+b.dataset.c); G.dist = distanceField(); open(); });
+  let n = NPLAYERS, mode = 'solo';
+  // 1. タイトル：遊び方を選ぶ
+  const title = () => {
+    const sv = loadSave(), ns = loadNetSave();
+    const cont = [];
+    if (ns && ns.role === 'client') cont.push([`部屋 ${ns.room} に戻る（席${ns.seat + 1}）`, () => joinRoom(ns.room, ns.name, ns)]);
+    if (sv) cont.push([sv.net ? `部屋 ${sv.net.room} を開き直す（${sv.g.wave ? `波${sv.g.wave}のあと` : '最初の波の前'}）` : `続きから（${sv.g.wave ? `波${sv.g.wave}のあと` : '最初の波の前'}・${sv.n}人・${COURSES[sv.course].name}）`, () => sv.net ? reopenHost(sv) : resumeGame(sv)]);
+    modal(`<div style="text-align:center;padding:10px 0 4px"><div style="font-size:40px;font-weight:900;color:#fff;letter-spacing:4px;text-shadow:0 0 18px #33f0ff,0 0 6px #33f0ff">電脳都市</div>
+      <div style="color:#7cf9ff;font-weight:bold;margin-top:6px">迷路で守って、株で勝つ</div></div>
+      <p class="note" style="text-align:center">タイルで迷路を作り、ウイルスの波を全員で${WAVES}回守りきる。タイルのかたまりは会社になり、倒した数で株価が上がる。いちばんお金持ちになった人の勝ち。</p>`,
+      [...cont, ['ひとりで遊ぶ（CPUと）', () => { mode = 'solo'; rules(); }], ['部屋を作る', () => { mode = 'host'; rules(); }], ['部屋に入る', () => showJoin('')],
+       ['ルールを読む', () => { showRules(); document.querySelector('#mbox .row button').onclick = () => { document.getElementById('modal').style.display = 'none'; title(); }; }]]);
+    document.querySelectorAll('#mbox .row button').forEach(b => { b.style.width = '100%'; });   // 縦に並べる
   };
-  open();
+  // 2. ルールを選ぶ：1項目1行
+  const line = (label, items, attr, cur) => `<div style="display:flex;align-items:center;gap:6px;margin:7px 0"><span style="width:5.4em;flex:none;color:#7cf9ff;font-weight:bold;font-size:13px">${label}</span><div class="pick" style="margin:0;gap:4px;flex-wrap:nowrap">${items.map(([k, t]) => `<button class="btn${k === cur ? ' on' : ''}" data-${attr}="${k}" style="padding:5px 7px;font-size:13px;white-space:nowrap">${t}</button>`).join('')}</div></div>`;
+  const rules = () => {
+    modal(`<h3>${mode === 'host' ? '部屋を作る' : 'ひとりで遊ぶ'}：ルールを選ぶ</h3>` +
+      line('人数', [2, 3, 4, 5, 6].map(k => [k, k + '人']), 'n', n) +
+      line('難しさ', Object.entries(DIFFS).map(([k, d]) => [k, d.name]), 'df', DIFF) +
+      line('考える時間', [[0, 'あり'], [1, 'なし']], 'nl', NO_LIMIT ? 1 : 0) +
+      line('CPU の強さ', [['normal', 'ふつう'], ['easy', 'よわい']], 'lv', CPU_LEVEL) +
+      line('会社の能力', [[0, 'なし'], [1, 'あり']], 'pw', POWERS ? 1 : 0) +
+      `<p class="note">${mode === 'host' ? '人数は、ほかの人と CPU を合わせた数。空いた席は CPU が入る。' : '人数は、あなたと CPU を合わせた数。'}</p>`,
+      [['次へ（コースを選ぶ）', courses], ['戻る', title]]);
+    const on = (a, f) => document.querySelectorAll(`#mbox [data-${a}]`).forEach(b => b.onclick = () => { f(b.dataset[a]); rules(); });
+    on('n', v => n = +v); on('df', v => DIFF = v); on('nl', v => NO_LIMIT = v === '1'); on('lv', v => CPU_LEVEL = v); on('pw', v => POWERS = v === '1');
+  };
+  // 3. コースを選ぶ：小さな盤の図つきの札
+  const courses = () => {
+    modal(`<h3>コースを選ぶ</h3>` + COURSES.map((c, i) => `<button class="btn${i === COURSE ? ' on' : ''}" data-c="${i}" style="display:flex;gap:10px;align-items:center;width:100%;text-align:left;margin:5px 0;padding:6px">
+        <img src="${courseMini(i)}" alt="" style="width:72px;flex:none"><span><b style="color:#7cf9ff">${c.name}</b><br><span class="note" style="color:var(--text)">${c.note}。</span></span></button>`).join('') +
+      `<div class="note" style="font-size:11px"><span style="color:#ff4dff">■</span>入口 <span style="color:#fff">■</span>出口 <span style="color:#8a94b4">■</span>置けない <span style="color:#e0bc40">■</span>敵が速くなる <span style="color:#4cc070">■</span>敵が回復する</div>`,
+      [[mode === 'host' ? '部屋を作る' : '始める', () => {
+        if (mode === 'host') { let nm = ''; try { nm = localStorage.getItem('stock-defense-name') || ''; } catch (e) {} hostLobby(n, nm || 'ホスト'); }
+        else { clearSave(); clearNetSave(); NPLAYERS = n; startGame(); } }], ['戻る', rules]]);
+    document.querySelectorAll('#mbox [data-c]').forEach(b => b.onclick = () => { useCourse(+b.dataset.c); G.dist = distanceField(); courses(); });
+  };
+  title();
 }
 useCourse(COURSE); resize(); G.dist = distanceField();
 if (AUTO || PARAMS.has('start')) startGame(); else if (PARAMS.has('room')) showJoin(PARAMS.get('room')); else showStart();
