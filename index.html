@@ -68,7 +68,7 @@
   .peek { display:flex; flex-wrap:wrap; gap:4px; }
   .peek span { border:1px solid #2c3d6b; border-radius:6px; padding:2px 6px; font-size:12px; color:var(--text); background:#0c1222; }
   .peek small { margin-left:4px; color:var(--dim); font-size:10px; }
-  .sgrid .btn .pw { font-size:11px; color:#ffe9a8; }
+  .sgrid .btn .pw { font-size:10px; letter-spacing:-.4px; line-height:1.25; color:#ffe9a8; }
   #market .btn.on { background:#24407a; box-shadow:0 0 8px #7cf9ff; }
   .btn:disabled { opacity:.35; cursor:default; }
   #acts { display:flex; gap:6px; flex-wrap:wrap; padding:4px 0; }
@@ -192,6 +192,7 @@ let CPU_LEVEL = PARAMS.get('level') === 'easy' ? 'easy' : 'normal';
 // 難しさ（人が遊ぶとき用）：敵の体力の倍率と、最初の3波をさらに柔らかくするか。CPU の試しで合わせた硬さが「ふつう」
 const DIFFS = { easy:{ name:'やさしい', hp:.8, early:.7 }, normal:{ name:'ふつう', hp:1 }, hard:{ name:'むずかしい', hp:1.15 } };
 let DIFF = DIFFS[PARAMS.get('diff')] ? PARAMS.get('diff') : 'normal';
+let NO_LIMIT = PARAMS.get('limit') === '0';   // 考える時間なし（人が遊ぶとき、自分の番の考える時間が減らない）
 let NPLAYERS = Math.max(2, Math.min(6, +(PARAMS.get('players') || 4)));
 
 // タイルの種類：時間・射程（マス）・威力・撃つ間隔（秒）・色
@@ -203,13 +204,20 @@ const TYPES = {
   burst: { name:'一斉駆除',         time:5, color:'#ffe14d', range:2.2, dmg:2, cd:1.4, splash:.9 },
   // 誘導（ユーザーの案）：射程に入った敵の一部をおびき寄せ、自分の前まで寄り道させる。数字は Claude の案
   lure:  { name:'ハニーポット',     time:3, color:'#ffd27a', range:2.2, dmg:0, cd:.3, cap:2, chance:.3 },
+  // ボルテックス（ユーザーの案。GeoDefense の Vortex タワーから）：撃たない。とても広い射程の中で倒れた敵の火花を吸い取り、
+  // 同じ会社の攻撃するタワー全部に同じ速さで送る。満タンになったタワーは、次の1発が必殺弾になる（自動）。数字は CPU の試しで合わせる
+  vortex:{ name:'ボルテックス',     time:3, color:'#b48cff', range:4, dmg:0, cd:1 },
 };
+// ボルテックスの数字：1体倒れるとたまる量（大きい敵は多め）、満タンの量、必殺弾の威力の倍率とまわりに当たる広さ。
+// 強化1段ごとにたまる量 +50%。最後の段（3段）は、攻撃を受けている敵からも少しずつ吸い取る（元の作りと同じ）
+const VX = { gain:{ big:5, hard:2 }, full:6, mult:4, splash:1.1, hitGain:.1 };
+(PARAMS.get('vx') || '').split(',').filter(Boolean).forEach(x => { const [k, v] = x.split(':'); if (k in VX && k !== 'gain') VX[k] = +v; });
 // ハニーポット：射程に入った敵は、それぞれ1回だけ「寄せられるか」を試され、30%（強化1段ごとに +10%）で寄せられる。
 // 同時に寄せられるのは2体まで（強化1段ごとに +1）。全部を寄せると強すぎた（1ゲームで寄せた敵が敵全体の8割ほど）ので「一部」にした
 const lureCap = t => TYPES.lure.cap + (t.lv - 1);
 const lureChance = t => TYPES.lure.chance + .1 * (t.lv - 1);
 // 効果のひとこと（手札の札と、盤のタワーを選んだときに出す）
-const TYPE_SHORT = { node:'安い壁。弱く撃つ', av:'近くを素早く撃つ', fw:'撃たずに遅くする', scan:'遠くへ強い一撃', burst:'まとめて削る', lure:'敵を寄り道させる' };
+const TYPE_SHORT = { node:'安い壁。弱く撃つ', av:'近くを素早く撃つ', fw:'撃たずに遅くする', scan:'遠くへ強い一撃', burst:'まとめて削る', lure:'敵を寄り道させる', vortex:'火花を集めて味方を強く' };
 // 説明（画面で長押し・カーソルを合わせると出る）
 const TYPE_DESC = {
   node:'安くて早い壁。近くの敵を弱く撃つ。迷路の壁を作るのに使う',
@@ -217,10 +225,11 @@ const TYPE_DESC = {
   fw:'撃たないが、射程の中の敵を遅くする。ほかのタワーが当てやすくなる',
   scan:'遠くまで届く強い一撃。撃つ間隔は長い',
   burst:'当たったまわりの敵もまとめて削る。群れに強い',
+  vortex:'撃たないが、とても広い射程の中で倒れた敵の火花を吸い取り、同じ会社の攻撃するタワーに送る。たまったタワーは、次の1発が必殺弾（威力4倍、まわりにも当たる）になる。強化するとたまるのが速くなる',
   lure:'撃たないが、射程に入った敵の一部（それぞれ30%の確率、同時に2体まで。強化で増える）をおびき寄せ、自分の前まで寄り道させる。敵を自分の会社のタワーの前に通せる',
 };
 // ?nolure でハニーポットなし（比べる用。抜いた分はノードにする）
-const MIX = PARAMS.has('nolure') ? [['node', .32], ['av', .24], ['fw', .15], ['scan', .15], ['burst', .14]] : [['node', .24], ['av', .24], ['fw', .15], ['scan', .15], ['burst', .14], ['lure', .08]];
+const MIX = PARAMS.has('nolure') ? [['node', .32], ['av', .24], ['fw', .15], ['scan', .15], ['burst', .14]] : [['node', .22], ['av', .22], ['fw', .15], ['scan', .14], ['burst', .13], ['lure', .08], ['vortex', .06]];
 
 // 会社：アクワイアと同じく3つの格（安い2・中3・高い2）
 const COMPANIES = [
@@ -233,10 +242,10 @@ let POWERS = PARAMS.get('powers') === '1';
 const PW = { rapid:.75, splash:.5, link:.1, range:.4, slow:.2, pierce:1.4, fame:1.1 };   // 数字は CPU の試しで合わせる。?pw=rapid:.8,fame:1.1 で上書き
 (PARAMS.get('pw') || '').split(',').filter(Boolean).forEach(x => { const [k, v] = x.split(':'); PW[k] = +v; });
 const POWER = [
-  { name:'連射', desc:'タワーの撃つ間隔が短い' }, { name:'拡散', desc:'弾が当たった敵のとなりの敵にも少し当たる' },
-  { name:'連携', desc:'となりの同じ会社のタワー1つごとに威力が上がる（3つまで）' }, { name:'遠視', desc:'タワーの射程が長い' },
-  { name:'減速', desc:'弾が当たった敵が少し遅くなる。遅くした敵をほかの会社が倒したら、手柄を分ける' }, { name:'貫通', desc:'硬い敵と大きい敵によく効く' },
-  { name:'集客', desc:'倒した数が多めに数えられ、株価が上がりやすい' },
+  { name:'速く撃つ', desc:'タワーの撃つ間隔が短い' }, { name:'まわりにも当たる', desc:'弾が当たった敵のとなりの敵にも少し当たる' },
+  { name:'となりどうしで強く', desc:'となりの同じ会社のタワー1つごとに威力が上がる（3つまで）' }, { name:'射程が長い', desc:'タワーの射程が長い' },
+  { name:'当てた敵が遅く', desc:'弾が当たった敵が少し遅くなる。遅くした敵をほかの会社が倒したら、手柄を分ける' }, { name:'硬い敵に強い', desc:'硬い敵と大きい敵によく効く' },
+  { name:'株価が上がりやすい', desc:'倒した数が多めに数えられ、株価が上がりやすい' },
 ];
 const hasPower = (id, n) => POWERS && id === n;
 const POWER_HP = 1.025;   // 能力ありは守りが強くなるぶん、敵を硬くする
@@ -534,6 +543,7 @@ function nextActor() {
   const ready = G.players.filter(p => p.t < G.limit);
   return ready.sort((a, b) => a.t - b.t || b.order - a.order)[0] || null;
 }
+const normalTime = type => TYPES[type].time + CELL_EXTRA;   // 札に出すふつうの時間（印のマスならこれより CELL_EXTRA 少ない）
 const placeTime = (t0, x, y) => TYPES[t0.type].time + (CELL_EXTRA && (x !== t0.x || y !== t0.y) ? CELL_EXTRA : 0);
 function spend(p, time) { p.t += time; p.order = ++G.seq + 100; }
 function waveActive() { return G.spawnQueue.length > 0 || G.enemies.length > 0; }
@@ -826,6 +836,7 @@ function towerPower(type, lv, co) {
   if (!ty.range) return { range:0, dps:0, slow:0 };
   const range = ty.range + .4 * up + (hasPower(co, 3) ? PW.range : 0);
   if (type === 'fw') return { range, dps:0, slow:Math.min(.75, ty.slow + .12 * up) };
+  if (type === 'vortex') return { range, dps:.6 * (1 + .5 * up), slow:0 };
   // 能力の見積もり：連射はそのまま、拡散・連携・貫通はおおよそ2割増しとして読む
   const pm = hasPower(co, 0) ? 1 / PW.rapid : hasPower(co, 1) || hasPower(co, 2) || hasPower(co, 5) ? 1.2 : 1;
   const dps = ty.dmg * (1 + .6 * up) / ty.cd * (type === 'burst' ? 2 : 1) * pm;
@@ -1372,7 +1383,7 @@ function waveTick(dt) {
     const a = G.actor;
     if (a && !a.cpu) {
       if (a.clock === undefined) a.clock = FIRST_WAIT;
-      a.clock -= dt;
+      if (!NO_LIMIT) a.clock -= dt;
       if (a.clock <= 0 && !G.busy && !G.choosing) { a.t = Math.max(a.t, G.limit); G.selected = null; G.menu = null; log(`${a.name}：考える時間が切れたので、この波の手番は終わり`); renderAll(); }
     }
     if (!nextActor() && !waveActive()) { G.waveTimer = Math.min(G.waveTimer, 3); G.waveTimer -= dt; }   // 一瞬だけ手番の人がいない間を数えないよう、時間トラックで判断する
@@ -1450,6 +1461,7 @@ function towerTick(dt) {
       }
       continue;
     }
+    if (t.type === 'vortex') { t.cool = ty.cd; continue; }   // ボルテックスは撃たない（吸い取るのは倒れたとき）
     if (t.type === 'fw') {
       inR.forEach(e => { e.slow = .7; e.slowAmt = Math.min(.75, ty.slow + .12 * up); e.slowTile = key(t.x, t.y); });
       G.beams.push({ ring:true, x:cx, y:cy, r:range * S * Math.sqrt(3), color:bc, life:.35 }); sfx('fw', cx);
@@ -1458,15 +1470,19 @@ function towerTick(dt) {
     // いちばん出口に近い敵を狙う
     inR.sort((a, b) => (G.dist[a.cell] ?? 99) - (G.dist[b.cell] ?? 99));
     const links = hasPower(coId, 2) ? Math.min(3, neighbors(t.x, t.y).filter(([a, b]) => { const k = key(a, b); return G.tiles[k] && TYPES[G.tiles[k].type].range && G.owner[k] === coId; }).length) : 0;
-    const target = inR[0], dmg = ty.dmg * (1 + .6 * up) * (1 + PW.link * links);
+    const power = (t.charge || 0) >= VX.full;   // ボルテックスから満タンまで送られていたら、この1発は必殺弾
+    if (power) { t.charge = 0; G.stats.powerShots = (G.stats.powerShots || 0) + 1; }
+    const target = inR[0], dmg = ty.dmg * (1 + .6 * up) * (1 + PW.link * links) * (power ? VX.mult : 1);
     G.beams.push({ x1:cx, y1:cy, x2:target.x, y2:target.y, color:bc, life: t.type === 'scan' ? .25 : .08, w: t.type === 'scan' ? 3 : 1.5 });
     sfx(t.type, cx);
-    const hit = t.type === 'burst' ? G.enemies.filter(e => !e.dead && cellDist(target.x, target.y, e.x, e.y) <= ty.splash) : hasPower(coId, 1) ? G.enemies.filter(e => !e.dead && cellDist(target.x, target.y, e.x, e.y) <= .8) : [target];
+    if (power) { G.beams.push({ x1:cx, y1:cy, x2:target.x, y2:target.y, color:'#e8d8ff', life:.4, w:6 }); burst(target.x, target.y, '#b48cff', 50, 2.2); shock(target.x, target.y, 1.6); sfx('bigkill', target.x); }
+    const hit = power ? G.enemies.filter(e => !e.dead && cellDist(target.x, target.y, e.x, e.y) <= Math.max(VX.splash, ty.splash || 0)) : t.type === 'burst' ? G.enemies.filter(e => !e.dead && cellDist(target.x, target.y, e.x, e.y) <= ty.splash) : hasPower(coId, 1) ? G.enemies.filter(e => !e.dead && cellDist(target.x, target.y, e.x, e.y) <= .8) : [target];
     if (t.type === 'burst') burst(target.x, target.y, bc, 22, 1.4);
     for (const e of hit) {
       e.hp -= dmg * (hasPower(coId, 1) && t.type !== 'burst' && e !== target ? PW.splash : 1) * (hasPower(coId, 5) && (e.type === 'hard' || e.type === 'big') ? PW.pierce : 1);
       if (hasPower(coId, 4)) { if (!(e.slow > 0)) { e.slowAmt = PW.slow; e.slowTile = key(t.x, t.y); } e.slow = Math.max(e.slow || 0, .5); }   // 減速で遅くした敵も、ファイアウォールと同じく手柄を分ける
       hitSpark(e.x, e.y, t.type === 'scan' ? '#ffffff' : bc, t.type === 'scan' ? 14 : 5);
+      vortexAbsorb(e, e.hp <= 0 && !e.dead);
       if (e.hp <= 0 && !e.dead) {
         e.dead = true;
         burst(e.x, e.y, ENEMY[e.type].color, e.type === 'big' ? 160 : 40, e.type === 'big' ? 3.2 : 1.8);
@@ -1489,6 +1505,32 @@ function towerTick(dt) {
       }
     }
   }
+}
+
+// ボルテックス：倒れた（kill）か、3段なら攻撃を受けた敵の火花を吸い取り、同じ会社の攻撃するタワー全部に同じだけ送る
+function vortexAbsorb(e, kill) {
+  for (const v of Object.values(G.tiles)) {
+    if (v.type !== 'vortex' || (!kill && v.lv < 3)) continue;
+    const [vx, vy] = center(v.x, v.y), range = TYPES.vortex.range + .4 * (v.lv - 1);
+    if (cellDist(vx, vy, e.x, e.y) > range) continue;
+    const amt = (kill ? (VX.gain[e.type] || 1) : VX.hitGain) * (1 + .5 * (v.lv - 1));
+    v.energy = (v.energy || 0) + amt;
+    const co = G.owner[key(v.x, v.y)];
+    if (co !== undefined) for (const [k, u] of Object.entries(G.tiles)) if (G.owner[k] === co && TYPES[u.type].dmg > 0) u.charge = Math.min(VX.full, (u.charge || 0) + amt);
+    if (kill) absorbFx(e.x, e.y, vx, vy);
+  }
+}
+// 吸い取る演出：倒れたところから、火花がボルテックスへ吸い込まれていく
+function absorbFx(x, y, tx, ty) {
+  netFx('absorb', [x / S, y / S, tx / S, ty / S]);
+  const d0 = Math.hypot(x - tx, y - ty), th0 = Math.atan2(y - ty, x - tx);
+  for (let i = 0; i < 32 && G.particles.length < SPARK_MAX; i++) {
+    const r0 = d0 + (Math.random() - .5) * S * 1.2, th = th0 + (Math.random() - .5) * 1.2;
+    G.particles.push({ x:tx + r0 * Math.cos(th), y:ty + r0 * Math.sin(th), vx:0, vy:0, life:3, to:[tx, ty], r:Math.max(S * .5, r0), th, vr:-(S * (1 + Math.random() * 1.5)),
+      h:Math.max(S * .5, r0) ** 2 * (1.4 + Math.random() * .8), color:Math.random() < .35 ? '#ffffff' : Math.random() < .5 ? '#d2b8ff' : '#9d7bff' });
+  }
+  const vt = Object.values(G.tiles).find(t => t.type === 'vortex' && Math.hypot(center(t.x, t.y)[0] - tx, center(t.x, t.y)[1] - ty) < 1); if (vt) vt.spin = 1;
+  G.flashes.push({ x:tx, y:ty, r:S * 1.1, life:.5, max:.5, color:'#b48cff' });   // ボルテックスが光る
 }
 
 // ===== 終わり =====
@@ -1661,6 +1703,16 @@ function fxTick(dt) {
   G.red = Math.max(0, G.red - dt * 1.5);
   const drag = Math.pow(.93, dt * 60), born = [];
   for (const q of G.particles) {
+    if (q.to) {   // 吸い込まれる火花：渦を巻きながら中心へ。中心に近いほど速く回り、速く落ちる
+      q.vr -= S * 9 * dt;                                         // 中心へ落ちる速さはだんだん上がる
+      q.r = Math.max(0, q.r + q.vr * dt);
+      const om = Math.min(28, q.h / Math.max(q.r, S * .2) ** 2);  // 回る速さ（角運動量を保つので、近いほど速い）
+      q.th += om * dt;
+      const nx = q.to[0] + q.r * Math.cos(q.th), ny = q.to[1] + q.r * Math.sin(q.th);
+      if (dt > 0) { q.vx = (nx - q.x) / dt; q.vy = (ny - q.y) / dt; }   // 尾の向きと長さに使う
+      q.x = nx; q.y = ny; q.life -= dt; if (q.r < S * .12) q.life = 0;
+      continue;
+    }
     q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= drag; q.vy = q.vy * drag + (q.g || 0) * dt; q.life -= dt;
     // 残り火の一部は、消えるときにもう一度小さく弾ける
     if (q.pop && q.life <= 0) for (let i = 0; i < 7; i++) { const a = Math.random() * Math.PI * 2, v = (40 + Math.random() * 90) * S / 20; born.push({ x:q.x, y:q.y, vx:Math.cos(a) * v, vy:Math.sin(a) * v, life:.25 + Math.random() * .3, g:S, color:'#ffffff' }); }
@@ -1701,10 +1753,26 @@ function draw() {
     if (t) {
       const co = G.owner[k], fl = co !== undefined ? G.flash[co] || 0 : 0;
       // 塗りは会社の色（会社のないタイルは灰色）。タワーの種類は、内側の細い枠とアイコンの色で見せる
-      cx2.fillStyle = co !== undefined ? G.cos[co].color + (fl ? Math.round(85 + 150 * Math.min(1, fl)).toString(16).padStart(2, '0') : '55') : '#ffffff14'; cx2.fill();
-      if (co === undefined) { cx2.strokeStyle = '#ffffff40'; cx2.setLineDash([3, 3]); cx2.lineWidth = 1.5; cx2.stroke(); cx2.setLineDash([]); }
+      cx2.fillStyle = co !== undefined ? G.cos[co].color + (fl ? Math.round(85 + 150 * Math.min(1, fl)).toString(16).padStart(2, '0') : '55') : '#8a96b855'; cx2.fill();
+      if (co === undefined) { cx2.strokeStyle = '#c9d4ffaa'; cx2.lineWidth = 1.8; cx2.stroke(); }   // 会社のないタイル：灰色の実線（印のマスの点線と見分ける）
+      if (t.type === 'vortex') {
+        t.spin = Math.max(0, (t.spin || 0) - 1 / 60);
+        const sp = t.spin || 0, rot = performance.now() / (900 - 600 * sp), R = S * (.75 + .55 * sp);
+        cx2.save(); cx2.strokeStyle = sp > .05 ? '#e8d8ff' : '#b48cff'; cx2.shadowColor = '#b48cff'; cx2.shadowBlur = 6 + 18 * sp; cx2.lineCap = 'round';
+        for (let arm = 0; arm < 3; arm++) {   // 渦の腕：外から中心へ巻き込む曲線
+          cx2.globalAlpha = .35 + .6 * sp; cx2.lineWidth = 1.5 + 2 * sp; cx2.beginPath();
+          for (let k = 0; k <= 16; k++) { const f = k / 16, a = rot + arm * Math.PI * 2 / 3 + f * 2.4, rr = R * (1 - f * .85); cx2[k ? 'lineTo' : 'moveTo'](px + rr * Math.cos(a), py + rr * Math.sin(a)); }
+          cx2.stroke();
+        }
+        cx2.restore();
+      }
       drawIcon(cx2, t.type, px, py, S * .42);
       for (let l = 1; l < (t.lv || 1); l++) { cx2.fillStyle = ICON_COLOR; cx2.fillRect(px - S * .3 + l * S * .2, py + S * .5, S * .14, S * .1); }
+      if (t.charge) {   // ボルテックスから送られたたまり具合。満タンなら光る（次の1発が必殺弾）
+        const full = t.charge >= VX.full; cx2.save(); cx2.strokeStyle = full ? '#e8d8ff' : '#b48cff'; cx2.lineWidth = full ? 3 : 2;
+        if (full) { cx2.shadowColor = '#b48cff'; cx2.shadowBlur = 14 + 6 * Math.sin(performance.now() / 120); }
+        cx2.beginPath(); cx2.arc(px, py, S * .72, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, t.charge / VX.full)); cx2.stroke(); cx2.restore();
+      }
     } else {
       cx2.fillStyle = isClosed(x, y) ? '#03050a' : sp === 'wall' ? '#1c2440' : sp === 'block' ? '#2a1830' : sp === 'fast' ? '#2a2a10' : sp === 'heal' ? '#102a18' : path.has(k) ? '#0f1d3a' : '#0a1226';
       cx2.fill(); cx2.strokeStyle = isClosed(x, y) ? '#0b1020' : path.has(k) ? '#24407a' : '#1b2d55'; cx2.lineWidth = 1; cx2.stroke();
@@ -1737,7 +1805,7 @@ function draw() {
   if (CELL_EXTRA && !AUTO && G.started) for (const t of me().hand) {
     if (G.tiles[key(t.x, t.y)]) continue;
     const [qx, qy] = center(t.x, t.y); hexPath(qx, qy, S * .8); cx2.save(); cx2.setLineDash([3, 3]); cx2.strokeStyle = 'rgba(255,233,168,.75)'; cx2.lineWidth = 1.5; cx2.stroke(); cx2.restore();
-    cx2.save(); cx2.globalAlpha = .55; drawIcon(cx2, t.type, qx, qy, S * .38); cx2.restore();
+    cx2.save(); cx2.globalAlpha = .3; drawIcon(cx2, t.type, qx, qy + S * .12, S * .32); cx2.globalAlpha = .9; cx2.fillStyle = '#ffe9a8'; cx2.font = `bold ${S * .38}px sans-serif`; cx2.textAlign = 'center'; cx2.textBaseline = 'middle'; cx2.fillText('印', qx, qy - S * .38); cx2.restore();   // まだ置いていない：うすい印と「印」の字
   }
   if (G.waitPlace) { const [qx, qy] = center(...G.waitPlace.at), pl = .5 + .5 * Math.sin(performance.now() / 120); hexPath(qx, qy, S * .95); cx2.save(); cx2.setLineDash([5, 4]); cx2.strokeStyle = `rgba(255,233,168,${.4 + .6 * pl})`; cx2.lineWidth = 3; cx2.stroke(); cx2.restore(); cx2.save(); cx2.globalAlpha = .4 + .4 * pl; drawIcon(cx2, G.waitPlace.t.type, qx, qy, S * .42); cx2.restore(); }
   // 置こうとしているタイルの場所
@@ -1868,6 +1936,7 @@ function drawIcon(c, type, x, y, r) {
   if (type === 'av') { ring(r * .6); c.beginPath(); c.arc(x, y, r * .2, 0, Math.PI * 2); c.fill(); }
   if (type === 'fw') { ring(r * .4); ring(r * .8); }
   if (type === 'scan') { c.beginPath(); c.moveTo(x - r, y); c.lineTo(x + r, y); c.moveTo(x, y - r); c.lineTo(x, y + r); c.stroke(); ring(r * .45); }
+  if (type === 'vortex') { for (let k = 0; k < 3; k++) { c.beginPath(); c.arc(x, y, r * (.3 + k * .25), k * 2.1, k * 2.1 + Math.PI * 1.2); c.stroke(); } }
   if (type === 'lure') { c.beginPath(); c.arc(x, y - r * .1, r * .55, Math.PI, 0, true); c.moveTo(x - r * .55, y - r * .1); c.lineTo(x - r * .55, y - r * .7); c.moveTo(x + r * .55, y - r * .1); c.lineTo(x + r * .55, y - r * .7); c.stroke(); }
   if (type === 'burst') { c.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; c.moveTo(x + Math.cos(a) * r * .3, y + Math.sin(a) * r * .3); c.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } c.stroke(); }
   c.restore();
@@ -1902,12 +1971,13 @@ function renderTop() {
   document.getElementById('pauseBtn').style.display = canPause() ? '' : 'none';
   const ac = waveActive();
   { const el = document.getElementById('wave'), mine = me(), n = `波${G.wave + 1}/${WAVES}`;
-    const done = !mine || mine.t >= G.limit || (mine.clock ?? FIRST_WAIT) <= 0;
+    const done = !mine || mine.t >= G.limit || (!NO_LIMIT && (mine.clock ?? FIRST_WAIT) <= 0);
     // 人が遊ぶとき：自分の考える時間はいつも出す。自分の番で減っている間は明るく、ほかの人の番では灰色
     el.innerHTML = G.over ? '終了' : ac ? `波 ${G.wave}/${WAVES} 来襲中` : G.wave >= WAVES ? '最後の波'
       : AUTO ? `${n}まで ${Math.ceil(G.waveTimer)}秒`
       : !nextActor() ? `${n}まで ${Math.max(0, Math.ceil(G.waveTimer))}秒`
       : done ? `${n}まで・番は終わり`
+      : NO_LIMIT ? `${n}まで・${G.actor === mine ? 'あなたの番' : 'みんなの番のあと'}`
       : `${n}まで <span data-tip="あなたの考える時間。自分の番の間だけ減る" style="color:${G.actor === mine ? '#ffe066' : '#6f7a99'}">${Math.max(0, Math.ceil(mine.clock ?? FIRST_WAIT))}秒</span>`; }
   document.getElementById('life').textContent = '♥ ' + G.lives;
   document.getElementById('money').textContent = AUTO ? '' : '所持金 ' + me().money;
@@ -1942,7 +2012,7 @@ function turnText() {
   if (up) return [`${label(up.x, up.y)} の${TYPES[up.type].name}（${TYPE_SHORT[up.type]}）`, canUpgrade(up) ? `盤のメニューの「強化する」で射程と威力が上がります（時間${TYPES[up.type].time}）。強化したあとも株を1枚もらえます。${left}` : 'このタワーは強化できません。手札のタイルを選び直してください'];
   if (sel && AREA_MODE) { const c = canPlace(sel), tg = chosenOf(sel);
     if (!c.ok) return [`${tileName(sel)}には置けません（${c.why}）`, '別のタイルを選んでください'];
-    if (!tg) return [`${tileName(sel)}の光っているマスに${TYPES[sel.type].name}を置けます`, `${TYPES[sel.type].name}：${TYPE_DESC[sel.type]}。光っているマスを押すと、そこに置けます${CELL_EXTRA ? `（点線の印のマスなら時間${TYPES[sel.type].time}、ほかは${TYPES[sel.type].time + CELL_EXTRA}）` : ''}。札をもう一度押すか、光っていないところを押すとやめます。${left}`];
+    if (!tg) return [`${tileName(sel)}の光っているマスに${TYPES[sel.type].name}を置けます`, `${TYPES[sel.type].name}：${TYPE_DESC[sel.type]}。光っているマスを押すと、そこに置けます。置くのに時間${normalTime(sel.type)}${CELL_EXTRA ? `（点線の印のマスなら${CELL_EXTRA}少ない）` : ''}。札をもう一度押すか、光っていないところを押すとやめます。${left}`];
     return [`${label(...tg)} に置くタイルを選んでください`, `盤に出たメニューから選ぶと、その場で置きます。置いたら株を1枚もらえます。${left}`]; }
   if (sel) { const c = canPlace(sel), tg = targetOf(sel); return [c.ok ? `${label(...tg)} に${TYPES[sel.type].name}を置けます` : `${tileName(sel)}${AREA_MODE ? '' : ' のまわり'}には置けません（${c.why}）`, c.ok ? `${AREA_MODE ? tileName(sel) + 'の中の' : label(sel.x, sel.y) + ' か、そのまわりの'}光っているマスに置けます。盤で場所を選び、「置く」かもう一度押す。置いたら株を1枚もらえます。${left}` : '別のタイルを選んでください'];  }
   const can = [];
@@ -1985,8 +2055,8 @@ function renderHand() {
   me().hand.forEach((t, i) => {
     const b = document.createElement('button'), c = canPlace(t);
     b.className = 'tile' + (G.selected === i ? ' sel' : '') + (c.ok ? '' : ' bad');
-    b.innerHTML = `<span class="nm"><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}</span><span class="eff">${TYPE_SHORT[t.type]}</span><span class="tm">${CELL_EXTRA ? `印${TYPES[t.type].time}・ほか${TYPES[t.type].time + CELL_EXTRA}` : `時間${TYPES[t.type].time}`}<span class="ar">エリア${AREA_MODE ? AREA_NAMES[t.area] : label(t.x, t.y)}</span></span>`;
-    b.dataset.tip = `${TYPES[t.type].name}：${TYPE_DESC[t.type]}` + (TYPES[t.type].range ? `（射程${TYPES[t.type].range}マス）` : '') + `。置くのに時間${TYPES[t.type].time}。` + (c.ok ? '' : `今は置けない：${c.why}`);
+    b.innerHTML = `<span class="nm"><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}</span><span class="eff">${TYPE_SHORT[t.type]}</span><span class="tm">時間${normalTime(t.type)}<span class="ar">エリア${AREA_MODE ? AREA_NAMES[t.area] : label(t.x, t.y)}</span></span>`;
+    b.dataset.tip = `${TYPES[t.type].name}：${TYPE_DESC[t.type]}` + (TYPES[t.type].range ? `（射程${TYPES[t.type].range}マス）` : '') + `。置くのに時間${normalTime(t.type)}${CELL_EXTRA ? `（印のマスなら${CELL_EXTRA}少ない）` : ''}。` + (c.ok ? '' : `今は置けない：${c.why}`);
     b.onclick = () => { if (G.swapping && G.swapping.p === me()) { act(G.viewer || 0, { t:'swap', idx:i }); return; } G.selected = G.selected === i ? null : i; G.upSel = null; G.target = null; G.menu = null; renderAll(); };   // 選んだ札をもう一度押したら、選ぶのをやめる
     el.appendChild(b);
   });
@@ -2086,14 +2156,15 @@ function renderCos() {
   h += `<tr><td data-tip="値段は会社の株価の加重平均。筆頭も配当もなく、終わりにそのときの値段で売る"><span class="sw" style="background:${CENTRAL_CO.color}"></span>投資信託</td><td>-</td><td>-</td><td>-</td><td>${centralPrice()}</td><td>${G.centralLeft}</td><td style="text-align:left">${cp}</td></tr>`;
   const notYet = G.cos.filter(co => !rowOf(co));
   if (!AUTO) { const cnt = {}; me().cards.forEach(id => cnt[id] = (cnt[id] || 0) + 1);
-    h += `<tr><td colspan="7" style="text-align:left">あなたの株の手札：${Object.keys(cnt).length ? Object.entries(cnt).map(([id, n]) => { const co = id == CENTRAL ? CENTRAL_CO : G.cos[id]; return `<span style="color:${co.color}">${co.name}${n}</span>`; }).join(' ') : 'なし'}</td></tr>`; }
+    h += `<tr><td colspan="7" style="text-align:left">あなたの株の手札：${Object.keys(cnt).length ? Object.entries(cnt).map(([id, n]) => { const co = id == CENTRAL ? CENTRAL_CO : G.cos[id]; return `<span style="color:${co.color}">${co.name}×${n}</span>`; }).join(' ') : 'なし'}</td></tr>`; }
   if (notYet.length) h += `<tr><td colspan="7" class="note" style="text-align:left">まだない会社：` + notYet.map(co => `<span data-tip="${co.name}：${'★'.repeat(co.tier + 1)}、株価${price(co)}、残り株${availOf(co.id)}${POWERS ? '、' + POWER[co.id].name + '：' + POWER[co.id].desc : ''}"><span class="sw" style="background:${co.color}"></span>${co.name}${'★'.repeat(co.tier + 1)}</span>`).join('　') + '</td></tr>';
+  if (POWERS) h += `<tr><td colspan="7" style="text-align:left;padding-top:8px"><b>会社の能力</b>（その会社のタワー全部に効く。吸収された会社の能力は消える）` + G.cos.map(co => `<div style="margin:3px 0"><span class="sw" style="background:${co.color}"></span>${co.name}：<span style="color:#ffe9a8">${POWER[co.id].name}</span><span class="note">　${POWER[co.id].desc}</span></div>`).join('') + '</td></tr>';
   el.innerHTML = h;
 
 }
 // 能力ありのとき、株の札に会社の能力を出す（名前は札に、中身は長押しの吹き出しに）
 const powerLine = id => POWERS && id !== CENTRAL ? `<br><span class="pw">${POWER[id].name}</span>` : '';
-const powerTip = id => POWERS && id !== CENTRAL ? `。能力「${POWER[id].name}」：${POWER[id].desc}` : '';
+const powerTip = id => POWERS && id !== CENTRAL ? `。能力：${POWER[id].desc}` : '';
 function renderMarket() {
   const el = document.getElementById('market'); if (AUTO) { el.innerHTML = ''; return; }
   const tk = G.taking && G.taking.p === me(), ex = G.exchanging && G.exchanging.p === me(), dc = G.discarding && G.discarding.p === me();
@@ -2312,13 +2383,13 @@ function chooseDisposal(p, co, sv, pr, n, maxPairs, cb) {
 // ルールのまとめ
 const RULES_HTML = () => `<h3>電脳都市のルール（まとめ）</h3>${POWERS ? `<h4>会社の能力</h4><p class="note">能力はその会社のタワー全部に効きます。吸収された会社の能力は消えます。</p><ul>${POWER.map((w, i) => `<li>${COMPANIES[i].name}（${w.name}）：${w.desc}</li>`).join('')}</ul>` : ''}
 <h4>目的</h4><p>ウイルス（敵）の波を全員で${WAVES}回守りきり、そのとき<b>いちばんお金の多い人</b>の勝ち。ライフが0になったら<b>全員の負け</b>。</p>
-<h4>手番の順番</h4><p>時間トラックで<b>いちばん後ろの人</b>が次に動く。行動するとその時間だけ前へ進む。1つの波で1人が使える時間は、全員の合計が24になるように人数で決まる（4人なら6、2人なら12、6人なら4）。<b>最初の波の前だけは2倍</b>。使い切ったら波が終わるまで待つ。人が遊ぶときは、波ごとに一人ひとりに考える時間（最初は90秒、あとは45秒）がある。自分の番の間だけ減り、なくなったらその波の残りの手番は飛ばす。全員の手番が終わって敵がいなくなったら、次の波が来る。</p>
+<h4>手番の順番</h4><p>時間トラックで<b>いちばん後ろの人</b>が次に動く。行動するとその時間だけ前へ進む。1つの波で1人が使える時間は、全員の合計が24になるように人数で決まる（4人なら6、2人なら12、6人なら4）。<b>最初の波の前だけは2倍</b>。使い切ったら波が終わるまで待つ。開始画面で「考える時間：あり」を選んだときは、波ごとに一人ひとりに考える時間（最初は90秒、あとは45秒）がある。自分の番の間だけ減り、なくなったらその波の残りの手番は飛ばす。全員の手番が終わって敵がいなくなったら、次の波が来る。</p>
 <h4>手番でできること（どれか1つ）</h4><ul>
-<li><b>タイルを置く</b>：手札のタイルには<b>印のマス</b>（盤に点線で出る）と、そのマスのエリアが書いてある。${CELL_EXTRA ? `印のマスに置けば書かれた時間、<b>同じエリアのほかの空いているマス</b>なら時間が${CELL_EXTRA}多くかかる` : 'そのエリアの空いているマスならどこにでも置ける'}（盤のうすい文字 A〜F がエリア）。盤の光るマスを押すと、そこに置けるタイルが並ぶ。置いたマスは壁になり、敵はよけて進む（遠回りさせるほど守りやすい）。入口から出口への道をふさぐ置き方はできない。置いたら<b>株を1枚手札に入れる</b>。<b>2人のときだけ</b>、置いたあとに手札のタイルを1枚入れ替えてもよい（入れ替えたタイルは山の底へ）。</li>
+<li><b>タイルを置く</b>：手札のタイルには<b>印のマス</b>（盤に点線で出る）と、そのマスのエリアが書いてある。${CELL_EXTRA ? `<b>同じエリアの空いているマス</b>なら、札の時間で置ける。<b>印のマスに置けば時間が${CELL_EXTRA}少ない</b>` : 'そのエリアの空いているマスならどこにでも置ける'}（盤のうすい文字 A〜F がエリア）。盤の光るマスを押すと、そこに置けるタイルが並ぶ。置いたマスは壁になり、敵はよけて進む（遠回りさせるほど守りやすい）。入口から出口への道をふさぐ置き方はできない。置いたら<b>株を1枚手札に入れる</b>。<b>2人のときだけ</b>、置いたあとに手札のタイルを1枚入れ替えてもよい（入れ替えたタイルは山の底へ）。</li>
 <li><b>強化する</b>：盤のタワーを押して強化（3段階まで）。誰が置いたタワーでもよい。強化しても株を1枚手札に入れる。</li>
 <li><b>株を公開する</b>：手札の株にお金（株価）を払って表にする。1社なら何枚でも、2社なら1枚ずつ。時間は1回につき1（何枚出しても同じ）。<b>敵が来ている間はできない</b>。</li>
 <li>どれもできないときだけ、タイルを1枚捨てて引き直す（時間1）。</li></ul>
-<h4>色とマーク</h4><p>タイルの<b>色は会社</b>（灰色の点線は会社のないタイル）。<b>マークはタワーの種類</b>。撃つ光線も会社の色。</p>
+<h4>色とマーク</h4><p>タイルの<b>色は会社</b>（灰色は会社のないタイル）。<b>黄色の点線に「印」</b>は、あなたの手札のタイルの印のマス（まだ置いていない）。<b>マークはタワーの種類</b>。撃つ光線も会社の色。</p>
 <ul>${Object.keys(TYPES).map(k => `<li><img src="${iconUrl(k)}" alt="" style="width:18px;height:18px;vertical-align:-4px;background:#16213d;border-radius:4px"> <b>${TYPES[k].name}</b>：${TYPE_DESC[k]}</li>`).join('')}</ul>
 <h4>株</h4><p>手札の株は伏せていて、まだ数えない。<b>公開した株だけ</b>がボーナスと売却で数えられる。終わりに手札に残った株は価値がない。<b>株の手札は8枚まで</b>で、超えたら捨てる（捨て札の山へ。山札がなくなったら混ぜて山札にする）。</p>
 <h4>会社と株価</h4><p>2枚以上つながったタイルのかたまりに会社を付ける。株価は、その会社のタワーが<b>倒した敵の数</b>で上がる。ファイアウォールで遅くなっている敵をほかの会社のタワーが倒したら、倒した数を半分ずつ分ける。1枚だけでどこにもつながっていないタイルは会社がないので、倒しても誰の株価にもならない。</p>
@@ -2416,6 +2487,7 @@ function applyState(m) {
     if (f === 'burst') burst(a[0] * S, a[1] * S, a[2], a[3], a[4]);
     if (f === 'shock') shock(a[0] * S, a[1] * S, a[2]);
     if (f === 'text') floatText(a[0] * S, a[1] * S, a[2], a[3]);
+    if (f === 'absorb') absorbFx(a[0] * S, a[1] * S, a[2] * S, a[3] * S);
     if (f === 'announce') announce(a[0], a[1]);
     if (f === 'sfx') sfx(a[0], a[1] === null ? undefined : a[1] * S);
   }
@@ -2441,7 +2513,7 @@ function hostConn(conn) {
     if (d.type === 'rejoin' && G.started && G.net.keys && G.net.keys[d.seat] && G.net.keys[d.seat] === d.key) {
       const seat = +d.seat, q = G.players[seat];
       G.net.peers[seat] = conn; q.cpu = false; q.remote = true;
-      conn.send({ type:'start', course:COURSE, n:NPLAYERS, powers:POWERS, diff:DIFF, seat, names:G.players.map(o => o.name), room:G.net.room, key:d.key });
+      conn.send({ type:'start', course:COURSE, n:NPLAYERS, powers:POWERS, diff:DIFF, noLimit:NO_LIMIT, seat, names:G.players.map(o => o.name), room:G.net.room, key:d.key });
       conn.send(snapshot(seat)); log(`${q.name} が戻った`); renderAll();
     }
     if (d.type === 'act' && G.started) { const seat = Object.entries(G.net.peers).find(([, c]) => c === conn); if (seat) act(+seat[0], d.a); }
@@ -2472,7 +2544,7 @@ function hostStart() {
   nt.joined.forEach((j, i) => { const seat = i + 1, q = G.players[seat]; q.cpu = false; q.remote = true; q.name = j.name; nt.peers[seat] = j.conn; });
   const names = G.players.map(q => q.name);
   nt.keys = {}; nt.joined.forEach((j, i) => nt.keys[i + 1] = Math.random().toString(36).slice(2, 10));
-  nt.joined.forEach((j, i) => j.conn.send({ type:'start', course:COURSE, n:NPLAYERS, powers:POWERS, diff:DIFF, seat:i + 1, names, room:nt.room, key:nt.keys[i + 1] }));
+  nt.joined.forEach((j, i) => j.conn.send({ type:'start', course:COURSE, n:NPLAYERS, powers:POWERS, diff:DIFF, noLimit:NO_LIMIT, seat:i + 1, names, room:nt.room, key:nt.keys[i + 1] }));
   renderAll();
 }
 // 参加者：部屋に入る
@@ -2489,7 +2561,7 @@ function joinRoom(room, name, back) {   // back：戻るときの { seat, key }
       conn.on('data', d => {
         if (d.type === 'reject') modal('<h3>参加できませんでした</h3><p class="note">ホストに断られたか、もう始まっています</p>', [['戻る', () => location.reload()]]);
         if (d.type === 'start') {
-          useCourse(d.course); NPLAYERS = d.n; POWERS = !!d.powers; DIFF = DIFFS[d.diff] ? d.diff : 'normal'; setup(); resize();
+          useCourse(d.course); NPLAYERS = d.n; POWERS = !!d.powers; DIFF = DIFFS[d.diff] ? d.diff : 'normal'; NO_LIMIT = !!d.noLimit; setup(); resize();
           G.viewer = d.seat; G.net = { role:'client', send:x => conn.send(x), fx:[] };
           G.players.forEach((q, i) => { q.name = d.names[i]; q.cpu = false; });
           G.started = true; hideModal(); renderAll(); renderLog(); retryCount = 0;
@@ -2562,7 +2634,7 @@ function saveGame() {
   if (!canSave()) return;
   const g = {}; SAVE_FIELDS.forEach(k => { if (G[k] !== undefined) g[k] = G[k]; });
   const net = G.net && G.net.role === 'host' ? { room:G.net.room, hostName:G.net.hostName, keys:G.net.keys, remote:G.players.map(q => !!q.remote) } : null;   // ホストなら部屋の情報も
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v:1, at:Date.now(), course:COURSE, n:NPLAYERS, powers:POWERS, diff:DIFF, level:CPU_LEVEL, plan:[...PLAN], g, net })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v:1, at:Date.now(), course:COURSE, n:NPLAYERS, powers:POWERS, diff:DIFF, level:CPU_LEVEL, noLimit:NO_LIMIT, plan:[...PLAN], g, net })); } catch (e) {}
 }
 function loadSave() { try { const sv = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return sv && sv.v === 1 ? sv : null; } catch (e) { return null; } }
 const NET_SAVE_KEY = 'stock-defense-net';   // 参加者：どの部屋のどの席か（読み込み直したら戻るため）
@@ -2570,7 +2642,7 @@ function loadNetSave() { try { return JSON.parse(localStorage.getItem(NET_SAVE_K
 function clearNetSave() { try { localStorage.removeItem(NET_SAVE_KEY); } catch (e) {} }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 function resumeGame(sv) {
-  useCourse(sv.course); NPLAYERS = sv.n; POWERS = !!sv.powers; DIFF = DIFFS[sv.diff] ? sv.diff : 'normal'; CPU_LEVEL = sv.level === 'easy' ? 'easy' : 'normal';
+  useCourse(sv.course); NPLAYERS = sv.n; POWERS = !!sv.powers; DIFF = DIFFS[sv.diff] ? sv.diff : 'normal'; CPU_LEVEL = sv.level === 'easy' ? 'easy' : 'normal'; NO_LIMIT = !!sv.noLimit;
   setup(); resize();
   Object.assign(G, sv.g); PLAN = new Set(sv.plan || []);
   G.dist = distanceField(); G.actor = null; G.busy = false; G.selected = null; G.menu = null;
@@ -2617,6 +2689,7 @@ function showStart() {
     <p class="note">タイルを置いて迷路を作り、ウイルスの波を全員で${WAVES}回守りきる。タイルのかたまりは会社になり、倒した数で株価が上がる。株を集めて、いちばんお金持ちになった人の勝ち。</p>
     <h4>人数（あなた＋ほかの人や CPU）</h4><div class="pick">${[2, 3, 4, 5, 6].map(k => `<button class="btn${k === n ? ' on' : ''}" data-n="${k}">${k}人</button>`).join('')}</div>
     <h4>難しさ</h4><div class="pick">${Object.entries(DIFFS).map(([k, d]) => `<button class="btn${k === DIFF ? ' on' : ''}" data-df="${k}">${d.name}</button>`).join('')}</div>
+    <h4>考える時間</h4><div class="pick">${[[false, 'あり'], [true, 'なし']].map(([k, t]) => `<button class="btn${k === NO_LIMIT ? ' on' : ''}" data-nl="${k ? 1 : 0}">${t}</button>`).join('')}</div>
     <h4>CPU の強さ</h4><div class="pick">${[['normal', 'ふつう'], ['easy', 'よわい']].map(([k, t]) => `<button class="btn${k === CPU_LEVEL ? ' on' : ''}" data-lv="${k}">${t}</button>`).join('')}</div>
     <h4>会社の能力</h4><div class="pick">${[[false, 'なし'], [true, 'あり']].map(([k, t]) => `<button class="btn${k === POWERS ? ' on' : ''}" data-pw="${k ? 1 : 0}">${t}</button>`).join('')}</div>
     <h4>コース</h4><div class="pick">${COURSES.map((c, i) => `<button class="btn${i === COURSE ? ' on' : ''}" data-c="${i}">${c.name}</button>`).join('')}</div>
@@ -2633,6 +2706,7 @@ function showStart() {
     document.querySelectorAll('#mbox [data-n]').forEach(b => b.onclick = () => { n = +b.dataset.n; open(); });
     document.querySelectorAll('#mbox [data-lv]').forEach(b => b.onclick = () => { CPU_LEVEL = b.dataset.lv; open(); });
     document.querySelectorAll('#mbox [data-df]').forEach(b => b.onclick = () => { DIFF = b.dataset.df; open(); });
+    document.querySelectorAll('#mbox [data-nl]').forEach(b => b.onclick = () => { NO_LIMIT = b.dataset.nl === '1'; open(); });
     document.querySelectorAll('#mbox [data-pw]').forEach(b => b.onclick = () => { POWERS = b.dataset.pw === '1'; open(); });
     document.querySelectorAll('#mbox [data-c]').forEach(b => b.onclick = () => { useCourse(+b.dataset.c); G.dist = distanceField(); open(); });
   };
