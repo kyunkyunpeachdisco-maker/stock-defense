@@ -29,7 +29,9 @@
   @media (max-width:360px) { .tile .nm { font-size:11px; letter-spacing:-.6px; } .tile .eff, .tile .tm { font-size:10px; } }
   #top { display:flex; gap:8px; align-items:center; font-size:13px; flex-wrap:wrap; padding:4px 2px; }
   #top .big { font-size:16px; font-weight:bold; white-space:nowrap; }
-  @media (max-width:480px) { #top { flex-wrap:nowrap; gap:6px; } #top .big { font-size:14px; } #setupNote { display:none; } #helpBtn .hl { display:none; } #top .btn { white-space:nowrap; }
+  /* スマホ：1行目に波（と持ち時間）とボタン、2行目にライフと所持金（1行だと波の表示が押し出されて消えていた） */
+  #top .brk { display:none; }
+  @media (max-width:480px) { #top { flex-wrap:wrap; gap:2px 6px; } #top #wave { flex:1 1 0; } #top .btn { order:1; } #top .brk { display:block; flex-basis:100%; height:0; order:2; } #top #life { order:3; } #top #money { order:4; } #top .big { font-size:14px; } #setupNote { display:none; } #helpBtn .hl { display:none; } #top .btn { white-space:nowrap; }
     /* スマホ：縦に長くならないよう、手札・ボタン・株の場を詰める */
     .tile { min-width:0; flex:1 1 30%; padding:3px 5px; font-size:11px; } .tile b { font-size:13px; } .tile img { width:18px !important; height:18px !important; }
     #acts .btn { padding:5px 8px; font-size:12px; } #market .btn { padding:4px 7px; font-size:12px; }
@@ -120,6 +122,7 @@
     <span id="life" class="big" data-tip="全員で共有のライフ。敵が出口（中枢サーバー）に届くと減り、0になると全員の負け"></span>
     <span id="money" class="big" data-tip="株を公開するときに払うお金。終わりにいちばん多い人の勝ち"></span>
     <span class="note" id="setupNote"></span>
+    <span class="brk"></span>
     <button class="btn" id="pauseBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="一時停止（ひとりで遊ぶときだけ）">⏸</button>
     <button class="btn" id="ffBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="早回し（ひとりで遊ぶときだけ）。押すたびに 1倍 → 2倍 → 3倍。持ち時間（秒）は早回ししても本当の秒で減る">▶</button>
     <button class="btn" id="soundBtn" style="padding:4px 8px;font-size:13px" data-tip="効果音を鳴らす・消す"></button>
@@ -253,7 +256,7 @@ const POWER = [
   { name:'株価が上がりやすい', desc:'倒した数が多めに数えられ、株価が上がりやすい' },
 ];
 const hasPower = (id, n) => POWERS && id === n;
-const POWER_HP = 1.025;   // 能力ありは守りが強くなるぶん、敵を硬くする
+const POWER_HP = 1.06;   // 能力ありは守りが強くなるぶん、敵を硬くする（1.025 では能力なしより1割ほど守りやすかったので暫定で上げた。試しで確かめる）
 // 1つの波につき1人が使える時間。使い切ったら次の波まで待つ（テーベの「年の終わり」のような区切り）。
 // 全員の合計を4人×6＝24にそろえる（ユーザー）：2人12・3人8・4人6・5人5・6人4
 const budget = () => Math.round(24 / NPLAYERS);
@@ -869,7 +872,9 @@ function defense(tiles, dist) {
   const towers = Object.values(tiles).filter(t => TYPES[t.type].range).map(t => ({ ...towerPower(t.type, t.lv, G.owner[key(t.x, t.y)]), c:center(t.x, t.y) }));
   // 入口ごとの道で守りの強さを測り、いちばん手薄な道で見る（入口の数を掛けて、そろっていれば合計と同じ）。
   // 合計で見ると、片側が厚ければもう片側が薄くても安全と思い込み、はさみうちで手薄な側から崩れていた
-  const per = ENTRANCES.map(([ex, ey]) => {
+  const fk = FORK ? forkDefense(dist, towers) : null;
+  const per = ENTRANCES.map(([ex, ey], ei) => {
+    if (fk) return fk[ei];
     let sum = 0, cur = [ex, ey], guard = 0;
     while (cur && guard++ < 300) {
       const c = center(...cur); let dps = 0, slow = 0;
@@ -888,6 +893,41 @@ function defense(tiles, dist) {
     total += dps * (TYPES.lure.cap + (lu.lv || 1) - 1) * (TYPES.lure.chance + .1 * ((lu.lv || 1) - 1)) * 2;
   }
   return total;   // 敵1体が通り道を進む間に受ける火力のおおよそ（× 1マスを進む秒数）
+}
+// 二股を見る（?fork=1、試し中。ユーザー。この形は試しで守りきれなくなった：ふつう5回中1回）：敵は、出口に近づくマスが2つ以上あるとき、どれかをくじで選ぶので、道が分かれると敵も分かれる。
+// 前の見積もりは入口ごとに1本の道だけを見ていたので、分かれていた道（入口ごとの道が別々のときも）を1本にまとめても損と思わなかった
+// （分かれていた敵が1本に集まって負けた）。入口ごとに流れを分けながら進み、敵1体が受ける火力の見込み（Σ 流れ×火力）を出す。
+// 道が分かれているとタワーの火力を取り合う敵が減るので、全部の入口を合わせた流れの集まり具合
+// （Σ 流れ² ÷ Σ 流れ。全員が1本の道なら1、半分ずつの二股なら0.5）で割る。全員が1本の道なら前の見積もりと同じ値になる
+const FORK = PARAMS.get('fork') === '1';
+const coverMemo = new Map();
+function coverCells(c, range) {
+  const mk = c[0] + ',' + c[1] + ',' + range;
+  if (!coverMemo.has(mk)) { const out = []; for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (cellDist(...c, ...center(x, y)) <= range) out.push(key(x, y)); coverMemo.set(mk, out); }
+  return coverMemo.get(mk);
+}
+function forkDefense(dist, towers) {
+  const all = new Map(), dpsAt = new Map(), slowAt = new Map();
+  // タワーごとに射程に入るマスを一度だけ数えて覚えておく（CPU が置き場所を何十通りも比べるので、マスごとに全部のタワーを調べると重い）
+  for (const t of towers) for (const k of coverCells(t.c, t.range)) { dpsAt.set(k, (dpsAt.get(k) || 0) + t.dps); slowAt.set(k, Math.max(slowAt.get(k) || 0, t.slow)); }
+  const pow = k => (dpsAt.get(k) || 0) / (1 - (slowAt.get(k) || 0));
+  const sums = ENTRANCES.map(([ex, ey]) => {
+    let level = new Map([[key(ex, ey), 1]]), sum = 0, guard = 0;
+    while (level.size && guard++ < 300) {
+      const next = new Map();
+      for (const [k, f] of level) {
+        sum += f * pow(k); all.set(k, (all.get(k) || 0) + f / ENTRANCES.length);
+        const d = dist[k]; if (!d) continue;
+        const [x, y] = k.split(',').map(Number), nx = neighbors(x, y).filter(([a, b]) => dist[key(a, b)] === d - 1);
+        for (const [a, b] of nx) { const kk = key(a, b); next.set(kk, (next.get(kk) || 0) + f / nx.length); }
+      }
+      level = next;
+    }
+    return sum;
+  });
+  let f1 = 0, f2 = 0; for (const f of all.values()) { f1 += f; f2 += f * f; }
+  const conc = Math.max(.2, f2 / Math.max(1e-9, f1));
+  return sums.map(v => v / conc);
 }
 // 危なさ：次の波の敵1体の平均の体力と、守りが与えられるダメージを比べる。1を超えると危ない
 function danger(def) {
@@ -1893,10 +1933,11 @@ function draw() {
     cx2.restore();
   }
   drawCompanies();
-  // 敵の通り道：流れる点線で、どこを通るかを見せる
-  cx2.save(); cx2.strokeStyle = '#7cf9ff99'; cx2.lineWidth = 2.5; cx2.lineCap = 'round'; cx2.setLineDash([2, S * .8]); cx2.lineDashOffset = -performance.now() / 40;
-  for (const line of pathLines()) { cx2.beginPath(); line.forEach(([x, y], i) => { const [a, b] = warp(...center(x, y)); cx2[i ? 'lineTo' : 'moveTo'](a, b); }); cx2.stroke(); }
-  cx2.restore();
+  // 敵の通り道：流れる点線で、どこを通るかを見せる。道が分かれていれば全部の分かれ道を描き、多く通る道ほど太く濃く（ユーザー）
+  drawFlow(pathFlow(G.dist), '124,249,255', 1);
+  // 置く前の見本：マスを選んでいる間、そこに置いたあとの道を黄色の点線で重ねる（ユーザー）
+  const pv = previewCell();
+  if (pv) { const k = key(...pv); if (previewCache.k !== k || previewCache.n !== Object.keys(G.tiles).length) { const d = distanceField({ ...G.tiles, [k]:{ type:'wall', x:pv[0], y:pv[1], lv:1 } }); previewCache.k = k; previewCache.n = Object.keys(G.tiles).length; previewCache.f = ENTRANCES.every(([a, b]) => d[key(a, b)] !== undefined) ? pathFlow(d) : null; } if (previewCache.f) drawFlow(previewCache.f, '255,224,102', .9); }
   // 入口と出口
   for (const [x, y] of ENTRANCES) mark(x, y, '#ff4dff', '入');
   mark(EXIT[0], EXIT[1], '#ffffff', '◆');
@@ -1990,6 +2031,42 @@ function draw() {
   }
 }
 // 入口ごとの道（流れる点線用）
+// 敵の流れ：入口から、出口に近づくマスへ分かれながら進む（敵は近づけるマスが2つ以上あるとき、くじで選ぶ）。
+// 戻り値は「マス→次のマス」ごとの流れの量（入口1つにつき1を、入口の数で割る）
+function pathFlow(dist) {
+  const seg = new Map();
+  for (const [ex, ey] of ENTRANCES) {
+    let level = new Map([[key(ex, ey), 1 / ENTRANCES.length]]), guard = 0;
+    while (level.size && guard++ < 300) {
+      const next = new Map();
+      for (const [k, f] of level) {
+        const d = dist[k]; if (!d) continue;
+        const [x, y] = k.split(',').map(Number), nx = neighbors(x, y).filter(([a, b]) => dist[key(a, b)] === d - 1);
+        for (const [a, b] of nx) { const kk = key(a, b), g = f / nx.length; next.set(kk, (next.get(kk) || 0) + g); seg.set(k + '|' + kk, (seg.get(k + '|' + kk) || 0) + g); }
+      }
+      level = next;
+    }
+  }
+  return seg;
+}
+function drawFlow(seg, rgb, alpha) {
+  cx2.save(); cx2.lineCap = 'round'; cx2.setLineDash([2, S * .8]); cx2.lineDashOffset = -performance.now() / 40;
+  for (const [sk, f] of seg) {
+    const [k1, k2] = sk.split('|'), [a1, b1] = warp(...center(...k1.split(',').map(Number))), [a2, b2] = warp(...center(...k2.split(',').map(Number)));
+    const w = Math.min(1, f * ENTRANCES.length);   // 1本の道を1として
+    cx2.strokeStyle = `rgba(${rgb},${(.25 + .45 * w) * alpha})`; cx2.lineWidth = 1.2 + 2 * w;
+    cx2.beginPath(); cx2.moveTo(a1, b1); cx2.lineTo(a2, b2); cx2.stroke();
+  }
+  cx2.restore();
+}
+// 置く前の見本を出すマス：盤のメニューで選んだ空きマスか、選んだタイルの置き場所
+const previewCache = {};
+function previewCell() {
+  if (AUTO || G.actor !== me() || G.busy) return null;
+  if (G.menu && !G.menu.tower) return [G.menu.x, G.menu.y];
+  const sel = G.selected !== null && G.selected !== undefined ? me().hand[G.selected] : null;
+  return sel ? chosenOf(sel) : null;
+}
 function pathLines() {
   return ENTRANCES.map(([ex, ey]) => {
     const out = []; let cur = [ex, ey], guard = 0;
@@ -2815,7 +2892,9 @@ function courseMini(i) {
 // 始める前の画面：人数とコースを選ぶ
 // 始める前の画面：タイトル → ルールを選ぶ → コースを選ぶ → 開始（ひとりで遊ぶ・部屋を作る）
 function showStart() {
-  let n = NPLAYERS, mode = 'solo';
+  let n = NPLAYERS, mode = 'solo', nlSet = PARAMS.has('limit');
+  // 持ち時間の初めの選び方：ひとりで遊ぶなら制限なし、部屋を作る（通信）なら制限あり（ユーザー）。自分で選んだらそのまま
+  const pickMode = m => { mode = m; if (!nlSet) NO_LIMIT = m === 'solo'; rules(); };
   // 1. タイトル：遊び方を選ぶ
   const title = () => {
     const sv = loadSave(), ns = loadNetSave();
@@ -2825,7 +2904,7 @@ function showStart() {
     modal(`<div style="text-align:center;padding:10px 0 4px"><div style="font-size:40px;font-weight:900;color:#fff;letter-spacing:4px;text-shadow:0 0 18px #33f0ff,0 0 6px #33f0ff">電脳都市</div>
       <div style="color:#7cf9ff;font-weight:bold;margin-top:6px">迷路で守って、株で勝つ</div></div>
       <p class="note" style="text-align:center">タイルで迷路を作り、ウイルスの波を全員で${WAVES}回守りきる。タイルのかたまりは会社になり、倒した数で株価が上がる。いちばんお金持ちになった人の勝ち。</p>`,
-      [...cont, ['ひとりで遊ぶ（CPUと）', () => { mode = 'solo'; rules(); }], ['部屋を作る', () => { mode = 'host'; rules(); }], ['部屋に入る', () => showJoin('')],
+      [...cont, ['ひとりで遊ぶ（CPUと）', () => pickMode('solo')], ['部屋を作る', () => pickMode('host')], ['部屋に入る', () => showJoin('')],
        ['ルールを読む', () => { showRules(); document.querySelector('#mbox .row button').onclick = () => { document.getElementById('modal').style.display = 'none'; title(); }; }]]);
     document.querySelectorAll('#mbox .row button').forEach(b => { b.style.width = '100%'; });   // 縦に並べる
   };
@@ -2841,7 +2920,7 @@ function showStart() {
       `<p class="note">${mode === 'host' ? '人数は、ほかの人と CPU を合わせた数。空いた席は CPU が入る。' : '人数は、あなたと CPU を合わせた数。'}</p>`,
       [['次へ（コースを選ぶ）', courses], ['戻る', title]]);
     const on = (a, f) => document.querySelectorAll(`#mbox [data-${a}]`).forEach(b => b.onclick = () => { f(b.dataset[a]); rules(); });
-    on('n', v => n = +v); on('df', v => DIFF = v); on('nl', v => NO_LIMIT = v === '1'); on('lv', v => CPU_LEVEL = v); on('pw', v => POWERS = v === '1');
+    on('n', v => n = +v); on('df', v => DIFF = v); on('nl', v => { NO_LIMIT = v === '1'; nlSet = true; }); on('lv', v => CPU_LEVEL = v); on('pw', v => POWERS = v === '1');
   };
   // 3. コースを選ぶ：小さな盤の図つきの札
   const courses = () => {
