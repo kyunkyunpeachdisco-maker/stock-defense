@@ -192,7 +192,8 @@ const centralPrice = () => {
   return Math.max(100, Math.round(avg / 100) * 100);
 };
 const priceOf = id => id === CENTRAL ? centralPrice() : price(G.cos[id]);  // 場に表向きに並べる株券の枚数（ユニオン・パシフィック式）
-let CPU_LEVEL = PARAMS.get('level') === 'easy' ? 'easy' : 'normal';
+const CPU_LEVELS = ['strong', 'normal', 'easy'];
+let CPU_LEVEL = CPU_LEVELS.includes(PARAMS.get('level')) ? PARAMS.get('level') : 'normal';
 // 難しさ（人が遊ぶとき用）：敵の体力の倍率と、最初の3波をさらに柔らかくするか。CPU の試しで合わせた硬さが「ふつう」
 const DIFFS = { easy:{ name:'やさしい', hp:.8, early:.7 }, normal:{ name:'ふつう', hp:1 }, hard:{ name:'むずかしい', hp:1.15 } };
 let DIFF = DIFFS[PARAMS.get('diff')] ? PARAMS.get('diff') : 'normal';
@@ -399,8 +400,9 @@ function setup() {
     for (let j = 0; j < HAND; j++) G.players[i].hand.push(G.bag.pop());
   }
   G.players.forEach((p, i) => p.style = i % 2 === 0 ? 'build' : 'buy');  // CPU の性格：守る人／株を買う人
-  // CPU の強さ（?level=easy でよわい、?mix=1 で偶数番だけふつう・奇数番はよわい。比べる用）
-  G.players.forEach(q => q.smart = PARAMS.get('mix') === '1' ? q.id % 2 === 0 : CPU_LEVEL !== 'easy');
+  // CPU の強さ（?level=strong でつよい、?level=easy でよわい、?mix=1 で偶数番だけふつう・奇数番はよわい。比べる用）
+  // つよい CPU は、ふつうの打ち方に、株の取り合いの打ち方（慎重に替える・渡さない・ほかの人の会社を育てない・いちばんの相手に渡さない）を足す
+  G.players.forEach(q => { q.smart = PARAMS.get('mix') === '1' ? q.id % 2 === 0 : CPU_LEVEL !== 'easy'; q.strong = CPU_LEVEL === 'strong'; });
   makePlan();
   // 最初の波の前だけ、使える時間を2倍にする（はさみうち・縦断で、守りが間に合わず1〜2回目の波で全滅していたため）。?prep= で変えられる
   G.centralLeft = CENTRAL_CARDS; G.limit = budget() * +(PARAMS.get('prep') || 2);
@@ -982,7 +984,7 @@ function cardValue(p, id, own) {
 // ほかの人の手札は見えないので、公開した枚数で見る。場に残した株を誰が取るかは分からないので半分に見る
 const DENY = PARAMS.get('deny') || '1';
 function denyValue(p, id, mine, fp) {
-  if (DENY === '0' || (DENY === 'mix' && p.id % 2)) return 0;
+  if (PARAMS.has('deny') ? (DENY === '0' || (DENY === 'mix' && p.id % 2)) : !p.strong) return 0;
   let worst = 0;
   G.players.forEach(q => {
     if (q === p) return;
@@ -990,8 +992,16 @@ function denyValue(p, id, mine, fp) {
     const before = bonusShare(p, id, mine); q.shares[id]++; const loss = before - bonusShare(p, id, mine); q.shares[id]--;
     worst = Math.max(worst, gain + loss);
   });
-  return worst * fp * .5 * .5;
+  // いちばんの相手に渡さない（暫定で全員。?denylead=0 でなし、?denylead=mix で偶数番だけ。ユーザー）：いちばんの相手（自分よりお金の見込みが多い人のうち最多）には、筆頭のまま差が広がるだけでも
+  // 株1枚分の値打ちが増えるので、場に残すと渡る分として足す（大きい会社ほど株価が高いので強く見る）
+  let lead = 0;
+  if (PARAMS.has('denylead') ? (DENY_LEAD === '1' || (DENY_LEAD === 'mix' && p.id % 2 === 0)) : p.strong) {
+    const top = G.players.filter(q => q !== p).sort((a, b) => wealth(b) - wealth(a))[0];
+    if (top && wealth(top) >= wealth(p) * .9) lead = fp * .5;
+  }
+  return worst * fp * .5 * .5 + lead;
 }
+const DENY_LEAD = PARAMS.get('denylead') || '1';   // mix で偶数番だけ
 function cpuTake(p) {
   if (canReset(p)) { resetMarket(); p.resetUsed = true; }
   let best = { mi:-1, v:200 + Math.random() * 50 };  // 山札の一番上
@@ -1003,13 +1013,22 @@ function cpuTake(p) {
 // 慎重に替える CPU（?exch=careful で全員、?exch=mix で偶数番だけ。試し中）：筆頭・次点を争える会社の株は替えない。
 // 替えるのは、立っていない会社の株が1枚だけのときと、ほかの人に3枚以上離されて筆頭も次点も望めない会社の株
 const EXCH = PARAMS.get('exch') || 'careful';   // 暫定：慎重に替える CPU が強かった（?exch=now で前の替え方）
-const exchCareful = p => EXCH === 'careful' || (EXCH === 'mix' && p.id % 2 === 0);
+// 切り替えを指定しなければ、つよい CPU だけ（下の渡さない・育てないも同じ）
+const exchCareful = p => PARAMS.has('exch') ? EXCH === 'careful' || (EXCH === 'mix' && p.id % 2 === 0) : !!p.strong;
 function hopeless(p, id) {
   const co = G.cos[id], mine = p.shares[id] + p.cards.filter(c => c === id).length;
   if (!co.active) return p.cards.filter(c => c === id).length <= 1;
   const others = G.players.filter(q => q !== p).map(q => q.shares[id]).sort((a, b) => b - a);
+  if (COUNTING === '1' || (COUNTING === 'mix' && p.id % 2 === 0)) {
+    // 数える（?count=1、試し中。ユーザー。望みなしの見方が甘くなり、公開にお金を使いすぎて守れなくなった：5回中0回）：公開した株と場の株は見えるので、残りの枚数（山札とみんなの手札）が分かる。
+    // 残りを全部自分が取っても次点に届かないときだけ、望みなしとみる
+    const seen = G.players.reduce((a, q) => a + q.shares[id], 0) + G.market.filter(c => c === id).length + p.cards.filter(c => c === id).length;
+    const unseen = Math.max(0, SHARES_BY_CO[id] - seen);
+    return (others[1] || 0) - mine > unseen;
+  }
   return (others[1] || 0) - mine >= 3;   // 次点にも3枚以上届かない
 }
+const COUNTING = PARAMS.get('count') || '';   // mix で偶数番だけ
 function cpuExchange(p) {
   if (!canExchange(p)) return;
   const worst = [...new Set(p.cards.filter(c => c !== CENTRAL))].filter(id => !exchCareful(p) || hopeless(p, id)).map(id => ({ id, v:cardValue(p, id, true) })).sort((a, b) => a.v - b.v)[0];
@@ -1107,7 +1126,7 @@ function routeValue(p, before, after) {
 // ほかの人が筆頭の会社は育てない（暫定で全員。?grow=0 で前の置き方、?grow=mix で偶数番だけ。ユーザー）：
 // 大きくなると安全になって筆頭が決まったままになり、となりの会社も吸収して太る。いちばん持っている人の公開した枚数の8割を、自分の持ち分から引いて見る
 const GROW = PARAMS.get('grow') || 'rival';
-const growRival = p => GROW === 'rival' || (GROW === 'mix' && p.id % 2 === 0);
+const growRival = p => PARAMS.has('grow') ? GROW === 'rival' || (GROW === 'mix' && p.id % 2 === 0) : !!p.strong;
 const rivalHold = (p, id) => Math.max(0, ...G.players.filter(q => q !== p).map(q => q.shares[id])) * .8;
 // 置こうとしているタイルが、どの会社に入りそうか（となりの会社。複数なら大きい方）
 function guessOwner(x, y) {
@@ -2753,7 +2772,7 @@ function loadNetSave() { try { return JSON.parse(localStorage.getItem(NET_SAVE_K
 function clearNetSave() { try { localStorage.removeItem(NET_SAVE_KEY); } catch (e) {} }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 function resumeGame(sv) {
-  useCourse(sv.course); NPLAYERS = sv.n; POWERS = !!sv.powers; DIFF = DIFFS[sv.diff] ? sv.diff : 'normal'; CPU_LEVEL = sv.level === 'easy' ? 'easy' : 'normal'; NO_LIMIT = !!sv.noLimit;
+  useCourse(sv.course); NPLAYERS = sv.n; POWERS = !!sv.powers; DIFF = DIFFS[sv.diff] ? sv.diff : 'normal'; CPU_LEVEL = CPU_LEVELS.includes(sv.level) ? sv.level : 'normal'; NO_LIMIT = !!sv.noLimit;
   setup(); resize();
   Object.assign(G, sv.g); PLAN = new Set(sv.plan || []);
   G.dist = distanceField(); G.actor = null; G.busy = false; G.selected = null; G.menu = null;
@@ -2817,7 +2836,7 @@ function showStart() {
       line('人数', [2, 3, 4, 5, 6].map(k => [k, k + '人']), 'n', n) +
       line('難しさ', Object.entries(DIFFS).map(([k, d]) => [k, d.name]), 'df', DIFF) +
       line('考える時間', [[0, 'あり'], [1, 'なし']], 'nl', NO_LIMIT ? 1 : 0) +
-      line('CPU の強さ', [['normal', 'ふつう'], ['easy', 'よわい']], 'lv', CPU_LEVEL) +
+      line('CPU の強さ', [['strong', 'つよい'], ['normal', 'ふつう'], ['easy', 'よわい']], 'lv', CPU_LEVEL) +
       line('会社の能力', [[0, 'なし'], [1, 'あり']], 'pw', POWERS ? 1 : 0) +
       `<p class="note">${mode === 'host' ? '人数は、ほかの人と CPU を合わせた数。空いた席は CPU が入る。' : '人数は、あなたと CPU を合わせた数。'}</p>`,
       [['次へ（コースを選ぶ）', courses], ['戻る', title]]);
