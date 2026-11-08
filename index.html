@@ -827,9 +827,9 @@ function revealShares(p, id, n) {
 }
 // 2社の株を1枚ずつ公開する（ユニオン・パシフィックどおり。1回の行動として、時間は2）
 const canRevealPair = (p, a, b) => a !== b && canReveal(p, a, 1) && canReveal(p, b, 1) && p.money >= priceOf(a) + priceOf(b);
-// 公開の時間：1回の公開につき1（何枚出しても、2社に1枚ずつでも同じ。ユニオン・パシフィックの「1回の手番で何枚でも」にそろえる。
-// 1枚につき1だと、まとめて出す意味がなかった）。?revtime=card で前の「1枚につき1」、?revtime=2 などで変えて比べる
-const REV_TIME = PARAMS.get('revtime') === 'card' ? null : (PARAMS.get('revtime') || '1');
+// 公開の時間：1枚につき1（2社に1枚ずつなら2）。1回につき1だと、先に公開すればほぼ次も自分の番でやり得だった（ユーザー）。
+// ?revtime=1 で「何枚でも1」、?revtime=2 などで変えて比べる（試し中・暫定）
+const REV_TIME = (PARAMS.get('revtime') || 'card') === 'card' ? null : PARAMS.get('revtime');
 const revealTime = n => REV_TIME ? +REV_TIME : n;
 function revealPair(p, a, b) {
   G.pairing = true; revealShares(p, a, 1); revealShares(p, b, 1); G.pairing = false;
@@ -986,9 +986,19 @@ function cpuTake(p) {
   takeShare(p, best.mi);
 }
 // いちばん値打ちの低い手札の株が、投資信託より安ければ交換する
+// 慎重に替える CPU（?exch=careful で全員、?exch=mix で偶数番だけ。試し中）：筆頭・次点を争える会社の株は替えない。
+// 替えるのは、立っていない会社の株が1枚だけのときと、ほかの人に3枚以上離されて筆頭も次点も望めない会社の株
+const EXCH = PARAMS.get('exch') || 'careful';   // 暫定：慎重に替える CPU が強かった（?exch=now で前の替え方）
+const exchCareful = p => EXCH === 'careful' || (EXCH === 'mix' && p.id % 2 === 0);
+function hopeless(p, id) {
+  const co = G.cos[id], mine = p.shares[id] + p.cards.filter(c => c === id).length;
+  if (!co.active) return p.cards.filter(c => c === id).length <= 1;
+  const others = G.players.filter(q => q !== p).map(q => q.shares[id]).sort((a, b) => b - a);
+  return (others[1] || 0) - mine >= 3;   // 次点にも3枚以上届かない
+}
 function cpuExchange(p) {
   if (!canExchange(p)) return;
-  const worst = [...new Set(p.cards.filter(c => c !== CENTRAL))].map(id => ({ id, v:cardValue(p, id) })).sort((a, b) => a.v - b.v)[0];
+  const worst = [...new Set(p.cards.filter(c => c !== CENTRAL))].filter(id => !exchCareful(p) || hopeless(p, id)).map(id => ({ id, v:cardValue(p, id) })).sort((a, b) => a.v - b.v)[0];
   // 受け取る1口は公開済みで、終わりに売れる。差し出す株の値打ちより高ければ交換する
   if (worst && futureTrust() > worst.v + 100) exchangeCentral(p, worst.id);
 }
@@ -2294,7 +2304,7 @@ function renderMarket() {
     const ok = chosen.length === 1 ? canReveal(me(), chosen[0][0], chosen[0][1]) : canRevealPair(me(), chosen[0][0], chosen[1][0]);
     const row = document.createElement('div'); row.style.cssText = 'width:100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap';
     row.innerHTML = `<span class="note">${chosen.map(([id, k]) => coOf(id).name + '×' + k).join('と')}を公開：${cost}払う${ok ? '' : '（お金が足りない）'}</span>`;
-    const go = document.createElement('button'); go.className = 'btn'; go.style.borderColor = '#7cf9ff'; go.textContent = `公開する（時間1）`; go.disabled = !ok;
+    const go = document.createElement('button'); go.className = 'btn'; go.style.borderColor = '#7cf9ff'; go.textContent = `公開する（時間${chosen.length === 1 ? revealTime(chosen[0][1]) : (REV_TIME ? +REV_TIME : 2)}）`; go.disabled = !ok;
     go.onclick = () => { const c2 = chosen; G.revSel = {}; if (c2.length === 1) act(G.viewer || 0, { t:'reveal', id:c2[0][0], n:c2[0][1] }); else act(G.viewer || 0, { t:'pair', a:c2[0][0], b:c2[1][0] }); };
     const no = document.createElement('button'); no.className = 'btn'; no.textContent = 'やめる'; no.onclick = () => { G.revSel = {}; renderMarket(); };
     row.appendChild(go); row.appendChild(no); box.appendChild(row);
@@ -2463,7 +2473,7 @@ const RULES_HTML = () => `<h3>電脳都市のルール（まとめ）</h3>${POWE
 <h4>手番でできること（どれか1つ）</h4><ul>
 <li><b>タイルを置く</b>：手札のタイルには<b>印のマス</b>（盤に点線で出る）と、そのマスのエリアが書いてある。${CELL_EXTRA ? `<b>同じエリアの空いているマス</b>なら、札の時間で置ける。<b>印のマスに置けば時間が${CELL_EXTRA}少ない</b>` : 'そのエリアの空いているマスならどこにでも置ける'}（盤のうすい文字 A〜F がエリア）。盤の光るマスを押すと、そこに置けるタイルが並ぶ。置いたマスは壁になり、敵はよけて進む（遠回りさせるほど守りやすい）。入口から出口への道をふさぐ置き方はできない。置いたら<b>株を1枚手札に入れる</b>。<b>2人のときだけ</b>、置いたあとに手札のタイルを1枚入れ替えてもよい（入れ替えたタイルは山の底へ）。</li>
 <li><b>強化する</b>：盤のタワーを押して強化（3段階まで）。誰が置いたタワーでもよい。強化しても株を1枚手札に入れる。</li>
-<li><b>株を公開する</b>：手札の株にお金（株価）を払って表にする。1社なら何枚でも、2社なら1枚ずつ。時間は1回につき1（何枚出しても同じ）。<b>敵が来ている間はできない</b>。</li>
+<li><b>株を公開する</b>：手札の株にお金（株価）を払って表にする。1社なら何枚でも、2社なら1枚ずつ。時間は${REV_TIME ? `1回につき${REV_TIME}（何枚出しても同じ）` : '1枚につき1'}。<b>敵が来ている間はできない</b>。</li>
 <li>印のマスが埋まった（か、道がふさがるなどで置けなくなった）タイルを、まとめて入れ替える（時間1）。手札の印のマスが全部そうなったら、時間を使わずに手札を全部入れ替える。</li>
 <li>どれもできないときだけ、タイルを1枚捨てて引き直す（時間1）。</li></ul>
 <h4>色とマーク</h4><p>タイルの<b>色は会社</b>（灰色は会社のないタイル）。<b>黄色の点線に「印」</b>は、あなたの手札のタイルの印のマス（まだ置いていない）。<b>マークはタワーの種類</b>。撃つ光線も会社の色。</p>
