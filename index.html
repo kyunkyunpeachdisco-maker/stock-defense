@@ -636,7 +636,9 @@ function resolveGroup(p, x, y, onDone) {
       const free = G.cos.filter(c => !c.active);
       if (!free.length) return onDone();
       const found = id => { foundCompany(p, id, grp); onDone(); };
-      if (p.cpu) found(free.map(c => ({ id:c.id, v:(p.cards.filter(x => x === c.id).length + p.shares[c.id]) * 10 + c.tier + Math.random() })).sort((a, b) => b.v - a.v)[0].id);
+      // CPU の設立：手札と公開した株の多い会社を選び、同じならくじ。前は同じなら★の多い会社で、序盤はヘリオス・オメガばかり立っていた（?found=tier で前の形）
+      const held = c => p.cards.filter(x => x === c.id).length + p.shares[c.id];
+      if (p.cpu) found(free.map(c => ({ id:c.id, v:held(c) * 10 + (PARAMS.get('found') === 'tier' ? c.tier + Math.random() : Math.random() * 5) })).sort((a, b) => b.v - a.v)[0].id);
       else requestChoice(p, 'found', { ids:free.map(c => c.id) }, found);
       return;
     }
