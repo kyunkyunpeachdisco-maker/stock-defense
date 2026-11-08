@@ -198,8 +198,12 @@ const priceOf = id => id === CENTRAL ? centralPrice() : price(G.cos[id]);  // �
 const CPU_LEVELS = ['strong', 'normal', 'easy'];
 let CPU_LEVEL = CPU_LEVELS.includes(PARAMS.get('level')) ? PARAMS.get('level') : 'normal';
 // 難しさ（人が遊ぶとき用）：敵の体力の倍率と、最初の3波をさらに柔らかくするか。CPU の試しで合わせた硬さが「ふつう」
-const DIFFS = { easy:{ name:'やさしい', hp:.8, early:.7 }, normal:{ name:'ふつう', hp:1 }, hard:{ name:'むずかしい', hp:1.15 } };
+const DIFFS = { easy:{ name:'やさしい', hp:.8, early:.7 }, normal:{ name:'ふつう', hp:1 }, hard:{ name:'むずかしい', hp:1.25 } };   // むずかしいは 1.15 だと、能力あり・つよい CPU で 9/20 守りきれた（目安2〜3割）ので暫定で上げた
 let DIFF = DIFFS[PARAMS.get('diff')] ? PARAMS.get('diff') : 'normal';
+// むずかしいの硬さを波ごとに上げていく（暫定。?ramp=0 で一律 1.25 倍）：一律 1.25 倍だと序盤（波3〜6）で崩れる負けばかりだったので、
+// 波1は 1.0 倍、最後の波で 1.45 倍まで上げ、終盤まで粘ってから負ける形にする
+const HARD_RAMP = PARAMS.get('ramp') !== '0';
+const diffHp = () => DIFF === 'hard' && HARD_RAMP ? 1 + .45 * (Math.max(1, G.wave) - 1) / (WAVES - 1) : DIFFS[DIFF].hp;
 let NO_LIMIT = PARAMS.get('limit') === '0';   // 考える時間なし（人が遊ぶとき、自分の番の考える時間が減らない）
 let NPLAYERS = Math.max(2, Math.min(6, +(PARAMS.get('players') || 4)));
 
@@ -542,7 +546,7 @@ function newCycle() {
   const base = G.limit;
   const behind = G.players.filter(p => p.t < base).sort((a, b) => a.t - b.t || b.order - a.order);
   behind.forEach((p, i) => { p.t = base; p.order = 1e9 - i; });  // 線ちょうどにいた人より先に動く
-  G.players.forEach(p => { p.resetUsed = false; p.clock = WAVE_GAP; });
+  G.players.forEach(p => { p.resetUsed = false; p.clock = WAVE_GAP; p.renewN = 0; });
   G.limit = base + budget();
   renderAll();
 }
@@ -1386,6 +1390,7 @@ const printedFilled = t => {
   return printedMemo.m.get(k);
 };
 // 入れ替え：指定のタイルを山の底に戻して、同じ枚数を引き直す
+const renewTime = p => (p.renewN || 0) + 1;
 function renewTiles(p, idxs) {
   const out = idxs.map(i => p.hand[i]);
   p.hand = p.hand.filter((t, i) => !idxs.includes(i));
@@ -1448,7 +1453,7 @@ function spawn(type) {
   const ent = COURSE === 1 && G.wave <= 10 ? G.wave % 2 : rnd(ENTRANCES.length), [ex, ey] = ENTRANCES[ent];
   // 最初の3回の波だけ敵を弱くする（?early=0.5 なら波1は半分、波4でふつうに戻る。ふつうは1、入口が隅のコースはコースごとの値）
   const E = +(PARAMS.get('early') || Math.min(COURSES[COURSE].early || 1, DIFFS[DIFF].early || 1)), early = G.wave <= 3 ? E + (1 - E) * (G.wave - 1) / 3 : 1;
-  const def = ENEMY[type], hp = Math.round(def.hp * (6 + effWave(G.wave) * HP_GROWTH) * early * (COURSES[COURSE].hpMul || 1) * playerHp() * DIFFS[DIFF].hp * (POWERS ? POWER_HP : 1) * 10) / 10;  // 回を追うごとに硬くする（数字は仮）
+  const def = ENEMY[type], hp = Math.round(def.hp * (6 + effWave(G.wave) * HP_GROWTH) * early * (COURSES[COURSE].hpMul || 1) * playerHp() * diffHp() * (POWERS ? POWER_HP : 1) * 10) / 10;  // 回を追うごとに硬くする（数字は仮）
   const [x, y] = center(ex, ey);
   G.enemies.push({ type, x, y, hp, max:hp, cell:key(ex, ey), next:null, slow:0, id:++G.seq, ent });
 }
@@ -1701,7 +1706,16 @@ function finish(win) {
   log(`投資信託を ${tp} で売った`);
   G.players.forEach(q => { if (q.bank) { q.money += q.bank; earn(q, '預かりの配当', q.bank); q.bank = 0; } });
   const rank = [...G.players].sort((a, b) => b.money - a.money);
-  G.result = rank.map((p, i) => `${i + 1}位 ${p.name} ${p.money}`).join('\n');
+  // 結果：順位と、お金の内訳・会社ごとの公開した株（筆頭◎・次点○）も出す（最終ポイントだけだと、なぜその順位か分からなかった。ユーザー）
+  const inc = (p, ks) => ks.reduce((a, k) => a + ((p.income || {})[k] || 0), 0);
+  const parts = p => [['終わりのボーナス', inc(p, ['終わりのボーナス'])], ['株の売却', inc(p, ['終わりの売却'])], ['配当', inc(p, DIV_BANK ? ['預かりの配当'] : ['決算の配当'])],
+    ['合併', inc(p, ['合併のボーナス', '合併の売却'])], ['投資信託', inc(p, ['投資信託の売却'])], ['払った', inc(p, ['払った（会社）', '払った（投資信託）'])]].filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join('・');
+  const coLines = G.final.activeIds.map(id => {
+    const n = G.final.shares.map(sh => sh[id]), sorted = [...new Set(n)].filter(v => v > 0).sort((a, b) => b - a);
+    return `${G.cos[id].name}（株価${G.final.price[id]}）：` + G.players.map((q, i) => `${q.name.replace('CPU', 'C')} ${n[i]}${n[i] && n[i] === sorted[0] ? '◎' : n[i] && n[i] === sorted[1] ? '○' : ''}`).join('　');
+  });
+  const trust = G.players.map((q, i) => `${q.name.replace('CPU', 'C')} ${G.final.shares[i][CENTRAL]}`).join('　');
+  G.result = rank.map((p, i) => `${i + 1}位 ${p.name} ${p.money}\n　${parts(p)}`).join('\n') + '\n\n会社の株（公開した枚数。◎筆頭 ○次点）\n' + coLines.join('\n') + `\n投資信託（1口 ${tp}）：${trust}`;
   log('結果：' + rank[0].name + 'の勝ち');
   renderAll(); showResult();
 }
@@ -2198,7 +2212,7 @@ function renderTrack() {
 // 「今やること」：いまの場面で何ができるかを1〜2行で出す
 function turnText() {
   const p = G.actor;
-  if (G.over) return ['終わりました', ''];
+  if (G.over) return ['終わりました', '<button class="btn" data-end="result">結果を見る</button> <button class="btn" data-end="again">もう一度</button>'];
   const left = AUTO ? '' : `この波で使える時間：あと${Math.max(0, G.limit - me().t)}`;
   if (!p) return ['全員が時間を使い切りました', `波が終わると${budget()}ずつ補充されます`];
   if (p !== me()) return [`${p.name} の番`, left];
@@ -2224,6 +2238,7 @@ function turnText() {
 function renderTurn() {
   const [a, b] = turnText();
   document.getElementById('turn').innerHTML = `<span class="now">${a}</span>${b ? `<span class="sub">${b}</span>` : ''}`;
+  document.querySelectorAll('#turn [data-end]').forEach(bt => bt.onclick = () => bt.dataset.end === 'result' ? showResult() : location.reload());
   renderGuide();
 }
 // はじめのうちは、押す場所を光らせる（「？ ルール」から消せる）
@@ -2280,7 +2295,7 @@ function renderHand() {
   if (G.swapping && G.swapping.p === me()) { sb.style.display = ''; sb.disabled = false; sb.textContent = '入れ替えない'; }
   else { sb.textContent = 'タイルを捨てて引き直す（時間1）'; sb.disabled = !(mine && !canDoSomething(me())); sb.style.display = sb.disabled ? 'none' : ''; }
   const nb = document.getElementById('renewBtn'), nf = me().hand.filter(printedFilled).length;
-  nb.style.display = mine && nf && !G.swapping ? '' : 'none'; nb.textContent = `印が使えないタイルを入れ替える（${nf}枚・時間1）`;
+  nb.style.display = mine && nf && !G.swapping ? '' : 'none'; nb.textContent = `印が使えないタイルを入れ替える（${nf}枚・時間${renewTime(me())}）`;
   renderMenu();
 }
 const drawSpots = {};
@@ -2395,14 +2410,14 @@ function renderMarket() {
       ...G.market.map((id, mi) => { const co = G.cos[id]; return [`${co.name}<br><span class="note">${co.active ? price(co) : 'まだない'}</span>${powerLine(id)}`, co.color, () => act(G.viewer || 0, { t:'take', mi }), tk,
         (co.active ? `${co.name}の株。いまの株価${price(co)}（公開するときに払う）` : `${co.name}はまだ盤にない。手札に入れておけるが、公開できるのは設立されてから`) + powerTip(id)]; }),
       ['山札<br><span class="note">何が来るか</span>', null, () => act(G.viewer || 0, { t:'take', mi:-1 }), tk && G.deck.length, '山札の一番上を、見ないで手札に入れる'],
-      [`投資信託<br><span class="note">残り${G.centralLeft}</span>`, CENTRAL_CO.color, () => act(G.viewer || 0, { t:'take', mi:-2 }), tk && G.centralLeft > 0, `投資信託。値段は盤にある会社の株価の平均（いま${centralPrice()}）。筆頭も配当もなく、終わりにそのときの値段で売れる`]]);
+      [`投資信託<br><span class="note">${G.centralLeft > 0 ? '残り' + G.centralLeft : '売り切れ'}</span>`, CENTRAL_CO.color, () => act(G.viewer || 0, { t:'take', mi:-2 }), tk && G.centralLeft > 0, `投資信託。値段は盤にある会社の株価の平均（いま${centralPrice()}）。筆頭も配当もなく、終わりにそのときの値段で売れる`]]);
     if (tk && canReset(me())) {
       const r = document.createElement('button'); r.className = 'btn'; r.textContent = '場を入れ替える（どれも公開できないときの1回だけ）'; r.style.marginTop = '4px';
       r.onclick = () => act(G.viewer || 0, { t:'reset' }); el.appendChild(r);
     }
   } else if (G.actor === me() && !G.over) {
     // スマホの自分の番：置く・強化したらもらえる株を、押せない見本として小さく1行で
-    el.insertAdjacentHTML('beforeend', `<div class="shead">置いたらもらえる株（どれか1枚）</div><div class="peek">${G.market.map(id => { const co = G.cos[id]; return `<span style="border-color:${co.color}">${co.name}<small>${co.active ? price(co) : 'まだない'}${POWERS ? '・' + POWER[id].name : ''}</small></span>`; }).join('')}<span>山札</span><span style="border-color:${CENTRAL_CO.color}">投資信託</span></div>`);
+    el.insertAdjacentHTML('beforeend', `<div class="shead">置いたらもらえる株（どれか1枚）</div><div class="peek">${G.market.map(id => { const co = G.cos[id]; return `<span style="border-color:${co.color}">${co.name}<small>${co.active ? price(co) : 'まだない'}${POWERS ? '・' + POWER[id].name : ''}</small></span>`; }).join('')}<span>山札</span>${G.centralLeft > 0 ? `<span style="border-color:${CENTRAL_CO.color}">投資信託</span>` : `<span style="opacity:.45">投資信託<small>売り切れ</small></span>`}</div>`);
   }
   // 株の手札：押して公開する株を選び（押すたびに1枚ずつ増える）、最後に「公開する」で決める。
   // 1社なら何枚でも、2社なら1枚ずつ。選び方に合わない押し方をしたら、その会社だけを選び直す
@@ -2517,10 +2532,11 @@ function act(pid, a) {
     case 'remove': if (!turn || !canRemove(a.k)) return false; G.busy = true; removeAction(p, a.k); afterAction(); return true;
     case 'reveal': if (!turn || !(a.n >= 1) || !canReveal(p, a.id, a.n)) return false; G.busy = true; revealShares(p, a.id, a.n); afterAction(); return true;
     case 'pair': if (!turn || !canRevealPair(p, a.a, a.b)) return false; G.busy = true; revealPair(p, a.a, a.b); afterAction(); return true;
-    case 'renew': {   // 印が埋まったタイルを全部入れ替える（時間1）
+    case 'renew': {   // 印が埋まったタイルを全部入れ替える。時間は同じ波の1回目は1、2回目は2、3回目は3…（何度も引き直せないように。ユーザー）
       const idxs = p.hand.map((t, i) => printedFilled(t) ? i : -1).filter(i => i >= 0);
       if (!turn || !idxs.length) return false;
-      renewTiles(p, idxs); spend(p, 1); log(`${p.name}：印が使えないタイルを${idxs.length}枚入れ替えた（時間1）`); G.stats.renew = (G.stats.renew || 0) + 1; afterAction(); return true;
+      const rt = renewTime(p); p.renewN = (p.renewN || 0) + 1;
+      renewTiles(p, idxs); spend(p, rt); log(`${p.name}：印が使えないタイルを${idxs.length}枚入れ替えた（時間${rt}）`); G.stats.renew = (G.stats.renew || 0) + 1; afterAction(); return true;
     }
     case 'redraw': if (!turn || canDoSomething(p) || !p.hand[a.idx || 0]) return false; swapTile(p, a.idx || 0); afterAction(); return true;
     case 'take': if (!G.taking || G.taking.p !== p || ![-2, -1, 0, 1, 2, 3, 4].includes(a.mi)) return false; finishTake(a.mi); return true;
@@ -2605,7 +2621,7 @@ const RULES_HTML = () => `<h3>電脳都市のルール（まとめ）</h3>${POWE
 <li><b>タイルを置く</b>：手札のタイルには<b>印のマス</b>（盤に点線で出る）と、そのマスのエリアが書いてある。${CELL_EXTRA ? `<b>同じエリアの空いているマス</b>なら、札の時間で置ける。<b>印のマスに置けば時間が${CELL_EXTRA}少ない</b>` : 'そのエリアの空いているマスならどこにでも置ける'}（盤のうすい文字 A〜F がエリア）。盤の光るマスを押すと、そこに置けるタイルが並ぶ。置いたマスは壁になり、敵はよけて進む（遠回りさせるほど守りやすい）。入口から出口への道をふさぐ置き方はできない。置いたら<b>株を1枚手札に入れる</b>。<b>2人のときだけ</b>、置いたあとに手札のタイルを1枚入れ替えてもよい（入れ替えたタイルは山の底へ）。</li>
 <li><b>強化する</b>：盤のタワーを押して強化（3段階まで）。誰が置いたタワーでもよい。強化しても株を1枚手札に入れる。</li>
 <li><b>株を公開する</b>：手札の株にお金（株価）を払って表にする。1社なら何枚でも、2社なら1枚ずつ。時間は${REV_TIME ? `1回につき${REV_TIME}（何枚出しても同じ）` : '1枚につき1'}。<b>敵が来ている間はできない</b>。</li>
-<li>印のマスが埋まった（か、道がふさがるなどで置けなくなった）タイルを、まとめて入れ替える（時間1）。手札の印のマスが全部そうなったら、時間を使わずに手札を全部入れ替える。</li>
+<li>印のマスが埋まった（か、道がふさがるなどで置けなくなった）タイルを、まとめて入れ替える（時間は同じ波の1回目が1、2回目が2、3回目が3…と増える）。手札の印のマスが全部そうなったら、時間を使わずに手札を全部入れ替える。</li>
 <li>どれもできないときだけ、タイルを1枚捨てて引き直す（時間1）。</li></ul>
 <h4>色とマーク</h4><p>タイルの<b>色は会社</b>（灰色は会社のないタイル）。<b>黄色の点線に「印」</b>は、あなたの手札のタイルの印のマス（まだ置いていない）。<b>マークはタワーの種類</b>。撃つ光線も会社の色。</p>
 <ul>${Object.keys(TYPES).map(k => `<li><img src="${iconUrl(k)}" alt="" style="width:18px;height:18px;vertical-align:-4px;background:#16213d;border-radius:4px"> <b>${TYPES[k].name}</b>：${TYPE_DESC[k]}</li>`).join('')}</ul>
@@ -2648,7 +2664,8 @@ document.addEventListener('pointerdown', e => {
 document.addEventListener('pointerup', () => clearTimeout(tipTimer));
 document.addEventListener('scroll', hideTip, true);
 
-function showResult() { modal(`<h3>${G.lives > 0 ? '最終決算' : '全員の負け'}</h3><pre style="white-space:pre-wrap">${G.result}</pre>`, [['もう一度', () => location.reload()]]); }
+// 結果を閉じて、盤や会社のタブを見られる（「もう一度」だけだと、閉じると始めの画面に戻っていた。ユーザー）。下の「結果を見る」でまた開く
+function showResult() { modal(`<h3>${G.lives > 0 ? '最終決算' : '全員の負け'}</h3><pre style="white-space:pre-wrap">${G.result}</pre>`, [['盤と会社を見る', () => { document.getElementById('modal').style.display = 'none'; }], ['もう一度', () => location.reload()]]); }
 
 
 // ===== 何人かで遊ぶ（PeerJS。ホストが計算し、参加者には様子を送る。テンプレートの「端末間同期」の手順どおり） =====
