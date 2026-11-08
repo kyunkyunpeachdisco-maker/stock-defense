@@ -971,12 +971,26 @@ function futureTrust() {
   const w = act.map(c => G.players.reduce((s2, q) => s2 + q.shares[c.id], 0) || 1), sw = w.reduce((a, b) => a + b, 0);
   return act.reduce((s2, c, i) => s2 + futurePrice(c) * w[i], 0) / sw;
 }
-function cardValue(p, id) {
+function cardValue(p, id, own) {
   if (id === CENTRAL) return Math.max(100, futureTrust() - centralPrice() * .5);
   const co = G.cos[id];
   if (!co.active) return 150;
   const fp = futurePrice(co), mine = p.shares[id] + p.cards.filter(c => c === id).length;
-  return (fp - price(co) * .5) + (bonusShare(p, id, mine + 1) - bonusShare(p, id, mine)) * fp * .5;
+  return (fp - price(co) * .5) + (bonusShare(p, id, mine + 1) - bonusShare(p, id, mine)) * fp * .5 + (own ? 0 : denyValue(p, id, mine, fp));
+}
+// 渡さない（暫定で全員。?deny=0 で前の取り方、?deny=mix で偶数番だけ）。渡さない CPU のほうが勝った：場に残すと、ほかの人がそれを取って筆頭・次点に近づく分と、自分の順位が下がる分を、取る値打ちに足す。
+// ほかの人の手札は見えないので、公開した枚数で見る。場に残した株を誰が取るかは分からないので半分に見る
+const DENY = PARAMS.get('deny') || '1';
+function denyValue(p, id, mine, fp) {
+  if (DENY === '0' || (DENY === 'mix' && p.id % 2)) return 0;
+  let worst = 0;
+  G.players.forEach(q => {
+    if (q === p) return;
+    const n = q.shares[id], gain = bonusShare(q, id, n + 1) - bonusShare(q, id, n);
+    const before = bonusShare(p, id, mine); q.shares[id]++; const loss = before - bonusShare(p, id, mine); q.shares[id]--;
+    worst = Math.max(worst, gain + loss);
+  });
+  return worst * fp * .5 * .5;
 }
 function cpuTake(p) {
   if (canReset(p)) { resetMarket(); p.resetUsed = true; }
@@ -998,8 +1012,9 @@ function hopeless(p, id) {
 }
 function cpuExchange(p) {
   if (!canExchange(p)) return;
-  const worst = [...new Set(p.cards.filter(c => c !== CENTRAL))].filter(id => !exchCareful(p) || hopeless(p, id)).map(id => ({ id, v:cardValue(p, id) })).sort((a, b) => a.v - b.v)[0];
-  // 受け取る1口は公開済みで、終わりに売れる。差し出す株の値打ちより高ければ交換する
+  const worst = [...new Set(p.cards.filter(c => c !== CENTRAL))].filter(id => !exchCareful(p) || hopeless(p, id)).map(id => ({ id, v:cardValue(p, id, true) })).sort((a, b) => a.v - b.v)[0];
+  // 受け取る1口は公開済みで、終わりに売れる。差し出す株の値打ちより高ければ交換する。
+  // 差し出した株はゲームから消えるので、渡さないために取った株も、自分に要らなければ投資信託に替えてよい（自分にとっての値打ちだけで比べる）
   if (worst && futureTrust() > worst.v + 100) exchangeCentral(p, worst.id);
 }
 // 合併の見込み：このタイルで会社どうしがつながるなら、吸収される会社のボーナスのうち自分の取り分から、
@@ -1089,6 +1104,11 @@ function routeValue(p, before, after) {
   for (const id of new Set([...Object.keys(before), ...Object.keys(after)])) if (id !== '-1') v += perKillValue(p, +id) * K * ((after[id] || 0) - (before[id] || 0));
   return v;
 }
+// ほかの人が筆頭の会社は育てない（暫定で全員。?grow=0 で前の置き方、?grow=mix で偶数番だけ。ユーザー）：
+// 大きくなると安全になって筆頭が決まったままになり、となりの会社も吸収して太る。いちばん持っている人の公開した枚数の8割を、自分の持ち分から引いて見る
+const GROW = PARAMS.get('grow') || 'rival';
+const growRival = p => GROW === 'rival' || (GROW === 'mix' && p.id % 2 === 0);
+const rivalHold = (p, id) => Math.max(0, ...G.players.filter(q => q !== p).map(q => q.shares[id])) * .8;
 // 置こうとしているタイルが、どの会社に入りそうか（となりの会社。複数なら大きい方）
 function guessOwner(x, y) {
   const ids = [...new Set(neighbors(x, y).map(([a, b]) => G.owner[key(a, b)]).filter(v => v !== undefined))];
@@ -1165,7 +1185,7 @@ function reserveCost(p, cost) {
 function cpuAct(p) {
   replaceDead(p);
   const dist0 = G.dist, def0 = estimate(G.tiles, dist0), u0 = dangerOf(def0), L0 = loseChance(u0), myW = Math.max(3000, wealth(p));
-  const bestCard = Math.max(200, ...G.market.map(id => cardValue(p, id)));
+  const bestCard = Math.max(200, ...G.market.map(id => cardValue(p, id, true)));   // 手番の比べ方には、渡さない分を入れない
   const opts = [];
   // 置く：守りの増え方（危なさが下がる分）と、株を持つ会社が育つ分と、手札に入る株の値打ち
   const len0 = pathFrom(dist0).length, RT = routeOn(p), sh0 = RT ? coShares(G.tiles, dist0, k => G.owner[k]) : null;
@@ -1188,7 +1208,7 @@ function cpuAct(p) {
     const len1 = pathFrom(dist1).length, defM = MAZE && !LEAK ? def1 * Math.max(1, len1 / len0) + Math.max(0, len1 - len0) * 2 : def1;
     const safety = (loseChance(u0) - loseChance(dangerOf(defM))) * myW;
     const stakeIds = new Set(neighbors(t.x, t.y).map(([a, b]) => G.owner[key(a, b)]).filter(v => v !== undefined));
-    const stake = [...stakeIds].reduce((s2, id) => s2 + (p.shares[id] + p.cards.filter(c => c === id).length) * 40, 0);
+    const stake = [...stakeIds].reduce((s2, id) => s2 + (p.shares[id] + p.cards.filter(c => c === id).length - (growRival(p) ? rivalHold(p, id) : 0)) * 40, 0);
     const growth = defGain(def0, def1) * (stake ? 1 : .2);
     const gco = RT ? guessOwner(t.x, t.y) : undefined, rv = RT ? routeValue(p, sh0, coShares(after, dist1, kk => kk === k ? gco : G.owner[kk])) : 0;
     const plan = planOn(p) && PLAN.has(k) ? PLAN_BONUS : 0;   // 設計図のマスなら高く見る
