@@ -256,7 +256,7 @@ const POWER = [
   { name:'株価が上がりやすい', desc:'倒した数が多めに数えられ、株価が上がりやすい' },
 ];
 const hasPower = (id, n) => POWERS && id === n;
-const POWER_HP = 1.06;   // 能力ありは守りが強くなるぶん、敵を硬くする（1.025 では能力なしより1割ほど守りやすかったので暫定で上げた。試しで確かめる）
+const POWER_HP = 1.12;   // 能力ありは守りが強くなるぶん、敵を硬くする（1.025・1.06 では能力なしより1割ほど守りやすかった：ふつう 16/20・むずかしい 9/20。暫定、試しで確かめる）
 // 1つの波につき1人が使える時間。使い切ったら次の波まで待つ（テーベの「年の終わり」のような区切り）。
 // 全員の合計を4人×6＝24にそろえる（ユーザー）：2人12・3人8・4人6・5人5・6人4
 const budget = () => Math.round(24 / NPLAYERS);
@@ -894,40 +894,49 @@ function defense(tiles, dist) {
   }
   return total;   // 敵1体が通り道を進む間に受ける火力のおおよそ（× 1マスを進む秒数）
 }
-// 二股を見る（?fork=1、試し中。ユーザー。この形は試しで守りきれなくなった：ふつう5回中1回）：敵は、出口に近づくマスが2つ以上あるとき、どれかをくじで選ぶので、道が分かれると敵も分かれる。
+// 二股を見る（暫定で使う。?fork=0 で前の見積もり。ユーザー）：敵は、出口に近づくマスが2つ以上あるとき、どれかをくじで選ぶので、道が分かれると敵も分かれる。
 // 前の見積もりは入口ごとに1本の道だけを見ていたので、分かれていた道（入口ごとの道が別々のときも）を1本にまとめても損と思わなかった
 // （分かれていた敵が1本に集まって負けた）。入口ごとに流れを分けながら進み、敵1体が受ける火力の見込み（Σ 流れ×火力）を出す。
 // 道が分かれているとタワーの火力を取り合う敵が減るので、全部の入口を合わせた流れの集まり具合
 // （Σ 流れ² ÷ Σ 流れ。全員が1本の道なら1、半分ずつの二股なら0.5）で割る。全員が1本の道なら前の見積もりと同じ値になる
-const FORK = PARAMS.get('fork') === '1';
+const FORK = PARAMS.get('fork') !== '0';
 const coverMemo = new Map();
 function coverCells(c, range) {
   const mk = c[0] + ',' + c[1] + ',' + range;
   if (!coverMemo.has(mk)) { const out = []; for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (cellDist(...c, ...center(x, y)) <= range) out.push(key(x, y)); coverMemo.set(mk, out); }
   return coverMemo.get(mk);
 }
+// 作り直し（2つ目の形）：敵1体が受ける火力は、そのマスのタワーの火力を、そのマスを通る敵の割合（全部の入口を合わせた流れ。全員なら1）で
+// 分けた分（割合が小さいほど取り合う敵が少ない。0.25 で頭打ち）。それを入口から出口までの道ごとに足し、いちばん少ない道で見る。
+// タワーのない道が1本でもあれば、そこを通る敵は削られないので守りは弱いと見る（前の形は平均で見たので、広い盤で強いと思い込んだ）
 function forkDefense(dist, towers) {
-  const all = new Map(), dpsAt = new Map(), slowAt = new Map();
-  // タワーごとに射程に入るマスを一度だけ数えて覚えておく（CPU が置き場所を何十通りも比べるので、マスごとに全部のタワーを調べると重い）
+  const dpsAt = new Map(), slowAt = new Map(), F = new Map();
   for (const t of towers) for (const k of coverCells(t.c, t.range)) { dpsAt.set(k, (dpsAt.get(k) || 0) + t.dps); slowAt.set(k, Math.max(slowAt.get(k) || 0, t.slow)); }
   const pow = k => (dpsAt.get(k) || 0) / (1 - (slowAt.get(k) || 0));
-  const sums = ENTRANCES.map(([ex, ey]) => {
-    let level = new Map([[key(ex, ey), 1]]), sum = 0, guard = 0;
+  const nextOf = k => { const d = dist[k]; if (!d) return []; const [x, y] = k.split(',').map(Number); return neighbors(x, y).map(([a, b]) => key(a, b)).filter(kk => dist[kk] === d - 1); };
+  // 1. 全部の入口を合わせた流れ
+  for (const [ex, ey] of ENTRANCES) {
+    let level = new Map([[key(ex, ey), 1 / ENTRANCES.length]]), guard = 0;
     while (level.size && guard++ < 300) {
       const next = new Map();
-      for (const [k, f] of level) {
-        sum += f * pow(k); all.set(k, (all.get(k) || 0) + f / ENTRANCES.length);
-        const d = dist[k]; if (!d) continue;
-        const [x, y] = k.split(',').map(Number), nx = neighbors(x, y).filter(([a, b]) => dist[key(a, b)] === d - 1);
-        for (const [a, b] of nx) { const kk = key(a, b); next.set(kk, (next.get(kk) || 0) + f / nx.length); }
+      for (const [k, f] of level) { F.set(k, (F.get(k) || 0) + f); const nx = nextOf(k); for (const kk of nx) next.set(kk, (next.get(kk) || 0) + f / nx.length); }
+      level = next;
+    }
+  }
+  // 2. 入口ごとに、出口までの道のうち受ける火力がいちばん少ない道
+  return ENTRANCES.map(([ex, ey]) => {
+    let level = new Map([[key(ex, ey), 0]]), best = Infinity, guard = 0;
+    while (level.size && guard++ < 300) {
+      const next = new Map();
+      for (const [k, v0] of level) {
+        const v = v0 + pow(k) / Math.max(.25, F.get(k) || 1), nx = nextOf(k);
+        if (!nx.length) { best = Math.min(best, v); continue; }
+        for (const kk of nx) next.set(kk, Math.min(next.has(kk) ? next.get(kk) : Infinity, v));
       }
       level = next;
     }
-    return sum;
+    return best === Infinity ? 0 : best;
   });
-  let f1 = 0, f2 = 0; for (const f of all.values()) { f1 += f; f2 += f * f; }
-  const conc = Math.max(.2, f2 / Math.max(1e-9, f1));
-  return sums.map(v => v / conc);
 }
 // 危なさ：次の波の敵1体の平均の体力と、守りが与えられるダメージを比べる。1を超えると危ない
 function danger(def) {
