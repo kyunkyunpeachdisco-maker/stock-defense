@@ -154,7 +154,7 @@
   <div class="sec">会社<span class="q" data-tip="つながったタイルのかたまり（2枚以上）に会社が付きます。株価は、その会社のタワーが倒した敵の数で上がります。会社どうしがつながると合併し、吸収された会社の株主にボーナスが出ます。">？</span></div>
   <table id="cos"></table>
   </div>
-  <div class="grp" id="gLog"><div id="log"></div></div>
+  <div class="grp" id="gLog"><button class="btn" id="exportBtn" style="margin:4px 0">記録を書き出す（JSON）</button><div id="log"></div></div>
 </div>
 <div id="modal"><div class="box" id="mbox"></div></div>
 <div id="pauseOv" style="position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:20"><div style="font-size:28px;font-weight:900;color:#fff;text-shadow:0 0 12px #33f0ff">一時停止中</div><button class="btn" id="resumeBtn" style="font-size:18px;padding:10px 28px">再開する</button></div>
@@ -383,7 +383,28 @@ const G = {
 
 function rnd(n) { return Math.floor(Math.random() * n); }
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-function log(t) { G.log.unshift(t); G.log.length = Math.min(G.log.length, 60); renderLog(); }
+function log(t) { G.log.unshift(t); G.log.length = Math.min(G.log.length, 60); (G.fullLog = G.fullLog || []).push([G.wave, t]); renderLog(); }
+// 打ち手の記録の書き出し（あとで試しや CPU づくりに使う。人が読む形でなくてよい。ユーザー）：
+// 波ごとの盤面のまとめ（各人のお金・預かり・公開した株・手札の株、会社のタイル数・倒した数・株価）と、最初からの記録の全文を JSON で保存する
+// 1手ずつの記録：誰が、どの波で、何をしたか（置いた場所・種類・入った会社、強化、取った株、公開、替えた・捨てた株、設立）。そのときの所持金と時間トラックも
+function rec(p, type, data) {
+  if (!p) return;
+  (G.moves = G.moves || []).push({ w:G.wave, p:p.id, type, ...data, money:p.money, t:p.t });
+}
+function recSnapshot(kind) {
+  (G.history = G.history || []).push({ kind, wave:G.wave, lives:G.lives,
+    players:G.players.map(q => ({ name:q.name, cpu:!!q.cpu, money:q.money, bank:q.bank || 0, shares:[...q.shares], cards:[...q.cards], hand:(q.hand || []).map(t => t.type) })),
+    cos:G.cos.map(co => ({ id:co.id, name:co.name, active:co.active, tiles:co.active ? coSize(co.id) : 0, kills:Math.round(co.kills * 10) / 10, price:co.active ? price(co) : 0 })),
+    centralLeft:G.centralLeft });
+}
+function exportRecord() {
+  const data = { app:'stock-defense', v:1, savedAt:new Date().toISOString(), settings:{ course:COURSE, n:NPLAYERS, diff:DIFF, level:CPU_LEVEL, powers:POWERS, noLimit:NO_LIMIT, params:location.search },
+    over:!!G.over, win:G.over ? G.lives > 0 : null, result:G.result || null, final:G.final || null, history:G.history || [], moves:G.moves || [], log:G.fullLog || [], stats:G.stats };
+  const a = document.createElement('a'), d = new Date();
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type:'application/json' }));
+  a.download = `stock-defense-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
 
 function setup() {
   // タイルの山：建てられるマスに1枚ずつ。種類は割合どおりに混ぜて座標に割り当てる
@@ -592,6 +613,7 @@ function placeTile(p, idx, onDone, at) {
   G.tiles[key(t.x, t.y)] = { type:t.type, x:t.x, y:t.y, cool:0, lv:1 }; G.stats.placed++; p.resetUsed = false;
   if (ax !== t0.x || ay !== t0.y) G.stats.placedNext = (G.stats.placedNext || 0) + 1;
   { const pt = G.stats.placedBy = G.stats.placedBy || {}; pt[t.type] = (pt[t.type] || 0) + 1; }
+  rec(p, 'place', { tile:t.type, at:[t.x, t.y], printed:t.x === t0.x && t.y === t0.y, hand:p.hand.map(h => h.type) });
   p.hand.splice(idx, 1); G.selected = null; G.target = null;
   if (G.bag.length) p.hand.push(G.bag.pop());
   const tm = placeTime(t0, t.x, t.y); spend(p, tm);
@@ -638,7 +660,7 @@ function removeAction(p, k) {
 // 取り除けるか：入口・出口の道はふさがらない。敵がいるときは、敵の道が変わるだけなのでいつでもよい
 const canRemove = k => REMOVE && !!G.tiles[k];
 function upgradeTile(p, k) {
-  const t = G.tiles[k]; t.lv++; spend(p, TYPES[t.type].time); G.stats.upgrades++;
+  const t = G.tiles[k]; t.lv++; spend(p, TYPES[t.type].time); G.stats.upgrades++; rec(p, 'upgrade', { tile:t.type, at:[t.x, t.y], lv:t.lv, co:G.owner[k] });
   { const ut = G.stats.upgBy = G.stats.upgBy || {}; ut[t.type] = (ut[t.type] || 0) + 1; } p.resetUsed = false;
   log(`${p.name}：${label(t.x, t.y)} の${TYPES[t.type].name}を強化（段階${t.lv}、時間${TYPES[t.type].time}）`);
   burst(...center(t.x, t.y), '#eef3ff', 30, 1.6); sfx('upgrade', center(t.x, t.y)[0]);
@@ -671,7 +693,7 @@ function resolveGroup(p, x, y, onDone) {
 }
 
 function foundCompany(p, id, grp) {
-  const co = G.cos[id]; co.active = true; co.kills = 0; co.founder = p.id; G.stats.founds = (G.stats.founds || 0) + 1;
+  const co = G.cos[id]; co.active = true; co.kills = 0; co.founder = p.id; G.stats.founds = (G.stats.founds || 0) + 1; rec(p, 'found', { co:id });
   grp.forEach(k => G.owner[k] = id);
   log(`${p.name}：${co.name}を設立`);
   const c = centroid(id); if (c) { shock(c[0], c[1], 1.8); burst(c[0], c[1], co.color, 50, 2); floatText(c[0], c[1], `${co.name} 設立`, co.color); } G.flash[id] = 1; sfx('found');
@@ -768,14 +790,14 @@ function takeShare(p, mi) {
   if (mi === -2) { if (G.centralLeft <= 0) return; G.centralLeft--; id = CENTRAL; }
   else if (mi < 0) id = drawDeck(); else { id = G.market[mi]; G.market.splice(mi, 1); refillMarket(); }
   if (id === undefined) return;
-  p.cards.push(id); G.stats.taken = (G.stats.taken || 0) + 1;
+  p.cards.push(id); G.stats.taken = (G.stats.taken || 0) + 1; rec(p, 'take', { co:id, from:mi === -2 ? 'trust' : mi < 0 ? 'deck' : 'market', market:[...G.market] });
   log(`${p.name}：株を1枚手札に入れた` + (p.cpu ? '' : `（${coOf(id).name}）`));
 }
 // 株を取ったあと、手札の好きな1枚を差し出して、投資信託を1口受け取れる（現物拠出）。
 // 差し出した株が支払いのかわりなので、お金は払わず、そのまま公開された状態になる。出した株は伏せたままゲームから外す
 function exchangeCentral(p, id) {
   if (G.centralLeft <= 0 || id === CENTRAL) return;
-  p.cards.splice(p.cards.indexOf(id), 1); p.shares[CENTRAL]++; G.centralLeft--; G.stats.exchanged = (G.stats.exchanged || 0) + 1;
+  p.cards.splice(p.cards.indexOf(id), 1); p.shares[CENTRAL]++; G.centralLeft--; G.stats.exchanged = (G.stats.exchanged || 0) + 1; rec(p, 'exchange', { co:id });
   log(`${p.name}：手札の株1枚を投資信託に替えた`);
 }
 const canExchange = p => G.centralLeft > 0 && p.cards.some(c => c !== CENTRAL);
@@ -786,6 +808,7 @@ function canReset(p) { return !p.resetUsed && G.market.length > 0 && !G.market.s
 // 8枚まで（?cardmax= で変えられる。0 で上限なし）
 const CARD_MAX = PARAMS.has('cardmax') ? +PARAMS.get('cardmax') : 8;
 function discardCard(p, id) {
+  rec(p, 'discard', { co:id });
   p.cards.splice(p.cards.indexOf(id), 1);
   if (id === CENTRAL) G.centralLeft++; else (G.discards = G.discards || []).push(id);
   G.stats.discarded = (G.stats.discarded || 0) + 1;
@@ -827,7 +850,7 @@ function finishExchange(id) {
 }
 const canReveal = (p, id, n = 1) => !waveActive() && coOf(id).active && p.cards.filter(c => c === id).length >= n && p.money >= priceOf(id) * n;
 function revealShares(p, id, n) {
-  const co = coOf(id), pr = priceOf(id);
+  const co = coOf(id), pr = priceOf(id); rec(p, 'reveal', { co:id, n, price:pr, others:G.players.map(q => q.shares[id]) });
   for (let i = 0; i < n; i++) p.cards.splice(p.cards.indexOf(id), 1);
   p.shares[id] += n; p.money -= pr * n; G.stats.bought += n; p.resetUsed = false; earn(p, id === CENTRAL ? '払った（投資信託）' : '払った（会社）', -pr * n);
   (G.revLog = G.revLog || []).push({ wave:G.wave, pid:p.id, id, n, pr, after:p.shares[id] });
@@ -1521,6 +1544,7 @@ function waveTick(dt) {
     }
     if (DIVIDEND_WAVES.includes(G.wave) && G.wave < WAVES) settle();
     if (CYCLE === 'end') newCycle();
+    recSnapshot('wave');
     if (G.wave < WAVES) { announce(`WAVE ${G.wave} クリア`, '時間が補充された。株を公開できる'); sfx('clear'); }
   }
   if (G.wave >= WAVES) return finish(true);
@@ -1719,6 +1743,7 @@ function finish(win) {
   const trust = G.players.map((q, i) => `${q.name.replace('CPU', 'C')} ${G.final.shares[i][CENTRAL]}`).join('　');
   G.result = rank.map((p, i) => `${i + 1}位 ${p.name} ${p.money}\n　${parts(p)}`).join('\n') + '\n\n会社の株（公開した枚数。◎筆頭 ○次点）\n' + coLines.join('\n') + `\n投資信託（1口 ${tp}）：${trust}`;
   log('結果：' + rank[0].name + 'の勝ち');
+  recSnapshot('end');
   renderAll(); showResult();
 }
 
@@ -2214,7 +2239,7 @@ function renderTrack() {
 // 「今やること」：いまの場面で何ができるかを1〜2行で出す
 function turnText() {
   const p = G.actor;
-  if (G.over) return ['終わりました', '<button class="btn" data-end="result">結果を見る</button> <button class="btn" data-end="again">もう一度</button>'];
+  if (G.over) return ['終わりました', '<button class="btn" data-end="result">結果を見る</button> <button class="btn" data-end="again">もう一度</button> <button class="btn" data-end="export">記録を書き出す</button>'];
   const left = AUTO ? '' : `この波で使える時間：あと${Math.max(0, G.limit - me().t)}`;
   if (!p) return ['全員が時間を使い切りました', `波が終わると${budget()}ずつ補充されます`];
   if (p !== me()) return [`${p.name} の番`, left];
@@ -2242,7 +2267,7 @@ function turnText() {
 function renderTurn() {
   const [a, b] = turnText();
   document.getElementById('turn').innerHTML = `<span class="now">${a}</span>${b ? `<span class="sub">${b}</span>` : ''}`;
-  document.querySelectorAll('#turn [data-end]').forEach(bt => bt.onclick = () => bt.dataset.end === 'result' ? showResult() : location.reload());
+  document.querySelectorAll('#turn [data-end]').forEach(bt => bt.onclick = () => bt.dataset.end === 'result' ? showResult() : bt.dataset.end === 'export' ? exportRecord() : location.reload());
   renderGuide();
 }
 // はじめのうちは、押す場所を光らせる（「？ ルール」から消せる）
@@ -2462,6 +2487,7 @@ function renderMarket() {
   if (waveActive() && ids.length) box.insertAdjacentHTML('beforeend', '<span class="note">敵が来ている間は公開できません</span>');
   el.appendChild(box);
 }
+document.getElementById('exportBtn').onclick = exportRecord;
 function renderLog() { document.getElementById('log').innerHTML = G.log.map(t => `<div>${t}</div>`).join(''); }
 function renderAll() { renderChoice(); renderInfo(); renderTop(); renderTrack(); renderTurn(); renderHand(); renderMarket(); renderCos(); renderLayout(); renderMenu(); }
 // スマホの表示：タブと、今の手順に要るまとまりだけを出す（PC はいつも全部）
