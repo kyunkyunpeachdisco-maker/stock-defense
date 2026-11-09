@@ -1534,7 +1534,9 @@ function waveTick(dt) {
       if (!NO_LIMIT) a.clock -= dt / FF;   // 考える時間は、早回ししても本当の秒で減る
       if (a.clock <= 0 && !G.busy && !G.choosing) { a.t = Math.max(a.t, G.limit); G.selected = null; G.menu = null; log(`${a.name}：持ち時間が切れたので、この波の手番は終わり`); renderAll(); }
     }
-    if (!nextActor() && !waveActive()) { G.waveTimer = Math.min(G.waveTimer, 3); G.waveTimer -= dt; }   // 一瞬だけ手番の人がいない間を数えないよう、時間トラックで判断する
+    // 株を選ぶ・替える・捨てる・会社を選ぶなどの途中は待つ（最後のタイルを置いて株を選んでいる間に波が来ていた。ユーザー）
+    const picking = G.busy || G.choosing || G.taking || G.exchanging || G.discarding || G.swapping;
+    if (!nextActor() && !waveActive() && !picking) { G.waveTimer = Math.min(G.waveTimer, 3); G.waveTimer -= dt; }   // 一瞬だけ手番の人がいない間を数えないよう、時間トラックで判断する
   }
   if (G.waveTimer <= 0) { G.wave++; G.lastSettle = null; if (CYCLE === 'start') newCycle(); G.spawnQueue = G.nextWave && G.nextWave.n === G.wave ? G.nextWave.list : makeWave(G.wave); G.spawnTimer = 0;
     if (G.wave < WAVES) G.nextWave = { n:G.wave + 1, list:makeWave(G.wave + 1) }; log(`波 ${G.wave} が来た（${G.spawnQueue.length}体）`);
@@ -2226,7 +2228,9 @@ function turnText() {
   if (sel && AREA_MODE) { const c = canPlace(sel), tg = chosenOf(sel);
     if (!c.ok) return [`${tileName(sel)}には置けません（${c.why}）`, '別のタイルを選んでください'];
     if (!tg) return [`${tileName(sel)}の光っているマスに${TYPES[sel.type].name}を置けます`, `${TYPES[sel.type].name}：${TYPE_DESC[sel.type]}。光っているマスを押すと、そこに置けます。置くのに時間${normalTime(sel.type)}${CELL_EXTRA ? `（点線の印のマスなら${CELL_EXTRA}少ない）` : ''}。札をもう一度押すか、光っていないところを押すとやめます。${left}`];
-    return [`${label(...tg)} に置くタイルを選んでください`, `盤に出たメニューから選ぶと、その場で置きます。置いたら株を1枚もらえます。${left}`]; }
+    // メニューに並んだタイルの種類の説明も出す（札を押したときと同じように。ユーザー）
+    const descs = [...new Set(buildOptions(...tg).map(([t]) => t.type))].map(ty => `${TYPES[ty].name}：${TYPE_DESC[ty]}。`).join('');
+    return [`${label(...tg)} に置くタイルを選んでください`, `${descs}盤に出たメニューから選ぶと、その場で置きます。置いたら株を1枚もらえます。${left}`]; }
   if (sel) { const c = canPlace(sel), tg = targetOf(sel); return [c.ok ? `${label(...tg)} に${TYPES[sel.type].name}を置けます` : `${tileName(sel)}${AREA_MODE ? '' : ' のまわり'}には置けません（${c.why}）`, c.ok ? `${AREA_MODE ? tileName(sel) + 'の中の' : label(sel.x, sel.y) + ' か、そのまわりの'}光っているマスに置けます。盤で場所を選び、「置く」かもう一度押す。置いたら株を1枚もらえます。${left}` : '別のタイルを選んでください'];  }
   const can = [];
   if (me().hand.some(t => canPlace(t).ok)) can.push('タイルを置く（盤の光るマスを押す）');
