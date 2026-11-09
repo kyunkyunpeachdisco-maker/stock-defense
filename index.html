@@ -1984,7 +1984,9 @@ function draw() {
   }
   drawCompanies();
   // 敵の通り道：流れる点線で、どこを通るかを見せる。道が分かれていれば全部の分かれ道を描き、多く通る道ほど太く濃く（ユーザー）
-  drawFlow(pathFlow(G.dist), '124,249,255', 1);
+  // 道の流れは盤が変わったときだけ数え直す（毎コマ数えていて、終わった画面などが重かった。ユーザー）
+  if (flowCache.d !== G.dist) { flowCache.d = G.dist; flowCache.f = pathFlow(G.dist); }
+  drawFlow(flowCache.f, '124,249,255', 1);
   // 置く前の見本：マスを選んでいる間、そこに置いたあとの道を黄色の点線で重ねる（ユーザー）
   const pv = previewCell();
   if (pv) { const k = key(...pv); if (previewCache.k !== k || previewCache.n !== Object.keys(G.tiles).length) { const d = distanceField({ ...G.tiles, [k]:{ type:'wall', x:pv[0], y:pv[1], lv:1 } }); previewCache.k = k; previewCache.n = Object.keys(G.tiles).length; previewCache.f = ENTRANCES.every(([a, b]) => d[key(a, b)] !== undefined) ? pathFlow(d) : null; } if (previewCache.f) drawFlow(previewCache.f, '255,224,102', .9); }
@@ -2083,6 +2085,7 @@ function draw() {
 // 入口ごとの道（流れる点線用）
 // 敵の流れ：入口から、出口に近づくマスへ分かれながら進む（敵は近づけるマスが2つ以上あるとき、くじで選ぶ）。
 // 戻り値は「マス→次のマス」ごとの流れの量（入口1つにつき1を、入口の数で割る）
+const flowCache = {};
 function pathFlow(dist) {
   const seg = new Map();
   for (const [ex, ey] of ENTRANCES) {
@@ -2265,9 +2268,13 @@ function turnText() {
   return ['あなたの番：どれか1つ', can.join(' ／ ') + (waveActive() && me().cards.length ? '。敵が来ている間は公開できません' : '') + `。${left}`];
 }
 function renderTurn() {
-  const [a, b] = turnText();
-  document.getElementById('turn').innerHTML = `<span class="now">${a}</span>${b ? `<span class="sub">${b}</span>` : ''}`;
-  document.querySelectorAll('#turn [data-end]').forEach(bt => bt.onclick = () => bt.dataset.end === 'result' ? showResult() : bt.dataset.end === 'export' ? exportRecord() : location.reload());
+  const [a, b] = turnText(), el = document.getElementById('turn');
+  const html = `<span class="now">${a}</span>${b ? `<span class="sub">${b}</span>` : ''}`;
+  // 同じなら作り直さない（0.25秒ごとにボタンを作り直すと、押しそこねたり重くなったりする）
+  if (el.dataset.html !== html) {
+    el.dataset.html = html; el.innerHTML = html;
+    document.querySelectorAll('#turn [data-end]').forEach(bt => bt.onclick = () => bt.dataset.end === 'result' ? showResult() : bt.dataset.end === 'export' ? exportRecord() : location.reload());
+  }
   renderGuide();
 }
 // はじめのうちは、押す場所を光らせる（「？ ルール」から消せる）
