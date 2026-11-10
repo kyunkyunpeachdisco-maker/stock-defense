@@ -2843,10 +2843,11 @@ function chooseSurvivor(ids, cb) { modal('<h3>合併</h3><div class="note">同�
 function chooseDisposal(p, co, sv, pr, n, maxPairs, cb) {
   // 吸収された会社の株：売る・交換する（2枚→残る会社の株1枚）・持ち続ける。
   // 1枚だけで交換できないときは2択。何枚かあるときは、売る・交換を「− 数 ＋」で選び、よく使う選び方はボタン1つで
-  const head = `<h3>${co.name}が${sv.name}に吸収された</h3><div class="note">あなたの${co.name}株：<b style="color:var(--text)">${n}枚</b>（株価 ${pr}）</div>`;
+  const head = `<h3>${co.name}が${sv.name}に吸収された</h3><div class="note">あなたの${co.name}株：<b style="color:var(--text)">${n}枚</b>（株価 ${pr}）</div>`
+    + `<div class="note">${sv.name}：株価 <b style="color:var(--text)">${price(sv)}</b>　公開した株 ${G.players.map(q => `${q === me() ? 'あなた' : q.name} ${q.shares[sv.id]}`).join('・')}</div>`;
   const keepNote = `${co.name}がまた立ったら使える`;
   if (n === 1 && maxPairs === 0) {
-    modal(head, [[`売る（+${pr}）`, () => cb({ sell:1, pairs:0 })], [`持ち続ける（${keepNote}）`, () => cb({ sell:0, pairs:0 })]]);
+    modal(head, [[`売る（+${pr}）`, () => cb({ sell:1, pairs:0 })], [`持ち続ける（${keepNote}）`, () => cb({ sell:0, pairs:0 })], ['盤と会社を見る', peekChoice]]);
     return;
   }
   let sell = 0, pairs = 0;
@@ -2866,7 +2867,7 @@ function chooseDisposal(p, co, sv, pr, n, maxPairs, cb) {
   };
   const presets = [['全部売る', () => cb({ sell:n, pairs:0 })], ['全部持ち続ける', () => cb({ sell:0, pairs:0 })]];
   if (maxPairs) presets.push(['できるだけ交換', () => { const pp = Math.min(maxPairs, Math.floor(n / 2)); cb({ sell:0, pairs:pp }); }]);
-  modal(head + '<div id="dispBody" style="margin-top:6px"></div>', [['この内容で決める', () => cb({ sell, pairs })], ...presets]);
+  modal(head + '<div id="dispBody" style="margin-top:6px"></div>', [['この内容で決める', () => cb({ sell, pairs })], ...presets, ['盤と会社を見る', peekChoice]]);
   draw();
 }
 // ルールのまとめ
