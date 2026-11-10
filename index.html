@@ -3227,10 +3227,10 @@ function loop(now) {
   saveTimer -= dt; if (saveTimer <= 0) { saveTimer = 2; if (G.over) { if (G.started && !AUTO && !G.saveCleared) { G.saveCleared = true; clearSave(); clearNetSave(); } } else saveGame(); }
   hudTimer -= dt; if (G.started && !G.over && hudTimer <= 0) { hudTimer = .25; renderTop(); renderInfo(); renderTurn(); if (G.actor === me()) renderHand(); }   // 終わったあとは finish の renderAll で足りる
   // 終わったあとの盤は、演出が残っている間と、操作・画面の変化があったときだけ描き直す（毎コマ描くと終わった画面が重かった。ユーザー）
-  // 電池の持ち：敵も演出も動いていない間（自分や CPU が考えている時間）は、操作や画面の変化があったときと、1秒に5回だけ描く。
+  // 電池の持ち：敵も演出も動いていない間（自分や CPU が考えている時間）は、操作や画面の変化があったときと、1秒に20回だけ描く（5回だと、敵の道を流れる点がカクカクした。ユーザー）。
   // 動いている間も、1秒に60回より多くは描かない（120回描く画面で半分になる）
   const moving = !G.over && (waveActive() || G.waitPlace) || fxActive();
-  if (G.boardDirty || (moving ? now - lastDraw > 14 : !G.over && now - lastDraw > 200)) { G.boardDirty = false; lastDraw = now; draw(); }
+  if (G.boardDirty || (moving ? now - lastDraw > 14 : !G.over && now - lastDraw > 45)) { G.boardDirty = false; lastDraw = now; draw(); }
   if (window.__probe) window.__probe(G);
   requestAnimationFrame(loop);
 }
