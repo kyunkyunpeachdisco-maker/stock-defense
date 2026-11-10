@@ -182,7 +182,7 @@ const SHARE_MODE = PARAMS.get('shares') === 'acquire' ? 'acquire' : 'up';
 // ユニオン・パシフィックでは大きくなれる会社ほど株が多い（いちばん大きい EP&RG が18枚、いちばん小さい灰が6枚）。
 // それにならい、格の高い会社ほど多くした（前は逆で、格の高い会社が少ない枚数で筆頭になれて得すぎた）。?shares=old で前の配分
 const SHARES_BY_CO = SHARE_MODE === 'up' ? (PARAMS.get('shares') === 'old' ? [26, 24, 22, 18, 16, 14, 10] : [10, 14, 16, 18, 22, 24, 26]) : [25, 25, 25, 25, 25, 25, 25];
-const CENTRAL = 7, CENTRAL_CARDS = SHARE_MODE === 'up' ? 26 : 35;
+const CENTRAL = 7, CENTRAL_CARDS = +(PARAMS.get('trust') || 0) || (SHARE_MODE === 'up' ? 26 : 35);   // ?trust=12 で投資信託の口数を変える（試し中：少なくして取り合いにする）
 const CENTRAL_CO = { id:CENTRAL, name:'投資信託', tier:0, color:'#ff4dff', active:true, central:true };
 const coOf = id => id === CENTRAL ? CENTRAL_CO : G.cos[id];
 // 投資信託の株価：盤にある会社の株価の加重平均（S&P のように、時価総額＝株価×公開されている株の枚数で重みをつける）。
@@ -855,10 +855,13 @@ function takeShare(p, mi) {
 }
 // 株を取ったあと、手札の好きな1枚を差し出して、投資信託を1口受け取れる（現物拠出）。
 // 差し出した株が支払いのかわりなので、お金は払わず、そのまま公開された状態になる。出した株は伏せたままゲームから外す
+// 投資信託に替えるのにかかる時間（試し中。?xtime=1。今は 0：替えるのに何も払わないので、要らない株は替えるのがいつも正解で、迷う所がない。ユーザー：「無条件交換で、存在意義が分からない」）
+const XTIME = +(PARAMS.get('xtime') || 0);
 function exchangeCentral(p, id) {
   if (G.centralLeft <= 0 || id === CENTRAL) return;
   p.cards.splice(p.cards.indexOf(id), 1); p.shares[CENTRAL]++; G.centralLeft--; G.stats.exchanged = (G.stats.exchanged || 0) + 1; rec(p, 'exchange', { co:id });
-  log(`${p.name}：手札の株1枚を投資信託に替えた`);
+  if (XTIME) spend(p, XTIME);
+  log(`${p.name}：手札の株1枚を投資信託に替えた${XTIME ? `（時間${XTIME}）` : ''}`);
 }
 const canExchange = p => G.centralLeft > 0 && p.cards.some(c => c !== CENTRAL);
 // 場に、今ある会社の株が1枚もないときは、時間を使って並べ直せる。時間は同じ波の1回目が1、2回目が2、3回目が3…（ユーザー。前は時間なしで1回だけで、
@@ -1250,7 +1253,8 @@ function cpuExchange(p) {
   const worst = [...new Set(p.cards.filter(c => c !== CENTRAL))].filter(id => !exchCareful(p) || hopeless(p, id)).map(id => ({ id, v:cardValue(p, id, true) })).sort((a, b) => a.v - b.v)[0];
   // 受け取る1口は公開済みで、終わりに売れる。差し出す株の値打ちより高ければ交換する。
   // 差し出した株はゲームから消えるので、渡さないために取った株も、自分に要らなければ投資信託に替えてよい（自分にとっての値打ちだけで比べる）
-  if (worst && futureTrust() > worst.v + 100) exchangeCentral(p, worst.id);
+  // 時間がかかるなら、その時間でできたはずの手（少なくとも株1枚ぶん、200）より得なときだけ替える
+  if (worst && futureTrust() > worst.v + 100 + XTIME * (+(PARAMS.get('xcost') || 200))) exchangeCentral(p, worst.id);
 }
 // 合併の見込み：このタイルで会社どうしがつながるなら、吸収される会社のボーナスのうち自分の取り分から、
 // ほかの人の取り分の平均の半分を引く（人を儲けさせるつなぎ方は控える）
