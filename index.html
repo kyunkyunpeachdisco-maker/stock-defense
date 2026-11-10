@@ -2216,7 +2216,7 @@ function resize() {
   const w = Math.min(document.getElementById('wrap').clientWidth - 12, 548);
   S = w / (Math.sqrt(3) * (COLS + .5));
   const h = S * (1.5 * ROWS + .5);
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = DPR();
   cv.width = w * dpr; cv.height = h * dpr; cv.style.height = h + 'px';
   cx2.setTransform(dpr, 0, 0, dpr, 0, 0);
   G.enemies.forEach(e => { const [x, y] = center(...e.cell.split(',').map(Number)); e.x = x; e.y = y; });
@@ -2226,8 +2226,10 @@ function hexPath(x, y, r) {
   for (let i = 0; i < 6; i++) { const a = Math.PI / 180 * (60 * i - 30); cx2[i ? 'lineTo' : 'moveTo'](x + r * Math.cos(a), y + r * Math.sin(a)); }
   cx2.closePath();
 }
+// 電池の持ち：盤の細かさは画面の2倍まで（3倍の画面でも見た目はほぼ変わらず、描く点の数は半分以下になる）
+const DPR = () => Math.min(2, window.devicePixelRatio || 1);
 function draw() {
-  const dpr0 = window.devicePixelRatio || 1;
+  const dpr0 = DPR();
   cx2.setTransform(dpr0, 0, 0, dpr0, 0, 0); cx2.clearRect(0, 0, cv.width, cv.height);
   if (G.shake) cx2.translate((Math.random() - .5) * G.shake, (Math.random() - .5) * G.shake);
   const path = new Set(pathCells().map(c => key(...c)));
@@ -2353,7 +2355,7 @@ function draw() {
     cx2.globalAlpha = 1; cx2.fillStyle = g; cx2.beginPath(); cx2.arc(f.x, f.y, r, 0, Math.PI * 2); cx2.fill();
   }
   cx2.restore();
-  const W = cv.width / (window.devicePixelRatio || 1), H = cv.height / (window.devicePixelRatio || 1);
+  const W = cv.width / DPR(), H = cv.height / DPR();
   // 浮かぶ文字（株価が上がった、合併、設立）
   cx2.save(); cx2.textAlign = 'center'; cx2.textBaseline = 'middle'; cx2.font = `bold ${Math.max(11, S * .6)}px sans-serif`;
   for (const q of G.texts) { cx2.globalAlpha = Math.min(1, q.life); cx2.fillStyle = q.color; cx2.shadowColor = q.color; cx2.shadowBlur = 12; cx2.fillText(q.text, Math.max(60, Math.min(W - 60, q.x)), q.y); }
@@ -3199,6 +3201,7 @@ function turboLoop() {
   if (window.__probe) window.__probe(G);
   requestAnimationFrame(turboLoop);
 }
+let lastDraw = 0;
 function loop(now) {
   if (TURBO) return turboLoop();
   const dt = paused ? 0 : Math.min(.05, (now - last) / 1000) * SPEED * FF; last = now;   // 一時停止中は時間を進めない
@@ -3224,7 +3227,10 @@ function loop(now) {
   saveTimer -= dt; if (saveTimer <= 0) { saveTimer = 2; if (G.over) { if (G.started && !AUTO && !G.saveCleared) { G.saveCleared = true; clearSave(); clearNetSave(); } } else saveGame(); }
   hudTimer -= dt; if (G.started && !G.over && hudTimer <= 0) { hudTimer = .25; renderTop(); renderInfo(); renderTurn(); if (G.actor === me()) renderHand(); }   // 終わったあとは finish の renderAll で足りる
   // 終わったあとの盤は、演出が残っている間と、操作・画面の変化があったときだけ描き直す（毎コマ描くと終わった画面が重かった。ユーザー）
-  if (!G.over || G.boardDirty || fxActive()) { G.boardDirty = false; draw(); }
+  // 電池の持ち：敵も演出も動いていない間（自分や CPU が考えている時間）は、操作や画面の変化があったときと、1秒に5回だけ描く。
+  // 動いている間も、1秒に60回より多くは描かない（120回描く画面で半分になる）
+  const moving = !G.over && (waveActive() || G.waitPlace) || fxActive();
+  if (G.boardDirty || (moving ? now - lastDraw > 14 : !G.over && now - lastDraw > 200)) { G.boardDirty = false; lastDraw = now; draw(); }
   if (window.__probe) window.__probe(G);
   requestAnimationFrame(loop);
 }
