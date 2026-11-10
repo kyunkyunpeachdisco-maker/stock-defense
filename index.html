@@ -1119,11 +1119,11 @@ const CAND_PATH = PARAMS.get('cand') === 'path';
 // 試し中の戦術（?tac=found,spoil のように並べる。?fpmix=0 / 1 で偶数番・奇数番だけ）
 //   found：手札に株を持っている会社を、自分で設立しにいく。どの会社を立てるかも、筆頭を取れる見込みと株価（格）で選ぶ
 //   noreset：場の入れ替えをしない（入れ替えがどれだけ得かを測る用）
-//   upcov：敵の道に届かないタワーを、株をもらうためだけに強化しない（5波目で全員負けた局で、CPU が道に届かないアンチウイルスを2回強化していた）
 //   spoil：撃たないタイル（ノード・ハニーポット・ボルテックス）は、育ってほしくない会社の良いマスに置き、自分の会社の良いマスには置かない
 //   hold：自分で立てた会社の株を持ち続ける。取るとき・公開するときに、その会社はこれから伸びるとみる（ユーザー：「入り口にヘリオス作って株持っておく」）
 const TAC = new Set((PARAMS.get('tac') || '').split(',').filter(Boolean));
 const tac = (p, name) => TAC.has(name) && tryOn(p);
+const UPCOV = PARAMS.get('upcov') !== '0';   // 敵の道に届かないタワーを、株をもらうためだけに強化しない
 const keepFp = (p, id, fp) => p.keep && p.keep[id] ? Math.max(fp, price(G.cos[id]) + 400) : fp;
 const WEAK_TILE = new Set(['node', 'lure', 'vortex']);
 // 設立の値打ち：立てた直後の株価（倒した数0）で、自分が受け取れそうなボーナスから、ほかの人の取り分の平均の半分を引く。
@@ -1528,8 +1528,9 @@ function cpuAct(p) {
     const def1 = estimate(after, dist0), safety = (loseChance(u0) - loseChance(dangerOf(fore(after, def1)))) * myW;
     const co = G.owner[k], stake = co !== undefined ? (p.shares[co] + p.cards.filter(c => c === co).length) * 40 : 0;
     const rv = RT ? routeValue(p, sh0, coShares(after, dist0, kk => G.owner[kk])) : 0;
-    // upcov（試し中）：強化しても敵の道に1マスも届かないタワーは、株をもらうためだけの強化になるので、株の分の値打ちを数えない
-    const idle = tac(p, 'upcov') && cover === 0;
+    // 強化しても敵の道に1マスも届かないタワーは、株をもらうためだけの強化になるので、株の分の値打ちを数えない（?upcov=0 で前の形）。
+    // 全員 CPU の300局ずつで、守りきる割合が 75% → 82%、残りライフが +1.1。この打ち方をする席だけを見ると順位はわずかに下がる（自分は株を1枚あきらめ、全員の守りが良くなる）
+    const idle = UPCOV && cover === 0;
     opts.push({ v:safety + (1 - L0) * (defGain(def0, def1) * (stake ? 1 : .2) + (idle ? 0 : stake + bestCard) + rv), time:TYPES[t.type].time, run:() => { upgradeTile(p, k); takeStep(p, afterAction); } });
   }
   // 公開：終わりまでの値上がりと、ボーナスの見込みの増え方から、払う株価を引く
