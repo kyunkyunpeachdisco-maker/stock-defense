@@ -143,6 +143,7 @@
     <button class="btn" id="place" disabled>このタイルを置く</button>
     <button class="btn" id="swap">タイルを捨てて引き直す（時間1）</button>
     <button class="btn" id="renewBtn" style="display:none"></button>
+    <button class="btn" id="redrawBtn" style="display:none"></button>
     <button class="btn" id="removeBtn" style="display:none">取り除く（時間2）</button>
   </div>
   </div>
@@ -1632,6 +1633,11 @@ function cpuAct(p) {
   if (best && best.v > 0) return best.run();
   // どの手も得に見えなくても、置けるタイルがあればパスより置く（守りの火力がいちばん増える手）
   const fallback = opts.filter(o => o.time <= 5).sort((a, b) => b.v - a.v)[0];
+  // 得な手がないとき、いちばん重いタイルを引き直す方が置くより時間が安ければ、引き直す
+  if (REDRAW && G.bag.length && p.hand.length && (!fallback || renewTime(p) < fallback.time)) {
+    const idx = p.hand.reduce((bi, t, i) => TYPES[t.type].time > TYPES[p.hand[bi].type].time ? i : bi, 0);
+    redrawTile(p, idx); return afterAction();
+  }
   if (fallback) return fallback.run();
   swapTile(p, 0); afterAction();
 }
@@ -1671,6 +1677,15 @@ const printedFilled = t => {
 };
 // 入れ替え：指定のタイルを山の底に戻して、同じ枚数を引き直す
 const renewTime = p => (p.renewN || 0) + 1;
+// 引き直し（?redraw=0 でなし）：手番の行動として、手札のタイル1枚を山の底に戻して1枚引く。株はもらえない。
+// 時間は、印が使えないタイルの入れ替えと合わせて、同じ波の1回目は1、2回目は2、3回目は3…（ユーザー：重いタイルばかりになると、どうでもいい所にいやいや建てるしかなかった）
+const REDRAW = PARAMS.get('redraw') !== '0';
+function redrawTile(p, idx) {
+  const rt = renewTime(p), t = p.hand[idx]; p.renewN = (p.renewN || 0) + 1;
+  rec(p, 'redraw', { tile:t.type, time:rt });
+  renewTiles(p, [idx]); spend(p, rt); G.stats.redraw = (G.stats.redraw || 0) + 1;
+  log(`${p.name}：${TYPES[t.type].name}を山に戻して引き直した（時間${rt}）`);
+}
 function renewTiles(p, idxs) {
   const out = idxs.map(i => p.hand[i]);
   p.hand = p.hand.filter((t, i) => !idxs.includes(i));
@@ -2556,6 +2571,7 @@ function renderGuide() {
   if (id) document.getElementById(id).classList.add('glow');
 }
 document.getElementById('renewBtn').onclick = () => act(G.viewer || 0, { t:'renew' });
+document.getElementById('redrawBtn').onclick = () => { if (G.selected !== null) act(G.viewer || 0, { t:'redraw', idx:G.selected }); };
 function renderHand() {
   const el = document.getElementById('hand');
   if (AUTO) { el.innerHTML = ''; return; }
@@ -2593,6 +2609,8 @@ function renderHand() {
   else { sb.textContent = 'タイルを捨てて引き直す（時間1）'; sb.disabled = !(mine && !canDoSomething(me())); sb.style.display = sb.disabled ? 'none' : ''; }
   const nb = document.getElementById('renewBtn'), nf = me().hand.filter(printedFilled).length;
   nb.style.display = mine && nf && !G.swapping ? '' : 'none'; nb.textContent = `印が使えないタイルを入れ替える（${nf}枚・時間${renewTime(me())}）`;
+  const db = document.getElementById('redrawBtn');
+  db.style.display = REDRAW && mine && G.selected !== null && me().hand[G.selected] && !G.swapping && G.bag.length ? '' : 'none'; db.textContent = `このタイルを引き直す（時間${renewTime(me())}）`;
   renderMenu();
 }
 const drawSpots = {};
@@ -2834,6 +2852,7 @@ function act(pid, a) {
     case 'remove': if (!turn || !canRemove(a.k)) return false; G.busy = true; removeAction(p, a.k); afterAction(); return true;
     case 'reveal': if (!turn || !(a.n >= 1) || !canReveal(p, a.id, a.n)) return false; G.busy = true; revealShares(p, a.id, a.n); afterAction(); return true;
     case 'pair': if (!turn || !canRevealPair(p, a.a, a.b)) return false; G.busy = true; revealPair(p, a.a, a.b); afterAction(); return true;
+    case 'redraw': if (!REDRAW || !turn || !p.hand[a.idx] || !G.bag.length) return false; redrawTile(p, a.idx); if (p === me()) G.selected = null; afterAction(); return true;
     case 'renew': {   // 印が埋まったタイルを全部入れ替える。時間は同じ波の1回目は1、2回目は2、3回目は3…（何度も引き直せないように。ユーザー）
       const idxs = p.hand.map((t, i) => printedFilled(t) ? i : -1).filter(i => i >= 0);
       if (!turn || !idxs.length) return false;
