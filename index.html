@@ -1126,7 +1126,10 @@ const CAND_PATH = PARAMS.get('cand') === 'path';
 //   spoil：撃たないタイル（ノード・ハニーポット・ボルテックス）は、育ってほしくない会社の良いマスに置き、自分の会社の良いマスには置かない
 //   hold：自分で立てた会社の株を持ち続ける。取るとき・公開するときに、その会社はこれから伸びるとみる（ユーザー：「入り口にヘリオス作って株持っておく」）
 const TAC = new Set((PARAMS.get('tac') || '').split(',').filter(Boolean));
-const tac = (p, name) => TAC.has(name) && tryOn(p);
+// 暫定で、つよい CPU の標準にした戦術（?lead=0 で外す）：margin・focus・refound（筆頭を固める・筆頭を取りにいく・立て直し）。
+// 席を入れ替えた300組で、平均順位 2.40 対 2.60（誤差の3.7倍）、終わりのボーナスが約 +1200
+const STD_TAC = PARAMS.get('lead') === '0' ? new Set() : new Set(['margin', 'focus', 'refound']);
+const tac = (p, name) => (TAC.has(name) && tryOn(p)) || (STD_TAC.has(name) && !!p.strong);
 const UPCOV = PARAMS.get('upcov') !== '0';   // 敵の道に届かないタワーを、株をもらうためだけに強化しない
 const keepFp = (p, id, fp) => p.keep && p.keep[id] ? Math.max(fp, price(G.cos[id]) + 400) : fp;
 const WEAK_TILE = new Set(['node', 'lure', 'vortex']);
@@ -1218,11 +1221,21 @@ function focusValue(p, id, mine, fp) {
   if (need < 2 || need > 3 || p.money < price(G.cos[id]) * (need + p.cards.filter(c => c === id).length)) return 0;
   return (bonusShare(p, id, top + 1) - bonusShare(p, id, mine + 1)) * fp * .5 / need;
 }
+// 筆頭を固める（?tac=margin、試し中。ユーザーの局：5枚で止めて、手札に抱えていた株を一気に出されて抜かれた）：
+// 自分が筆頭か並びで、差が1枚以内なら、もう1枚で抜かれにくくなる分を足す（ほかの人の手札は見えないので、手札の多い人がいるほど強く見る）
+function marginValue(p, id, mine, fp) {
+  const top = Math.max(0, ...G.players.filter(q => q !== p).map(q => q.shares[id]));
+  if (mine < top || mine - top > 1 || mine < 2) return 0;
+  const hidden = Math.max(0, ...G.players.filter(q => q !== p).map(q => q.cards.length));
+  return bonusShare(p, id, top + 1) * fp * MARGIN_W * Math.min(1, hidden / 4);
+}
+const MARGIN_W = +(PARAMS.get('marginw') || .15);
 function cardValue(p, id, own) {
   FP_P = p;
   if (id === CENTRAL) return Math.max(100, futureTrust() - centralPrice() * .5);
   const co = G.cos[id];
-  if (!co.active) return 150;
+  // 立て直し（?tac=refound、試し中。ユーザー：吸収された会社の株を持ち続けて、同じ会社をもう一度立てる）：盤にない会社の株は、すでに持っているほど、立てたとき安く筆頭になれるので高く見る
+  if (!co.active) return 150 + (tac(p, 'refound') ? 100 * Math.min(3, p.cards.filter(c => c === id).length) : 0);
   const fp = keepFp(p, id, futurePrice(co)), mine = p.shares[id] + p.cards.filter(c => c === id).length;
   // お金の計画（?tac=cash、試し中）：公開するお金が足りそうにない株は、自分にとっての値打ちを下げて見る（渡さない値打ちはそのまま）。
   // お金は、手持ちと、次の決算で入る配当の見込み。要るお金は、手札の株を全部公開する分とこの1枚
@@ -1232,7 +1245,7 @@ function cardValue(p, id, own) {
     const need = p.cards.filter(c => c !== CENTRAL && G.cos[c].active).reduce((a, c) => a + price(G.cos[c]), 0) + price(co);
     afford = CASH_FLOOR + (1 - CASH_FLOOR) * Math.min(1, (p.money + inc) / need);
   }
-  return ((fp - price(co) * .5) + (bonusShare(p, id, mine + 1) - bonusShare(p, id, mine)) * fp * .5) * afford + (own ? 0 : denyValue(p, id, mine, fp)) + (tac(p, 'mhope') ? mergeHope(p, id, mine) : 0) + (tac(p, 'focus') ? focusValue(p, id, mine, fp) : 0);
+  return ((fp - price(co) * .5) + (bonusShare(p, id, mine + 1) - bonusShare(p, id, mine)) * fp * .5) * afford + (own ? 0 : denyValue(p, id, mine, fp)) + (tac(p, 'mhope') ? mergeHope(p, id, mine) : 0) + (tac(p, 'focus') ? focusValue(p, id, mine, fp) : 0) + (tac(p, 'margin') ? marginValue(p, id, mine, fp) : 0);
 }
 // 渡さない（暫定で全員。?deny=0 で前の取り方、?deny=mix で偶数番だけ）。渡さない CPU のほうが勝った：場に残すと、ほかの人がそれを取って筆頭・次点に近づく分と、自分の順位が下がる分を、取る値打ちに足す。
 // ほかの人の手札は見えないので、公開した枚数で見る。場に残した株を誰が取るかは分からないので半分に見る
