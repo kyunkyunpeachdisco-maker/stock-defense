@@ -621,7 +621,7 @@ function newCycle() {
   const base = G.limit;
   const behind = G.players.filter(p => p.t < base).sort((a, b) => a.t - b.t || b.order - a.order);
   behind.forEach((p, i) => { p.t = base; p.order = 1e9 - i; });  // 線ちょうどにいた人より先に動く
-  G.players.forEach(p => { p.resetUsed = false; p.clock = WAVE_GAP; p.renewN = 0; });
+  G.players.forEach(p => { p.resetUsed = false; p.clock = WAVE_GAP; p.renewN = 0; p.resetN = 0; });
   G.limit = base + budget();
   renderAll();
 }
@@ -861,8 +861,18 @@ function exchangeCentral(p, id) {
   log(`${p.name}：手札の株1枚を投資信託に替えた`);
 }
 const canExchange = p => G.centralLeft > 0 && p.cards.some(c => c !== CENTRAL);
-// 場に、今ある会社の株が1枚もないときは、1回だけ並べ直せる
-function canReset(p) { return !p.resetUsed && G.market.length > 0 && !G.market.some(id => G.cos[id].active) && G.deck.length > 0; }
+// 場に、今ある会社の株が1枚もないときは、時間を使って並べ直せる。時間は同じ波の1回目が1、2回目が2、3回目が3…（ユーザー。前は時間なしで1回だけで、
+// 序盤は会社がないのでいつでも使え、欲しい株が出るまでただで引き直せた）。?reset=free で前の形（比べる用）
+const RESET_FREE = PARAMS.get('reset') === 'free';
+const resetTime = p => RESET_FREE ? 0 : (p.resetN || 0) + 1;
+function canReset(p) { return (!RESET_FREE || !p.resetUsed) && G.market.length > 0 && !G.market.some(id => G.cos[id].active) && G.deck.length > 0; }
+function doReset(p) {
+  const rt = resetTime(p); rec(p, 'reset', { market:[...G.market], time:rt });
+  resetMarket(); p.resetUsed = true; p.resetN = (p.resetN || 0) + 1; if (rt) spend(p, rt);
+  log(`${p.name}：場の株を入れ替えた${rt ? `（時間${rt}）` : ''}`);
+}
+// CPU が入れ替えるのは、かかる時間がこの数までのとき（?rstmax=。0 なら入れ替えない）
+const RESET_CPU_MAX = +(PARAMS.get('rstmax') || 1);
 // 置く・強化のあとに、株を1枚手札に入れる。人のときは場から選んでもらう
 // 株の手札の上限（ユーザーの案）。株を手札に入れたあと、超えた分を捨てる（山札に戻して混ぜる。投資信託は残り口数に戻す）。
 // 8枚まで（?cardmax= で変えられる。0 で上限なし）
@@ -1109,6 +1119,7 @@ const CAND_PATH = PARAMS.get('cand') === 'path';
 // 試し中の戦術（?tac=found,spoil のように並べる。?fpmix=0 / 1 で偶数番・奇数番だけ）
 //   found：手札に株を持っている会社を、自分で設立しにいく。どの会社を立てるかも、筆頭を取れる見込みと株価（格）で選ぶ
 //   noreset：場の入れ替えをしない（入れ替えがどれだけ得かを測る用）
+//   upcov：敵の道に届かないタワーを、株をもらうためだけに強化しない（5波目で全員負けた局で、CPU が道に届かないアンチウイルスを2回強化していた）
 //   spoil：撃たないタイル（ノード・ハニーポット・ボルテックス）は、育ってほしくない会社の良いマスに置き、自分の会社の良いマスには置かない
 //   hold：自分で立てた会社の株を持ち続ける。取るとき・公開するときに、その会社はこれから伸びるとみる（ユーザー：「入り口にヘリオス作って株持っておく」）
 const TAC = new Set((PARAMS.get('tac') || '').split(',').filter(Boolean));
@@ -1206,7 +1217,7 @@ const DENY_LEAD = PARAMS.get('denylead') || '1';   // mix で偶数番だけ
 const WEAK_RAND = +(PARAMS.get('wk') || 1);   // よわい CPU が、場の株を選ばずに取る割合
 function cpuTake(p) {
   FP_P = p;
-  if (canReset(p) && !tac(p, 'noreset')) { rec(p, 'reset', { market:[...G.market] }); resetMarket(); p.resetUsed = true; }
+  if (canReset(p) && !tac(p, 'noreset') && resetTime(p) <= RESET_CPU_MAX) doReset(p);
   if (p.weak && G.market.length && RNG.cpu() < WEAK_RAND) return takeShare(p, Math.floor(RNG.cpu() * G.market.length));
   let best = { mi:-1, v:200 + RNG.cpu() * 50 };  // 山札の一番上
   G.market.forEach((id, mi) => { const v = cardValue(p, id) + RNG.cpu() * 30; if (v > best.v) best = { mi, v }; });
@@ -1512,12 +1523,14 @@ function cpuAct(p) {
     return { k, t, cover:pathPts.filter(q => cellDist(...c, ...q) <= r).length };
   }).sort((a, b) => b.cover - a.cover);
   const upPick = PARAMS.get('fast') === '0' ? upCand : [...upCand.slice(0, 12), ...shufC(upCand.slice(12)).slice(0, 3)];
-  for (const { k, t } of upPick) {
+  for (const { k, t, cover } of upPick) {
     const after = { ...G.tiles, [k]:{ ...t, lv:t.lv + 1 } };
     const def1 = estimate(after, dist0), safety = (loseChance(u0) - loseChance(dangerOf(fore(after, def1)))) * myW;
     const co = G.owner[k], stake = co !== undefined ? (p.shares[co] + p.cards.filter(c => c === co).length) * 40 : 0;
     const rv = RT ? routeValue(p, sh0, coShares(after, dist0, kk => G.owner[kk])) : 0;
-    opts.push({ v:safety + (1 - L0) * (defGain(def0, def1) * (stake ? 1 : .2) + stake + bestCard + rv), time:TYPES[t.type].time, run:() => { upgradeTile(p, k); takeStep(p, afterAction); } });
+    // upcov（試し中）：強化しても敵の道に1マスも届かないタワーは、株をもらうためだけの強化になるので、株の分の値打ちを数えない
+    const idle = tac(p, 'upcov') && cover === 0;
+    opts.push({ v:safety + (1 - L0) * (defGain(def0, def1) * (stake ? 1 : .2) + (idle ? 0 : stake + bestCard) + rv), time:TYPES[t.type].time, run:() => { upgradeTile(p, k); takeStep(p, afterAction); } });
   }
   // 公開：終わりまでの値上がりと、ボーナスの見込みの増え方から、払う株価を引く
   // 投資信託の公開：これからの配当の増え方から、払う株価を引く
@@ -2636,7 +2649,7 @@ function renderMarket() {
       ['山札<br><span class="note">何が来るか</span>', null, () => act(G.viewer || 0, { t:'take', mi:-1 }), tk && G.deck.length, '山札の一番上を、見ないで手札に入れる'],
       ...(TRUST_PILE === '0' ? [] : [[`投資信託<br><span class="note">${G.centralLeft > 0 ? '残り' + G.centralLeft : '売り切れ'}</span>`, CENTRAL_CO.color, () => act(G.viewer || 0, { t:'take', mi:-2 }), tk && canTakeTrust(), `投資信託。値段は盤にある会社の株価の平均（いま${centralPrice()}）。筆頭も配当もなく、終わりにそのときの値段で売れる`]])]);
     if (tk && canReset(me())) {
-      const r = document.createElement('button'); r.className = 'btn'; r.textContent = '場を入れ替える（どれも公開できないときの1回だけ）'; r.style.marginTop = '4px';
+      const r = document.createElement('button'); r.className = 'btn'; r.textContent = RESET_FREE ? '場を入れ替える（どれも公開できないときの1回だけ）' : `場を入れ替える（時間${resetTime(me())}）`; r.style.marginTop = '4px';
       r.onclick = () => act(G.viewer || 0, { t:'reset' }); el.appendChild(r);
     }
   } else if (G.actor === me() && !G.over) {
@@ -2768,7 +2781,7 @@ function act(pid, a) {
     case 'exchange': if (!G.exchanging || G.exchanging.p !== p || (a.id !== null && !p.cards.includes(a.id))) return false; finishExchange(a.id); return true;
     case 'discard': if (!G.discarding || G.discarding.p !== p || !p.cards.includes(a.id)) return false; finishDiscard(a.id); return true;
     case 'swap': if (!G.swapping || G.swapping.p !== p || (a.idx !== null && !p.hand[a.idx])) return false; finishSwap(a.idx); return true;
-    case 'reset': if (!G.taking || G.taking.p !== p || !canReset(p)) return false; rec(p, 'reset', { market:[...G.market] }); resetMarket(); p.resetUsed = true; renderAll(); return true;
+    case 'reset': if (!G.taking || G.taking.p !== p || !canReset(p)) return false; doReset(p); renderAll(); return true;
     case 'choose': {
       const c = G.choosing; if (!c || c.p !== p) return false;
       if ((c.kind === 'found' || c.kind === 'survivor') && !c.data.ids.includes(a.v)) return false;
@@ -2906,7 +2919,7 @@ function snapshot(seat) {
   return { type:'state',
     tiles:Object.values(G.tiles).map(t => [t.x, t.y, t.type, t.lv]), owner:G.owner,
     cos:G.cos.map(c => [c.active ? 1 : 0, c.kills]),
-    players:G.players.map(o => ({ name:o.name, color:o.color, money:o.money, shares:o.shares, t:o.t, order:o.order, cpu:o.cpu, resetUsed:o.resetUsed, clock:o.clock })),
+    players:G.players.map(o => ({ name:o.name, color:o.color, money:o.money, shares:o.shares, t:o.t, order:o.order, cpu:o.cpu, resetUsed:o.resetUsed, resetN:o.resetN, clock:o.clock })),
     hand:q.hand, cards:q.cards, market:G.market, avail:G.cos.map(c => availOf(c.id)), centralLeft:G.centralLeft,
     lives:G.lives, wave:G.wave, waveTimer:G.waveTimer, sq:G.spawnQueue.length, limit:G.limit, actor:G.actor ? G.actor.id : -1, busy:G.busy,
     enemies:G.enemies.map(e => [e.id, e.type, e.x / S, e.y / S, e.hp, e.max, e.cell, e.next, e.lure || null]),
