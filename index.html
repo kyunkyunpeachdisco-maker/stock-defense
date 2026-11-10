@@ -123,8 +123,8 @@
     <span id="money" class="big" data-tip="株を公開するときに払うお金。終わりにいちばん多い人の勝ち"></span>
     <span class="note" id="setupNote"></span>
     <span class="brk"></span>
-    <button class="btn" id="pauseBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="一時停止（ひとりで遊ぶときだけ）">⏸</button>
-    <button class="btn" id="ffBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="早回し（ひとりで遊ぶときだけ）。押すたびに 1倍 → 2倍 → 3倍。持ち時間（秒）は早回ししても本当の秒で減る">▶</button>
+    <button class="btn" id="pauseBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="一時停止（ひとりで遊ぶときだけ）"><svg width="11" height="12" viewBox="0 0 11 12" style="vertical-align:-1px" aria-label="一時停止"><rect x="1" y="1" width="3" height="10" rx="1" fill="currentColor"/><rect x="7" y="1" width="3" height="10" rx="1" fill="currentColor"/></svg></button>
+    <button class="btn" id="ffBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="早回し（ひとりで遊ぶときだけ）。押すたびに 1倍 → 2倍 → 3倍。持ち時間（秒）は早回ししても本当の秒で減る"><svg width="11" height="12" viewBox="0 0 11 12" style="vertical-align:-1px" aria-label="早回し"><path d="M2 1.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L2.9.7a.6.6 0 0 0-.9.5z" fill="currentColor"/></svg></button>
     <button class="btn" id="soundBtn" style="padding:4px 8px;font-size:13px" data-tip="効果音を鳴らす・消す"></button>
     <button class="btn" id="helpBtn">？<span class="hl"> ルール</span></button>
   </div>
@@ -2888,7 +2888,7 @@ const RULES_HTML = () => `<h3>電脳都市のルール（まとめ）</h3>${POWE
 <h4>決算</h4><p>${DIVIDEND_WAVES.length ? DIVIDEND_WAVES.join('回目と') + '回目の波が終わったとき、盤にある会社ごとに、筆頭に株価の4倍、次点に2倍の配当。' + (DIV_BANK ? '配当は<b>終わりまで預かり</b>で、株を買うのには使えない（所持金の横に「預かり」と出る）。終わりに所持金に足す。' : '') : 'なし'}</p>
 <h4>投資信託</h4><p>値段は盤にある会社の株価の平均。筆頭も配当もなく、終わりにそのときの値段で売れる。場から取ることはできない。株を取ったあと、手札の株1枚を差し出して、投資信託1口を払わずに公開した状態で受け取れる。</p>
 <h4>終わり</h4><p>${WAVES}回守りきったら、盤にある会社すべてでボーナスを出し、公開した株と投資信託をその値段で売る。</p>
-<h4>画面</h4><p>ひとりで遊ぶときは、上の「⏸」で一時停止、「▶」で早回し（押すたびに1倍・2倍・3倍）。持ち時間は早回ししても本当の秒で減る。「？」の付いた見出し・数字・ボタンは、カーソルを合わせるか長押しすると説明が出ます。</p>
+<h4>画面</h4><p>ひとりで遊ぶときは、上の縦棒2本のボタンで一時停止、三角のボタンで早回し（押すたびに1倍・2倍・3倍）。持ち時間は早回ししても本当の秒で減る。「？」の付いた見出し・数字・ボタンは、カーソルを合わせるか長押しすると説明が出ます。</p>
 <p><label><input type="checkbox" id="guideChk" ${guideOff ? '' : 'checked'}> 押す場所を光らせて案内する</label></p>`;
 function showRules() {
   modal(RULES_HTML(), [['閉じる', () => {}]]);
@@ -3089,7 +3089,8 @@ let paused = false;
 const canPause = () => G.started && !G.over && !G.net && !AUTO;
 // 早回し（ひとりで遊ぶときだけ）：ゲームの時間を2倍・3倍で進める
 let FF = 1;
-const drawFF = () => { const b = document.getElementById('ffBtn'); b.textContent = FF === 1 ? '▶' : '▶' + FF; b.style.color = FF > 1 ? '#ffe066' : ''; };
+const FF_ICON = '<svg width="11" height="12" viewBox="0 0 11 12" style="vertical-align:-1px" aria-label="早回し"><path d="M2 1.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L2.9.7a.6.6 0 0 0-.9.5z" fill="currentColor"/></svg>';
+const drawFF = () => { const b = document.getElementById('ffBtn'); b.innerHTML = FF_ICON + (FF === 1 ? '' : FF); b.style.color = FF > 1 ? '#ffe066' : ''; };
 document.getElementById('ffBtn').onclick = () => { FF = FF % 3 + 1; drawFF(); };
 function setPause(on) { paused = on && canPause(); document.getElementById('pauseOv').style.display = paused ? 'flex' : 'none'; }
 document.getElementById('pauseBtn').onclick = () => setPause(true);
