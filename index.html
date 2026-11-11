@@ -943,12 +943,14 @@ function takeStep(p, done0) {
   G.taking = { p, done }; renderAll();
   if (p === me()) document.getElementById('market').scrollIntoView({ block:'nearest', behavior:'smooth' });
 }
+// 山札から引いた株を見せる窓。株の手札と同じ見た目の札で出す（ユーザー：窓だけ文字の表し方が違った）
+function showDrawn(co, done) { modal(`<h3>山札から引いた株</h3><div class="sgrid"><button class="btn" style="border-color:${co.color};pointer-events:none">${co.name} ×1<br><span class="note">${co.active ? priceOf(co.id) : 'まだない'}</span>${powerLine(co.id)}</button></div><p class="note">株の手札に入りました</p>`, [['OK', done]]); }
 function finishTake(mi) {
   const tk = G.taking; if (!tk) return;
   G.taking = null; const n0 = tk.p.cards.length; takeShare(tk.p, mi);
   if (canExchange(tk.p)) { G.exchanging = tk; renderAll(); return; }
   // 山札から引いて、投資信託に替える画面も出ないときは、何を引いたかを見せてから進む（ユーザー：時間を使い切っていると、見る間もなく次の波が始まった）
-  if (mi === -1 && tk.p === me() && tk.p.cards.length > n0) { const co = coOf(tk.p.cards[tk.p.cards.length - 1]); renderAll(); modal(`<h3>山札から引いた株</h3><p><b style="color:${co.color}">${co.name}</b>${co.active ? `（いまの株価${priceOf(co.id)}）` : '（まだ盤にない会社）'}</p>`, [['OK', () => tk.done()]]); return; }
+  if (mi === -1 && tk.p === me() && tk.p.cards.length > n0) { const co = coOf(tk.p.cards[tk.p.cards.length - 1]); renderAll(); showDrawn(co, () => tk.done()); return; }
   tk.done();
 }
 function finishExchange(id) {
@@ -1104,7 +1106,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.68';
+const APP_VER = 'v0.1.69';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -3591,7 +3593,8 @@ function showStart() {
 }
 useCourse(COURSE); resize(); G.dist = distanceField();
 if (AUTO || PARAMS.has('start')) startGame(); else if (PARAMS.has('room')) showJoin(PARAMS.get('room')); else showStart();
-if (PARAMS.has('howto')) showHowTo(+PARAMS.get('howto') || 0);   // 遊び方のページを直接開く（見た目の確認用）
+if (PARAMS.has('howto')) showHowTo(+PARAMS.get('howto') || 0);
+if (PARAMS.has('drawn')) setTimeout(() => showDrawn(coOf(+PARAMS.get('drawn')), () => {}), 500);   // 山札から引いた株の窓を直接開く（見た目の確認用）   // 遊び方のページを直接開く（見た目の確認用）
 requestAnimationFrame(loop);
 window.__G = G;
 </script>
