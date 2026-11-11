@@ -943,7 +943,7 @@ function revealShares(p, id, n) {
   if (PARAMS.get('dbg') === 'cash') TR({ k:'rv', w:G.wave, p:p.id, id, n, pr, after:p.money - pr * n, mine:p.shares[id] + n, top:Math.max(0, ...G.players.filter(q => q !== p).map(q => q.shares[id])) });
   p.shares[id] += n; p.money -= pr * n; G.stats.bought += n; p.resetUsed = false; earn(p, id === CENTRAL ? '払った（投資信託）' : '払った（会社）', -pr * n);
   (G.revLog = G.revLog || []).push({ wave:G.wave, pid:p.id, id, n, pr, after:p.shares[id] });
-  const rt = revealTime(n) + revExtra(p, [id]); if (!G.pairing) { spend(p, rt); p.revN = (p.revN || 0) + 1; } (p.revBy = p.revBy || {})[id] = (p.revBy[id] || 0) + 1; sfx('coin');
+  const rt = revealTime(n) + revExtra(p, [id]); if (!G.pairing) { spend(p, rt); p.revN = (p.revN || 0) + 1; G.stats.revA = (G.stats.revA || 0) + 1; G.stats.revX = (G.stats.revX || 0) + rt - revealTime(n); } (p.revBy = p.revBy || {})[id] = (p.revBy[id] || 0) + 1; sfx('coin');
   log(`${p.name}：${co.name}の株を${n}枚公開（${pr * n}払った${G.pairing ? "" : `、時間${rt}`}）`);
 }
 // 2社の株を1枚ずつ公開する（ユニオン・パシフィックどおり。1回の行動として、時間は2）
@@ -959,7 +959,7 @@ const REVX = PARAMS.get('revx') || '0';
 const revExtra = (p, ids) => { if (REV_TIME || REVX === '0') return 0; const k = REVX === 'same' ? Math.max(...ids.map(id => (p.revBy || {})[id] || 0)) : p.revN || 0; return REVX === 'tri' ? k * (k + 3) / 2 : k; };
 function revealPair(p, a, b) {
   const x = revExtra(p, [a, b]); G.pairing = true; revealShares(p, a, 1); revealShares(p, b, 1); G.pairing = false;
-  spend(p, (REV_TIME ? +REV_TIME : 2) + x); p.revN = (p.revN || 0) + 1;
+  spend(p, (REV_TIME ? +REV_TIME : 2) + x); p.revN = (p.revN || 0) + 1; G.stats.revA = (G.stats.revA || 0) + 1; G.stats.revP = (G.stats.revP || 0) + 1; G.stats.revX = (G.stats.revX || 0) + x;
 }
 
 // ===== CPU =====
@@ -1085,7 +1085,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.42';
+const APP_VER = 'v0.1.43';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -1619,7 +1619,7 @@ function cpuAct(p) {
   const cardFull = tac(p, 'full') && CARD_MAX && p.cards.length >= CARD_MAX;
   const bestCard = cardFull ? Math.max(0, Math.max(200, ...G.market.map(id => cardValue(p, id, true))) - Math.min(...p.cards.map(id => cardValue(p, id, true))))
     : Math.max(200, ...G.market.map(id => cardValue(p, id, true)));   // 手番の比べ方には、渡さない分を入れない
-  const opts = [];
+  let opts = [];
   // 置く：守りの増え方（危なさが下がる分）と、株を持つ会社が育つ分と、手札に入る株の値打ち
   const len0 = pathFrom(dist0).length, RT = routeOn(p), sh0 = RT ? coShares(G.tiles, dist0, k => G.owner[k]) : null;
   const freeCos = G.cos.filter(c => !c.active), foundBest = tac(p, 'found') && freeCos.length ? Math.max(0, ...freeCos.map(c => foundValue(p, c))) : 0;
@@ -1739,9 +1739,16 @@ function cpuAct(p) {
       opts.push({ v:(1 - L0) * v * (1 + G.wave / WAVES), time:revealTime(n) + revExtra(p, [id]), rv:id, rn:n, run:() => { revealShares(p, id, n); afterAction(); } });
     }
   }
+  // 上乗せがあるとき、同じ会社の公開は、値打ちの合計がいちばん高い枚数だけを残す（1枚ずつ出して上乗せを取られないように、まとめて出す）
+  if (REVX !== '0' && !REV_TIME) { const top = {}; for (const o of opts) if (o.rv !== undefined && (!top[o.rv] || o.v > top[o.rv].v)) top[o.rv] = o; opts = opts.filter(o => o.rv === undefined || top[o.rv] === o); }
   // 時間あたりの値打ちがいちばん高い手を選ぶ
   let best = null;
   for (const o of opts) { const score = o.v / o.time + RNG.cpu() * 20; if (!best || score > best.score) best = { ...o, score }; }
+  // 上乗せがあるとき、1枚だけ公開する手を選んだら、ほかにも1枚出したい会社があれば2社セットで出す（セットは1回と数える。1社ずつ別々に出すと2回目に上乗せを取られる）
+  if (REVX !== '0' && !REV_TIME && best && best.rv !== undefined && best.rn === 1 && best.v > 0) {
+    const o2 = opts.filter(o => o.rv !== undefined && o.rv !== best.rv && o.rn === 1 && o.v > 0 && canRevealPair(p, best.rv, o.rv)).sort((a, b) => b.v - a.v)[0];
+    if (o2) { const a = best.rv, b = o2.rv; best = { v:best.v + o2.v, time:2 + revExtra(p, [a, b]), score:best.score, run:() => { revealPair(p, a, b); afterAction(); } }; }
+  }
   if (PARAMS.get('dbg') === 'sole') for (const c of G.cos) { if (!c.active || !p.cards.includes(c.id) || p.shares[c.id]) continue; const hs = G.players.filter(q => q.shares[c.id] > 0); if (hs.length !== 1) continue;
     const ro = opts.filter(o => o.rv === c.id).sort((a, b) => b.v / b.time - a.v / a.time)[0];
     TR({ k:'solec', w:G.wave, inw:waveActive(), p:p.id, id:c.id, pr:price(c), money:p.money, ro:ro ? Math.round(ro.v / ro.time) : null, best:best ? Math.round(best.score) : null, took:!!(best && best.rv === c.id), bk:best ? (best.rv !== undefined ? 'rev' + best.rv : best.hi !== undefined ? 'place' : 'other') : '-' }); }
@@ -3214,10 +3221,17 @@ function drawLobby() {
   let qr = ''; try { const q = qrcode(0, 'M'); q.addData(url); q.make(); qr = q.createSvgTag(4, 0); } catch (e) {}
   const full = nt.joined.length + 1 >= nt.n;
   modal(`<h3>部屋 ${nt.room}</h3><div style="background:#fff;display:inline-block;padding:6px;border-radius:6px">${qr}</div>
-    <p class="note">QR を読むか、「部屋に入る」で番号 <b>${nt.room}</b> を入れてもらう。${nt.n}人の部屋で、空いた席は CPU が入る</p>
+    <p><button class="btn" data-inv="1">招待リンクを送る</button> <span class="note" id="invNote"></span></p>
+    <p class="note">招待リンクを送るか、QR を読むか、「部屋に入る」で番号 <b>${nt.room}</b> を入れてもらう。${nt.n}人の部屋で、空いた席は CPU が入る</p>
     <h4>参加する人</h4><p>${[nt.hostName + '（ホスト）', ...nt.joined.map(j => j.name)].join('、')}</p>
     ${nt.pending.length ? '<h4>参加の申し込み</h4>' + nt.pending.map((j, i) => `<div style="margin:4px 0">${j.name} <button class="btn" data-ok="${i}" ${full ? 'disabled' : ''}>許可</button> <button class="btn" data-ng="${i}">断る</button></div>`).join('') : ''}`,
     [['はじめる', () => hostStart()], ['やめる', () => location.reload()]]);
+  // 招待リンク：スマホなら共有の画面（LINE など）を開き、なければリンクをコピーする
+  document.querySelector('#mbox [data-inv]').onclick = async () => {
+    const note = t => { const e = document.getElementById('invNote'); if (e) e.textContent = t; };
+    try { if (navigator.share) { await navigator.share({ title:'電脳都市', text:`電脳都市の部屋 ${nt.room} に入る`, url }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(url); note('リンクをコピーしました'); } catch (e) { note(url); }
+  };
   document.querySelectorAll('#mbox [data-ok]').forEach(b => b.onclick = () => { const j = nt.pending.splice(+b.dataset.ok, 1)[0]; nt.joined.push(j); drawLobby(); });
   document.querySelectorAll('#mbox [data-ng]').forEach(b => b.onclick = () => { const j = nt.pending.splice(+b.dataset.ng, 1)[0]; j.conn.send({ type:'reject' }); drawLobby(); });
 }
