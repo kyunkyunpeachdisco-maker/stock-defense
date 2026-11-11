@@ -1106,7 +1106,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.78';
+const APP_VER = 'v0.1.79';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -2710,9 +2710,7 @@ function renderTurn() {
   renderGuide();
 }
 // はじめのうちは、押す場所を光らせる（「？ ルール」から消せる）
-const GUIDE_KEY = 'stock-defense-guide-off';
-let guideOff = AUTO; try { guideOff = guideOff || localStorage.getItem(GUIDE_KEY) === '1'; } catch (e) {}
-function setGuide(off) { guideOff = off; try { localStorage.setItem(GUIDE_KEY, off ? '1' : '0'); } catch (e) {} renderGuide(); }
+const guideOff = AUTO;   // 操作の案内は、いつも出す（消す切り替えはなくした。ユーザー）
 function renderGuide() {
   document.querySelectorAll('.glow').forEach(el => el.classList.remove('glow'));
   if (guideOff || G.over || G.actor !== me() || G.busy && !G.taking && !G.exchanging && !G.swapping && !G.discarding) return;
@@ -3211,8 +3209,7 @@ const HOWTO = [
     + `<p class="note">2人で遊ぶときだけ、タイルを置いたあとに、手札のタイルを1枚、時間を使わずに引き直すことができます。</p>`],
   () => ['画面のボタン', htTable(['画面の上のボタン', 'はたらき'], [['縦棒2本', 'ゲームを一時停止します。1人で遊ぶときだけ使えます'], ['三角', '早回しします。押すたびに、1倍、2倍、3倍と切り替わります。1人で遊ぶときだけ使えます'], ['♪', '効果音を鳴らすか、消すかを切り替えます'], ['？', 'この「遊び方」を開きます']])
     + `<p>画面の見出しや数字の横にある「？」は、指で長押しするか、マウスのカーソルを合わせると、その項目の説明が出ます。</p>`
-    + `<p><b>操作の案内</b>：自分の番のとき、次に操作する場所（タイルの手札、株券の場、「置く」ボタンなど）のまわりが、水色に光ります。遊び方に慣れて、光が要らなくなったら、下のボタンで消すことができます。</p>`
-    + `<p><button class="btn" id="guideChk" style="padding:4px 12px">${guideOff ? '操作の案内：消している（押すと光らせる）' : '操作の案内：光らせている（押すと消す）'}</button></p>`],
+    + `<p><b>操作の案内</b>：自分の番のとき、次に操作する場所（タイルの手札、株券の場、「置く」ボタンなど）のまわりが、水色に光ります。</p>`],
 ];
 function showHowTo(i = 0, onClose) {
   const pages = HOWTO.map(f => f()).filter(Boolean), n = pages.length; i = Math.max(0, Math.min(n - 1, i));
@@ -3223,7 +3220,6 @@ function showHowTo(i = 0, onClose) {
     [['← 前へ', () => showHowTo(i - 1, onClose)], last ? ['閉じる', onClose || (() => {}), '#7cf9ff'] : ['次へ →', () => showHowTo(i + 1, onClose), '#7cf9ff']]);
   const row = document.querySelector('#mbox .row'); row.style.justifyContent = 'space-between'; if (!i) row.firstChild.style.visibility = 'hidden';
   document.getElementById('htClose').onclick = close;
-  const gc = document.getElementById('guideChk'); if (gc) gc.onclick = e => { setGuide(!guideOff); e.target.textContent = guideOff ? '操作の案内：消している（押すと光らせる）' : '操作の案内：光らせている（押すと消す）'; };
 }
 document.getElementById('helpBtn').onclick = () => showHowTo(0);
 const soundBtn = document.getElementById('soundBtn');
