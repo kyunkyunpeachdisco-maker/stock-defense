@@ -761,6 +761,7 @@ function bonuses(co, m1 = 10, m2 = 5, kind = null, label = 'ボーナス') {
   // 筆頭に株価の10倍、次点に5倍（決算の配当は4倍・2倍）。2人のときは「市場」がサイコロの目の枚数を持つ
   const pr = price(co);
   const holders = G.players.map(p => ({ p, n:p.shares[co.id] })).filter(h => h.n > 0);
+  if (PARAMS.get('dbg') === 'sole' && holders.length === 1) TR({ k:'sole', w:G.wave, id:co.id, pr, m1, n:holders[0].n, who:holders[0].p.id, size:coSize(co.id), oth:G.players.filter(q => q !== holders[0].p).map(q => ({ c:q.cards.filter(c => c === co.id).length, m:q.money })), mk:G.market.filter(c => c === co.id).length });
   if (NPLAYERS === 2) holders.push({ p:null, n:1 + rnd(6) });
   if (!holders.length) return;
   holders.sort((a, b) => b.n - a.n);
@@ -796,8 +797,10 @@ function mergeChain(placer, survivor, absorbed, done) {
     const pr = price(co);
     const next = () => {
       if (!order.length) {
+        if (PARAMS.get('dbg') === 'cash') TR({ k:'mg', w:G.wave, n:G.stats.bought, placer:placer.id, absorbed:id, pl:G.players.map((q, i) => ({ gain:q.money - moneyBefore[i], before:moneyBefore[i], live:q.cards.filter(c => c !== CENTRAL && c !== id && G.cos[c].active).length, need:q.cards.filter(c => c !== CENTRAL && c !== id && G.cos[c].active).reduce((x, c) => x + price(G.cos[c]), 0), abs:q.shares[id] })) });
         (G.stats.mergeInfo = G.stats.mergeInfo || []).push({ wave:G.wave, placer:placer.id, absorbed:id, survivor, size:sizes[0], svSize:sizes[1], price:pr,
           gain:G.players.map((q, i) => q.money - moneyBefore[i]), founder:co.founder });
+        if (PARAMS.get('dbg') === 'end') TR({ k:'ab', w:G.wave, left:G.players.map(q => q.cards.filter(c => c === id).length) });
         sv.kills += co.kills; co.active = false; co.kills = 0;
         // 吸収された会社の手札の株は、そのまま手札に残す（その会社がまた設立されたら公開できる。ユーザー）
         Object.keys(G.owner).forEach(k => { if (G.owner[k] === id) G.owner[k] = survivor; });
@@ -852,6 +855,7 @@ function takeShare(p, mi) {
     if (TRUST_PILE === 'open') { p.shares[CENTRAL]++; G.stats.taken = (G.stats.taken || 0) + 1; rec(p, 'take', { co:id, from:'trust', open:true, market:[...G.market] }); log(`${p.name}：投資信託を1口受け取った（公開済み）`); return; } }
   else if (mi < 0) id = drawDeck(); else { id = G.market[mi]; G.market.splice(mi, 1); refillMarket(); }
   if (id === undefined) return;
+  if (PARAMS.get('dbg') === 'end' && id !== CENTRAL) TR({ k:'tk', w:G.wave, p:p.id, dead:!G.cos[id].active, held:p.cards.filter(c => c === id).length, from:mi < 0 ? 'deck' : 'market', liveInMarket:G.market.filter(c => G.cos[c].active).length });
   p.cards.push(id); G.stats.taken = (G.stats.taken || 0) + 1; rec(p, 'take', { co:id, from:mi === -2 ? 'trust' : mi < 0 ? 'deck' : 'market', market:[...G.market] });
   log(`${p.name}：株を1枚手札に入れた` + (p.cpu ? '' : `（${coOf(id).name}）`));
 }
@@ -927,6 +931,7 @@ const canReveal = (p, id, n = 1) => !waveActive() && coOf(id).active && p.cards.
 function revealShares(p, id, n) {
   const co = coOf(id), pr = priceOf(id); rec(p, 'reveal', { co:id, n, price:pr, others:G.players.map(q => q.shares[id]) });
   for (let i = 0; i < n; i++) p.cards.splice(p.cards.indexOf(id), 1);
+  if (PARAMS.get('dbg') === 'cash') TR({ k:'rv', w:G.wave, p:p.id, id, n, pr, after:p.money - pr * n, mine:p.shares[id] + n, top:Math.max(0, ...G.players.filter(q => q !== p).map(q => q.shares[id])) });
   p.shares[id] += n; p.money -= pr * n; G.stats.bought += n; p.resetUsed = false; earn(p, id === CENTRAL ? '払った（投資信託）' : '払った（会社）', -pr * n);
   (G.revLog = G.revLog || []).push({ wave:G.wave, pid:p.id, id, n, pr, after:p.shares[id] });
   if (!G.pairing) spend(p, revealTime(n)); sfx('coin');
@@ -1062,10 +1067,21 @@ function forkDefense(dist, towers) {
     return best === Infinity ? 0 : best;
   });
 }
+// 次の波の中身を見る（暫定で全員。?ahead=0 で前の形。CPU だけの局：負ける見込みが 7〜13% のまま、硬い敵が出はじめる6波目に5〜11点抜かれて負け。
+// 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
+// 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
+const AHEAD = PARAMS.get('ahead') !== '0', AH_L = +(PARAMS.get('ahl') || .5), AH_B = +(PARAMS.get('ahb') || .5);
+function waveHard(n) {
+  const st = WAVE_STYLE[COURSE] || WAVE_STYLE[0], mix = st.mix(effWave(n)); let rest = 1, a = 0;
+  for (const [k, w] of Object.entries(mix)) { rest -= w; a += w * (k === 'swarm' ? 2 : 1) * ENEMY[k].hp * Math.pow(ENEMY[k].life, AH_L); }
+  a += rest;
+  if (isBoss(n, st.boss)) a += AH_B * ENEMY.big.hp * Math.pow(ENEMY.big.life, AH_L) / Math.round(6 + 2 * effWave(n));
+  return a * 1.15 / .86;
+}
 // 危なさ：次の波の敵1体の平均の体力と、守りが与えられるダメージを比べる。1を超えると危ない
 function danger(def) {
   const n = Math.max(1, waveActive() ? G.wave : G.wave + 1);
-  const hp = (6 + effWave(n) * HP_GROWTH) * 1.15, secPerCell = 1 / 1.4, count = 6 + 2 * effWave(n);
+  const hp = (6 + effWave(n) * HP_GROWTH) * (AHEAD ? waveHard(n) : 1.15), secPerCell = 1 / 1.4, count = 6 + 2 * effWave(n);
   const per = def * secPerCell / Math.max(1, count * .25);   // 火力は、同時に射程に入る敵どうしで分け合う
   const lifeFactor = Math.sqrt(LIVES / Math.max(1, G.lives));
   return hp / Math.max(1, per) * lifeFactor * G.calib;   // calib：前の波で敵が届いたら慎重になる
@@ -1233,11 +1249,31 @@ function marginValue(p, id, mine, fp) {
   return bonusShare(p, id, top + 1) * fp * MARGIN_W * Math.min(1, hidden / 4);
 }
 const MARGIN_W = +(PARAMS.get('marginw') || .15);
+// 資金計画（?tac=plan、試し中。ユーザー：「合併を一度もせずにトップは無理。本命を安いうちに仕込むだけでなく、吸収されそうな会社の株を持っておいて、合併でお金を補充して、貯めておいた本命を公開する」
+// 「本命が払えるうちは安いうちに出していいが、それで資金がなくなったら元も子もない」）
+// 本命：公開した株と手札を合わせて、いちばん厚く持っている会社（2枚以上）
+function mainCo(p) {
+  let best = -1, bv = 0;
+  for (const c of G.cos) { if (!c.active) continue; const n = p.shares[c.id] + p.cards.filter(x => x === c.id).length; if (n < 2) continue; const v = n * futurePrice(c); if (v > bv) { bv = v; best = c.id; } }
+  return best;
+}
+// 手札の本命を全部公開するのに足りないお金
+function mainShort(p, spend = 0) { const m = mainCo(p); return m < 0 ? 0 : Math.max(0, p.cards.filter(x => x === m).length * price(G.cos[m]) - (p.money - spend)); }
+// 吸収されそうな度合い：大きい会社まで3マス以内なら近いほど高く、そうでなくても、安全な大きさに届かず、いちばん大きい会社でもなければ少し
+function absorbW(id) {
+  const d = linkDist(id); if (d <= 3) return MHOPE[d - 1];
+  return coSize(id) < SAFE && G.cos.some(c => c.active && c.id !== id && coSize(c.id) > coSize(id)) ? PLAN_BASE : 0;
+}
+const PLAN_BASE = +(PARAMS.get('planbase') || .15), PLAN_K = +(PARAMS.get('plank') || .6);
+let NOAFF = false;
 function cardValue(p, id, own) {
   FP_P = p;
   if (id === CENTRAL) return Math.max(100, futureTrust() - centralPrice() * .5);
   const co = G.cos[id];
   // 立て直し（?tac=refound、試し中。ユーザー：吸収された会社の株を持ち続けて、同じ会社をもう一度立てる）：盤にない会社の株は、すでに持っているほど、立てたとき安く筆頭になれるので高く見る
+  // 抱えすぎない（?tac=dead、試し中。ユーザーの局：CPU が吸収された会社の株を取り続けて、5枚抱えたまま4位。別の局でも4枚）：盤にない会社の株は、3枚あれば立てたとき筆頭に足りるので、
+  // それ以上は高く見ない。終わりの3波は、立て直しても育つ間がないので安く見る
+  if (!co.active && tac(p, 'dead')) { const held = p.cards.filter(c => c === id).length; return G.wave >= WAVES - 3 || held >= 3 ? 50 : 150 + (tac(p, 'refound') ? 100 * Math.min(2, held) : 0); }
   if (!co.active) return 150 + (tac(p, 'refound') ? 100 * Math.min(3, p.cards.filter(c => c === id).length) : 0);
   const fp = keepFp(p, id, futurePrice(co)), mine = p.shares[id] + p.cards.filter(c => c === id).length;
   // お金の計画（?tac=cash、試し中）：公開するお金が足りそうにない株は、自分にとっての値打ちを下げて見る（渡さない値打ちはそのまま）。
@@ -1248,7 +1284,10 @@ function cardValue(p, id, own) {
     const need = p.cards.filter(c => c !== CENTRAL && G.cos[c].active).reduce((a, c) => a + price(G.cos[c]), 0) + price(co);
     afford = CASH_FLOOR + (1 - CASH_FLOOR) * Math.min(1, (p.money + inc) / need);
   }
-  return ((fp - price(co) * .5) + (bonusShare(p, id, mine + 1) - bonusShare(p, id, mine)) * fp * .5) * afford + (own ? 0 : denyValue(p, id, mine, fp)) + (tac(p, 'mhope') ? mergeHope(p, id, mine) : 0) + (tac(p, 'focus') ? focusValue(p, id, mine, fp) : 0) + (tac(p, 'margin') ? marginValue(p, id, mine, fp) : 0);
+  // 払える株を取る（?tac=cash2、試し中。ユーザーの局：CPU が所持金100のまま、1,200の株を5枚抱えて最後まで出せず4位。ユーザー：「資金がなくなったら元も子もない」）：
+  // 今のお金で1枚も公開できない株は、自分にとっての値打ちを下げて見る。お金が足りていれば何も変わらない
+  if (!own && tac(p, 'cash2') && !NOAFF) afford = Math.max(CASH_FLOOR, Math.min(1, p.money / price(co)));
+  return ((fp - price(co) * .5) + (bonusShare(p, id, mine + 1) - bonusShare(p, id, mine)) * fp * .5) * afford + (own ? 0 : denyValue(p, id, mine, fp)) + (tac(p, 'mhope') ? mergeHope(p, id, mine) : tac(p, 'plan') && id !== mainCo(p) ? (bonusShareBase(p, id, mine + 1) - bonusShareBase(p, id, mine)) * price(co) * absorbW(id) : 0) + (tac(p, 'focus') ? focusValue(p, id, mine, fp) : 0) + (tac(p, 'margin') ? marginValue(p, id, mine, fp) : 0);
 }
 // 渡さない（暫定で全員。?deny=0 で前の取り方、?deny=mix で偶数番だけ）。渡さない CPU のほうが勝った：場に残すと、ほかの人がそれを取って筆頭・次点に近づく分と、自分の順位が下がる分を、取る値打ちに足す。
 // ほかの人の手札は見えないので、公開した枚数で見る。場に残した株を誰が取るかは分からないので半分に見る
@@ -1284,8 +1323,13 @@ function liveDraw(p) {
 }
 function cpuTake(p) {
   FP_P = p;
+  if (PARAMS.get('dbg') === 'fm' && p.strong && G.market.length) { const rows = G.market.map(id => { if (id === CENTRAL || !G.cos[id].active) return { id, v:cardValue(p, id), f:0, m:0 }; const co = G.cos[id], fp = keepFp(p, id, futurePrice(co)), mine = p.shares[id] + p.cards.filter(c => c === id).length; return { id, v:cardValue(p, id), f:focusValue(p, id, mine, fp), m:marginValue(p, id, mine, fp), mine, top:Math.max(0, ...G.players.filter(q => q !== p).map(q => q.shares[id])), pub:p.shares[id] }; });
+    const pick = rows.reduce((a, b) => b.v > a.v ? b : a), base = rows.reduce((a, b) => b.v - b.f - b.m > a.v - a.f - a.m ? b : a);
+    if (pick.f || pick.m) TR({ k:'fm', w:G.wave, p:p.id, id:pick.id, f:Math.round(pick.f), m:Math.round(pick.m), mine:pick.mine, pub:pick.pub, top:pick.top, changed:pick.id !== base.id, money:p.money }); }
   if (PARAMS.get('dbg') === 'link') TR({ k:'ld', w:G.wave, n:G.stats.taken || 0, d:G.cos.filter(c => c.active).map(c => [c.id, linkDist(c.id), coSize(c.id)]), m:(G.stats.mergeInfo || []).length });
   if (canReset(p) && !tac(p, 'noreset') && (tac(p, 'rst') ? resetTime(p) <= (liveDraw(p) >= 1.5 ? 2 : liveDraw(p) >= .75 ? 1 : 0) : resetTime(p) <= RESET_CPU_MAX)) { const b = G.market.join(''), rt = resetTime(p), ld = +liveDraw(p).toFixed(1); doReset(p); TR({ k:'rst', ld, w:G.wave, p:p.id, rt, before:b, after:G.market.join(''), live:G.market.filter(id => G.cos[id].active).length, act:G.cos.filter(c => c.active).map(c => c.id).join('') }); }   // ?tac=rst、試し中：見えていない株を数えて、今ある会社の株が出る見込みがあるときだけ入れ替える（見込みが高ければ時間2まで）
+  if (PARAMS.get('dbg') === 'cash2' && tac(p, 'cash2') && G.market.length) { const a = G.market.map(id => cardValue(p, id)); NOAFF = true; const b = G.market.map(id => cardValue(p, id)); NOAFF = false;
+    const ia = a.indexOf(Math.max(...a)), ib = b.indexOf(Math.max(...b)); if (a.some((v, i) => v !== b[i])) TR({ k:'c2', w:G.wave, p:p.id, money:p.money, mk:G.market.join(''), pick:G.market[ia], was:G.market[ib], pr:G.market.map(id => id === CENTRAL || !G.cos[id].active ? 0 : price(G.cos[id])).join(','), hand:p.cards.join(''), ch:ia !== ib }); }
   if (p.weak && G.market.length && RNG.cpu() < WEAK_RAND) return takeShare(p, Math.floor(RNG.cpu() * G.market.length));
   let best = { mi:-1, v:200 + RNG.cpu() * 50 };  // 山札の一番上
   G.market.forEach((id, mi) => { const v = cardValue(p, id) + RNG.cpu() * 30; if (v > best.v) best = { mi, v }; });
@@ -1300,7 +1344,7 @@ const EXCH = PARAMS.get('exch') || 'careful';   // 暫定：慎重に替える C
 const exchCareful = p => PARAMS.has('exch') ? EXCH === 'careful' || (EXCH === 'mix' && p.id % 2 === 0) : !!p.strong;
 function hopeless(p, id) {
   const co = G.cos[id], mine = p.shares[id] + p.cards.filter(c => c === id).length;
-  if (!co.active) return p.cards.filter(c => c === id).length <= 1;
+  if (!co.active) { const held = p.cards.filter(c => c === id).length; return held <= 1 || (tac(p, 'dead') && (held >= 4 || G.wave >= WAVES - 3)); }
   const others = G.players.filter(q => q !== p).map(q => q.shares[id]).sort((a, b) => b - a);
   if (COUNTING === '1' || (COUNTING === 'mix' && p.id % 2 === 0)) {
     // 数える（?count=1、試し中。ユーザー。望みなしの見方が甘くなり、公開にお金を使いすぎて守れなくなった：5回中0回）：公開した株と場の株は見えるので、残りの枚数（山札とみんなの手札）が分かる。
@@ -1339,7 +1383,7 @@ function mergeGain(p, t) {
     const others = G.players.filter(q => q !== p).reduce((s2, q) => s2 + bonusShareBase(q, id, q.shares[id]) * pr, 0) / Math.max(1, G.players.length - 1);
     // 待つ得：吸収される会社の株価がこれから上がりそうなら、今つなげると、その分のボーナスを取り逃す（ここぞで合併させる）。?mergewait=0 で考えない
     const wait = MERGE_WAIT ? bonusShareBase(p, id, p.shares[id]) * Math.max(0, futurePrice(G.cos[id]) - pr) * .7 : 0;
-    v += mine - others * .5 - wait;
+    v += mine - others * .5 - wait + (tac(p, 'plan') ? Math.min(mine, mainShort(p)) * PLAN_K : 0);
   }
   // 残る会社が育つ得（?tac=mrival、試し中）：吸収された会社の倒した数とこれからの稼ぎは、残る会社に足されて株価が上がる。
   // その得を、自分の持ち分から、いちばん得をするほかの人の持ち分を引いて数える（人が筆頭の大きい会社に、自分の会社を吸収させて育てない）
@@ -1543,6 +1587,7 @@ function foreDef(alts, tiles, def) {
 }
 function cpuAct(p) {
   FP_P = p;
+  if (PARAMS.get('dbg') === 'end') TR({ k:'st', w:G.wave, p:p.id, money:p.money, live:p.cards.filter(c => c !== CENTRAL && G.cos[c].active).length, dead:p.cards.filter(c => c !== CENTRAL && !G.cos[c].active).length, need:p.cards.filter(c => c !== CENTRAL && G.cos[c].active).reduce((a, c) => a + price(G.cos[c]), 0), lead:G.cos.filter(c => c.active && p.shares[c.id] > 0 && p.shares[c.id] >= Math.max(...G.players.map(q => q.shares[c.id]))).length });
   replaceDead(p);
   const alts = tac(p, 'foresee') ? altBlocks(G.dist) : [], fore = (tiles, def) => alts.length ? foreDef(alts, tiles, def) : def;
   const dist0 = G.dist, def0 = estimate(G.tiles, dist0), u0 = dangerOf(fore(G.tiles, def0)), L0 = loseChance(u0), myW = Math.max(3000, wealth(p));
@@ -1554,6 +1599,11 @@ function cpuAct(p) {
   // 置く：守りの増え方（危なさが下がる分）と、株を持つ会社が育つ分と、手札に入る株の値打ち
   const len0 = pathFrom(dist0).length, RT = routeOn(p), sh0 = RT ? coShares(G.tiles, dist0, k => G.owner[k]) : null;
   const freeCos = G.cos.filter(c => !c.active), foundBest = tac(p, 'found') && freeCos.length ? Math.max(0, ...freeCos.map(c => foundValue(p, c))) : 0;
+  const canAbsorb = new Set();
+  // 吸収される前に手札の株を公開すると、筆頭・次点のボーナスがどれだけ増えるか（払える枚数まで。公開に払った分は、合併で同じ値で売れる）
+  const premGain = id => { const have = p.cards.filter(c => c === id).length, pr = price(G.cos[id]); let g = 0;
+    for (let n = 1; n <= have && pr * n <= p.money; n++) g = Math.max(g, (bonusShareBase(p, id, p.shares[id] + n) - bonusShareBase(p, id, p.shares[id])) * pr);
+    return g; };
   p.hand.forEach((t0, i) => {
     const cp = canPlace(t0); if (!cp.ok) return;
     let spots = cp.spots;
@@ -1575,6 +1625,9 @@ function cpuAct(p) {
     const len1 = pathFrom(dist1).length, defM = MAZE && !LEAK ? def1 * Math.max(1, len1 / len0) + Math.max(0, len1 - len0) * 2 : def1;
     const safety = (loseChance(u0) - loseChance(dangerOf(fore(after, defM)))) * myW;
     const stakeIds = new Set(neighbors(t.x, t.y).map(([a, b]) => G.owner[key(a, b)]).filter(v => v !== undefined));
+    // 合併の前に出す（?tac=prem、試し中。CPU どうしの6局で、吸収されたとき手札に残って使えなくなった株が82枚）：このタイルで吸収される会社を覚えておく
+    const absIds = tac(p, 'prem') && stakeIds.size >= 2 ? [...stakeIds].sort((a, b) => coSize(b) - coSize(a)).slice(1) : [];
+    absIds.forEach(id => canAbsorb.add(id));
     const stake = [...stakeIds].reduce((s2, id) => s2 + (p.shares[id] + p.cards.filter(c => c === id).length - (growRival(p) ? rivalHold(p, id) : 0)) * 40, 0);
     const growth = defGain(def0, def1) * (stake ? 1 : .2);
     const gco = RT ? guessOwner(t.x, t.y) : undefined, sh1 = RT ? coShares(after, dist1, kk => kk === k ? gco : G.owner[kk]) : null, rv = RT ? routeValue(p, sh0, sh1) : 0;
@@ -1588,7 +1641,7 @@ function cpuAct(p) {
     // 守りが危ないときは、守りの足しにならない置き方（ノードなど）を、株をもらうためだけには打たない（暫定で全員。?guard=0 で前の形。ユーザーの局：30枚中11枚がノードで5波目に全員の負け）。
     // ほかの株の案とまとめて全員 CPU の100局ずつで、守りきる割合が 87% → 92%、残りライフが +1.0。この打ち方をする席だけを見ると順位はわずかに下がる
     const lazy = GUARD && L0 > GUARD_L && safety <= 0;
-    opts.push({ v:safety + (1 - L0) * (growth + (lazy ? 0 : stake + bestCard) + mergeGain(p, t) + rv + fnd + spoil) + plan, hi:i, time:placeTime(t0, t.x, t.y), run:() => placeTile(p, i, () => takeStep(p, afterAction), [t.x, t.y]) });
+    opts.push({ v:safety + (1 - L0) * (growth + (lazy ? 0 : stake + bestCard) + mergeGain(p, t) - absIds.reduce((a, id) => a + premGain(id), 0) + rv + fnd + spoil) + plan, hi:i, time:placeTime(t0, t.x, t.y), run:() => placeTile(p, i, () => takeStep(p, afterAction), [t.x, t.y]) });
     }
   });
   // 取り除く：守りの変化と、経路で株価がどう動くか（自分が株を持つ会社に倒させる道に変わるなら得）
@@ -1629,7 +1682,7 @@ function cpuAct(p) {
     const have = p.cards.filter(c => c === CENTRAL).length;
     for (let n = 1; n <= have; n++) {
       if (!canReveal(p, CENTRAL, n)) break;
-      const v = n * (futureTrust() - centralPrice());
+      const v = n * (futureTrust() - centralPrice()) - (tac(p, 'plan') ? (mainShort(p, centralPrice() * n) - mainShort(p)) * PLAN_K : 0);
       opts.push({ v:(1 - L0) * v, time:revealTime(n), run:() => { revealShares(p, CENTRAL, n); afterAction(); } });
     }
   }
@@ -1649,15 +1702,26 @@ function cpuAct(p) {
       if (!canReveal(p, id, n)) break;
       // 吸収されそうな会社は、公開して筆頭・次点になっておくと合併のボーナスが入る（?tac=mhoper、試し中。ユーザーの局：2〜3枚で筆頭を取り、合併で 5000〜8000）
       const hope = tac(p, 'mhoper') && linkDist(id) <= 3 ? (bonusShareBase(p, id, p.shares[id] + n) - bonusShareBase(p, id, p.shares[id])) * pr * MHOPE[linkDist(id) - 1] : 0;
-      const v = n * (fp - pr) + (bonusShare(p, id, p.shares[id] + n) - bonusShare(p, id, p.shares[id])) * fp + settleGain(p, id, n) - reserveCost(p, pr * n) + hope;
+      // 自分のタイルで吸収できる会社なら、つなげる前に出しておく分を足す
+      const prem = canAbsorb.has(id) ? (bonusShareBase(p, id, p.shares[id] + n) - bonusShareBase(p, id, p.shares[id])) * pr : 0;
+      if (prem && PARAMS.get('dbg') === 'end') TR({ k:'pm', w:G.wave, p:p.id, id, n, pr, prem:Math.round(prem), mine:p.shares[id], others:G.players.filter(q => q !== p).map(q => q.shares[id]).join(',') });
+      const planOnP = tac(p, 'plan'), isMain = planOnP && id === mainCo(p);
+      const hope2 = planOnP && !isMain ? (bonusShareBase(p, id, p.shares[id] + n) - bonusShareBase(p, id, p.shares[id])) * pr * absorbW(id) : 0;
+      const hold = planOnP && !isMain ? (mainShort(p, pr * n) - mainShort(p)) * PLAN_K : 0;
+      const v = n * (fp - pr) + (bonusShare(p, id, p.shares[id] + n) - bonusShare(p, id, p.shares[id])) * fp + settleGain(p, id, n) - reserveCost(p, pr * n) + hope + hope2 - hold + prem;
+      if (planOnP && PARAMS.get('dbg') === 'cash' && (hope2 || hold)) TR({ k:'pv', w:G.wave, p:p.id, id, n, pr, main:mainCo(p), hope2:Math.round(hope2), hold:Math.round(hold), v:Math.round(v), money:p.money });
       // 終わりが近いほど、手札の株は紙くずになりやすいので急ぐ
       // 守りきれなければ全部なくなるので、生き残る見込みを掛ける
-      opts.push({ v:(1 - L0) * v * (1 + G.wave / WAVES), time:revealTime(n), run:() => { revealShares(p, id, n); afterAction(); } });
+      opts.push({ v:(1 - L0) * v * (1 + G.wave / WAVES), time:revealTime(n), rv:id, rn:n, run:() => { revealShares(p, id, n); afterAction(); } });
     }
   }
   // 時間あたりの値打ちがいちばん高い手を選ぶ
   let best = null;
   for (const o of opts) { const score = o.v / o.time + RNG.cpu() * 20; if (!best || score > best.score) best = { ...o, score }; }
+  if (PARAMS.get('dbg') === 'sole') for (const c of G.cos) { if (!c.active || !p.cards.includes(c.id) || p.shares[c.id]) continue; const hs = G.players.filter(q => q.shares[c.id] > 0); if (hs.length !== 1) continue;
+    const ro = opts.filter(o => o.rv === c.id).sort((a, b) => b.v / b.time - a.v / a.time)[0];
+    TR({ k:'solec', w:G.wave, inw:waveActive(), p:p.id, id:c.id, pr:price(c), money:p.money, ro:ro ? Math.round(ro.v / ro.time) : null, best:best ? Math.round(best.score) : null, took:!!(best && best.rv === c.id), bk:best ? (best.rv !== undefined ? 'rev' + best.rv : best.hi !== undefined ? 'place' : 'other') : '-' }); }
+  if (PARAMS.get('dbg') === 'l0' && best) TR({ k:'l0', w:G.wave, inw:waveActive(), lives:G.lives, L0:+L0.toFixed(3), p:p.id, kind:best.rv !== undefined ? 'rev' : best.hi !== undefined ? 'place' : 'other', t:best.time, v:Math.round(best.v) });
   if (PARAMS.get('dbg') && best) (G.stats.bs = G.stats.bs || []).push(Math.round(best.score));
   if (cardFull && best) TR({ k:'full', w:G.wave, p:p.id, v:Math.round(best.v), t:best.time, kind:best.hi !== undefined ? 'place:' + p.hand[best.hi].type : 'other', money:p.money, bestCard:Math.round(bestCard) });
   if (best && best.v > 0) return best.run();
