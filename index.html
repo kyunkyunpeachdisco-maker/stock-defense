@@ -409,7 +409,7 @@ function recSnapshot(kind) {
     centralLeft:G.centralLeft });
 }
 function exportRecord() {
-  const data = { app:'stock-defense', v:1, savedAt:new Date().toISOString(), settings:{ course:COURSE, n:NPLAYERS, diff:DIFF, level:CPU_LEVEL, powers:POWERS, noLimit:NO_LIMIT, params:location.search },
+  const data = { app:'stock-defense', v:1, ver:APP_VER, savedAt:new Date().toISOString(), settings:{ course:COURSE, n:NPLAYERS, diff:DIFF, level:CPU_LEVEL, powers:POWERS, noLimit:NO_LIMIT, params:location.search },
     over:!!G.over, win:G.over ? G.lives > 0 : null, result:G.result || null, final:G.final || null, history:G.history || [], moves:G.moves || [], log:G.fullLog || [], stats:G.stats };
   const a = document.createElement('a'), d = new Date();
   a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type:'application/json' }));
@@ -1070,7 +1070,9 @@ function forkDefense(dist, towers) {
 // 次の波の中身を見る（暫定で全員。?ahead=0 で前の形。CPU だけの局：負ける見込みが 7〜13% のまま、硬い敵が出はじめる6波目に5〜11点抜かれて負け。
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
-const AHEAD = PARAMS.get('ahead') !== '0', AH_L = +(PARAMS.get('ahl') || .5), AH_B = +(PARAMS.get('ahb') || .5);
+// 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
+const APP_VER = 'v0.1.39';
+const AHEAD = PARAMS.get('ahead') !== '0', AH_L = +(PARAMS.get('ahl') || .5), AH_B = +(PARAMS.get('ahb') || 1);
 function waveHard(n) {
   const st = WAVE_STYLE[COURSE] || WAVE_STYLE[0], mix = st.mix(effWave(n)); let rest = 1, a = 0;
   for (const [k, w] of Object.entries(mix)) { rest -= w; a += w * (k === 'swarm' ? 2 : 1) * ENEMY[k].hp * Math.pow(ENEMY[k].life, AH_L); }
@@ -1147,7 +1149,7 @@ const TR = PARAMS.get('dbg') ? o => (G.stats.tr = G.stats.tr || []).push(o) : ()
 const TAC = new Set((PARAMS.get('tac') || '').split(',').filter(Boolean));
 // 暫定で、つよい CPU の標準にした戦術（?lead=0 で外す）：margin・focus・refound（筆頭を固める・筆頭を取りにいく・立て直し）。
 // 席を入れ替えた300組で、平均順位 2.40 対 2.60（誤差の3.7倍）、終わりのボーナスが約 +1200
-const STD_TAC = PARAMS.get('lead') === '0' ? new Set() : new Set(['margin', 'focus', 'refound', 'full', 'rst', 'xchg']);   // full・rst・xchg は、出た場面を数局読んでから比べた：100組で順位 2.36 対 2.64（2.9倍）、終わりのボーナス +1800、守りは全員どうしで 87 → 90
+const STD_TAC = PARAMS.get('lead') === '0' ? new Set() : new Set(['margin', 'focus', 'refound', 'full', 'rst', 'xchg', 'cash2']);   // full・rst・xchg は、出た場面を数局読んでから比べた：100組で順位 2.36 対 2.64（2.9倍）、終わりのボーナス +1800、守りは全員どうしで 87 → 90
 const tac = (p, name) => (TAC.has(name) && tryOn(p)) || (STD_TAC.has(name) && !!p.strong);
 const UPCOV = PARAMS.get('upcov') !== '0';   // 敵の道に届かないタワーを、株をもらうためだけに強化しない
 const keepFp = (p, id, fp) => p.keep && p.keep[id] ? Math.max(fp, price(G.cos[id]) + 400) : fp;
@@ -1284,7 +1286,7 @@ function cardValue(p, id, own) {
     const need = p.cards.filter(c => c !== CENTRAL && G.cos[c].active).reduce((a, c) => a + price(G.cos[c]), 0) + price(co);
     afford = CASH_FLOOR + (1 - CASH_FLOOR) * Math.min(1, (p.money + inc) / need);
   }
-  // 払える株を取る（?tac=cash2、試し中。ユーザーの局：CPU が所持金100のまま、1,200の株を5枚抱えて最後まで出せず4位。ユーザー：「資金がなくなったら元も子もない」）：
+  // 払える株を取る（暫定でつよい CPU の標準。100組で順位 2.45 対 2.55・誤差の1.8倍で、決めきれないまま暫定で入れた。ユーザーの局：CPU が所持金100のまま、1,200の株を5枚抱えて最後まで出せず4位。ユーザー：「資金がなくなったら元も子もない」）：
   // 今のお金で1枚も公開できない株は、自分にとっての値打ちを下げて見る。お金が足りていれば何も変わらない
   if (!own && tac(p, 'cash2') && !NOAFF) afford = Math.max(CASH_FLOOR, Math.min(1, p.money / price(co)));
   return ((fp - price(co) * .5) + (bonusShare(p, id, mine + 1) - bonusShare(p, id, mine)) * fp * .5) * afford + (own ? 0 : denyValue(p, id, mine, fp)) + (tac(p, 'mhope') ? mergeHope(p, id, mine) : tac(p, 'plan') && id !== mainCo(p) ? (bonusShareBase(p, id, mine + 1) - bonusShareBase(p, id, mine)) * price(co) * absorbW(id) : 0) + (tac(p, 'focus') ? focusValue(p, id, mine, fp) : 0) + (tac(p, 'margin') ? marginValue(p, id, mine, fp) : 0);
