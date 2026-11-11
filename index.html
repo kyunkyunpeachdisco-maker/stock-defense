@@ -119,14 +119,14 @@
 <body>
 <div id="wrap">
   <div id="top">
-    <span id="wave" class="big" data-tip="敵の波。全部の回数は上に出ています。波と波の間は少しだけ時間があります"></span>
-    <span id="life" class="big" data-tip="全員で共有のライフ。敵が出口（中枢サーバー）に届くと減り、0になると全員の負け"></span>
-    <span id="money" class="big" data-tip="株を公開するときに払うお金。終わりにいちばん多い人の勝ち"></span>
+    <span id="wave" class="big" data-tip="いま何回目の波か。波と波の間に、全員が順番に行動します"></span>
+    <span id="life" class="big" data-tip="全員で共有するライフ。敵が出口に着くと減り、0になると全員の負けです"></span>
+    <span id="money" class="big" data-tip="手持ちのお金。株を公開するときに払います。最後にいちばん多い人の勝ちです"></span>
     <span class="note" id="setupNote"></span>
     <span class="brk"></span>
-    <button class="btn" id="pauseBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="一時停止（ひとりで遊ぶときだけ）"><svg width="11" height="12" viewBox="0 0 11 12" style="vertical-align:-1px" aria-label="一時停止"><rect x="1" y="1" width="3" height="10" rx="1" fill="currentColor"/><rect x="7" y="1" width="3" height="10" rx="1" fill="currentColor"/></svg></button>
-    <button class="btn" id="ffBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="早回し（ひとりで遊ぶときだけ）。押すたびに 1倍 → 2倍 → 3倍。持ち時間（秒）は早回ししても本当の秒で減る"><svg width="11" height="12" viewBox="0 0 11 12" style="vertical-align:-1px" aria-label="早回し"><path d="M2 1.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L2.9.7a.6.6 0 0 0-.9.5z" fill="currentColor"/></svg></button>
-    <button class="btn" id="soundBtn" style="padding:4px 8px;font-size:13px" data-tip="効果音を鳴らす・消す"></button>
+    <button class="btn" id="pauseBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="一時停止"><svg width="11" height="12" viewBox="0 0 11 12" style="vertical-align:-1px" aria-label="一時停止"><rect x="1" y="1" width="3" height="10" rx="1" fill="currentColor"/><rect x="7" y="1" width="3" height="10" rx="1" fill="currentColor"/></svg></button>
+    <button class="btn" id="ffBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="早回し。押すたびに1倍、2倍、3倍と切り替わります。持ち時間は早回ししても同じ速さで減ります"><svg width="11" height="12" viewBox="0 0 11 12" style="vertical-align:-1px" aria-label="早回し"><path d="M2 1.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L2.9.7a.6.6 0 0 0-.9.5z" fill="currentColor"/></svg></button>
+    <button class="btn" id="soundBtn" style="padding:4px 8px;font-size:13px" data-tip="効果音のオンとオフ"></button>
     <button class="btn" id="helpBtn">？<span class="hl"> ルール</span></button>
   </div>
   <div style="position:relative"><canvas id="cv"></canvas><div id="bmenu"></div></div>
@@ -134,11 +134,11 @@
   <div id="info" class="note" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:2px 2px 4px"></div>
   <div id="tabs"><button class="btn on" data-tab="op">操作</button><button class="btn" data-tab="cos">会社</button><button class="btn" data-tab="log">記録</button></div>
   <div class="grp" id="gTrack">
-  <div class="sec">時間トラック<span class="q" data-tip="手番の順番を決める線です。いちばん左（後ろ）の人が次に動きます。行動するとその時間だけ右へ進みます。ピンクの線がこの波で使える時間の終わりで、越えた人は波が終わるまで待ちます。越えた分は次に持ち越します。">？</span></div>
+  <div class="sec">時間トラック<span class="q" data-tip="手番の順番です。いちばん左の人が次に動き、行動すると使った時間だけ右へ進みます。ピンクの線を越えた人は、波が終わるまで待ちます。越えた分は、次の波で使える時間から引かれます">？</span></div>
   <div id="track"></div>
   </div>
   <div class="grp" id="gHand">
-  <div class="sec">タイルの手札<span class="q" data-tip="タイルにはエリア（盤のうすい文字 A〜F）と種類が書いてあります。そのエリアの空いているマスなら、どこにでも置けます。選ぶと盤の上で置ける場所が光ります。置くとそこは壁になり、種類によっては敵を撃つタワーになります。置くのは無料で、時間だけ使います。">？</span></div>
+  <div class="sec">タイルの手札<span class="q" data-tip="タイルには、置けるエリア（盤のうすい文字 A〜F）とタワーの種類が書いてあります。選ぶと、置けるマスが盤の上で光ります。置くのにお金はかからず、時間だけ使います">？</span></div>
   <div id="hand"></div>
   <div id="acts">
     <button class="btn" id="place" disabled>このタイルを置く</button>
@@ -149,11 +149,11 @@
   </div>
   </div>
   <div class="grp" id="gStock">
-  <div class="sec">株<span class="q" data-tip="タイルを置くか強化すると、株を1枚手札に入れます（場の5枚か山札の一番上から選ぶ）。手札の株はまだ数えません。お金を払って公開した株だけが、ボーナスと売却で数えられます。">？</span></div>
+  <div class="sec">株<span class="q" data-tip="タイルを置くか強化すると、株を1枚もらえます。場の5枚か、山札の一番上から選びます。もらった株は手札に入るだけで、お金を払って公開するまでは数えません">？</span></div>
   <div id="market" style="padding:4px 0"></div>
   </div>
   <div class="grp" id="gCos">
-  <div class="sec">会社<span class="q" data-tip="つながったタイルのかたまり（2枚以上）に会社が付きます。株価は、その会社のタワーが倒した敵の数で上がります。会社どうしがつながると合併し、吸収された会社の株主にボーナスが出ます。">？</span></div>
+  <div class="sec">会社<span class="q" data-tip="タイルが2枚以上つながると会社になります。その会社のタワーが敵を倒すと、株価が上がります。会社どうしがつながると合併して、吸収された会社の株主にボーナスが出ます">？</span></div>
   <table id="cos"></table>
   </div>
   <div class="grp" id="gLog"><button class="btn" id="exportBtn" style="margin:4px 0">記録を書き出す（JSON）</button><div id="log"></div></div>
@@ -234,13 +234,13 @@ const lureChance = t => TYPES.lure.chance + .1 * (t.lv - 1);
 const TYPE_SHORT = { node:'安い壁。弱く撃つ', av:'近くを素早く撃つ', fw:'撃たずに遅くする', scan:'遠くへ強い一撃', burst:'まとめて削る', lure:'敵を寄り道させる', vortex:'火花を集めて味方を強く' };
 // 説明（画面で長押し・カーソルを合わせると出る）
 const TYPE_DESC = {
-  node:'安くて早い壁。近くの敵を弱く撃つ。迷路の壁を作るのに使う',
+  node:'時間1で置ける壁。近くの敵を弱く撃つ。敵の道を曲げるのに使う',
   av:'近くの敵を素早く撃つ',
-  fw:'撃たないが、射程の中の敵を遅くする。ほかのタワーが当てやすくなる',
+  fw:'撃たない。射程に入った敵を遅くして、ほかのタワーが撃つ時間をかせぐ',
   scan:'遠くまで届く強い一撃。撃つ間隔は長い',
   burst:'当たったまわりの敵もまとめて削る。群れに強い',
-  vortex:'撃たないが、とても広い射程の中で倒れた敵の火花を吸い取り、同じ会社の攻撃するタワーに送る。たまったタワーは、次の1発が必殺弾（威力4倍、まわりにも当たる）になる。強化するとたまるのが速くなる',
-  lure:'撃たないが、射程に入った敵の一部（それぞれ30%の確率、同時に2体まで。強化で増える）をおびき寄せ、自分の前まで寄り道させる。寄せた敵は、そこから元の道をなるべく通らない道で出口へ向かう（ほかに道がなければ元の道に合流する）。敵を自分の会社のタワーの前に通せる',
+  vortex:'撃たない。広い射程の中で倒れた敵の火花を集めて、同じ会社のタワーに送る。火花がたまったタワーは、次の1発が威力4倍になり、まわりの敵にも当たる。強化すると早くたまる',
+  lure:'撃たない。射程に入った敵を、3割の確率で自分の前までおびき寄せる（同時に2体まで。強化で増える）。寄ってきた敵は、そこから別の道を通って出口へ向かう。自分の会社のタワーの前を通らせるのに使う',
 };
 // ?nolure でハニーポットなし（比べる用。抜いた分はノードにする）
 const MIX = PARAMS.has('nolure') ? [['node', .32], ['av', .24], ['fw', .15], ['scan', .15], ['burst', .14]] : [['node', .22], ['av', .22], ['fw', .15], ['scan', .14], ['burst', .13], ['lure', .08], ['vortex', .06]];
@@ -258,7 +258,7 @@ const PW = { rapid:.75, splash:.5, link:.1, range:.4, slow:.2, pierce:1.4, fame:
 const POWER = [
   { name:'速く撃つ', desc:'タワーの撃つ間隔が短い' }, { name:'まわりにも当たる', desc:'弾が当たった敵のとなりの敵にも少し当たる' },
   { name:'となりどうしで強く', desc:'となりの同じ会社のタワー1つごとに威力が上がる（3つまで）' }, { name:'射程が長い', desc:'タワーの射程が長い' },
-  { name:'当てた敵が遅く', desc:'弾が当たった敵が少し遅くなる。遅くした敵をほかの会社が倒したら、手柄を分ける' }, { name:'硬い敵に強い', desc:'硬い敵と大きい敵によく効く' },
+  { name:'当てた敵が遅く', desc:'弾が当たった敵が少し遅くなる。遅くした敵をほかの会社が倒したら、倒した数を半分ずつ数える' }, { name:'硬い敵に強い', desc:'硬い敵と大きい敵によく効く' },
   { name:'株価が上がりやすい', desc:'倒した数が多めに数えられ、株価が上がりやすい' },
 ];
 const hasPower = (id, n) => POWERS && id === n;
@@ -823,7 +823,7 @@ function mergeChain(placer, survivor, absorbed, done) {
         while (got < pairs && takeCard(survivor)) got++;
         p.shares[id] -= got * 2; returnCards(id, got * 2); p.shares[survivor] += got;
         if (sell) { p.money += sell * pr; earn(p, '合併の売却', sell * pr); p.shares[id] -= sell; returnCards(id, sell); (G.mergeLog = G.mergeLog || []).push({ wave:G.wave, pid:p.id, id, n:sell, pr }); }
-        log(`${p.name}：${co.name}の株を、売る${sell}枚・交換${got * 2}枚（${sv.name}を${got}枚）・持ち続ける${p.shares[id]}枚`);
+        log(`${p.name}：${co.name}の株を` + [sell ? `${sell}枚売った` : '', got ? `${got * 2}枚を${sv.name}の株${got}枚と交換した` : '', p.shares[id] ? `${p.shares[id]}枚持ち続ける` : ''].filter(Boolean).join('、'));
         next();
       };
       const n = p.shares[id], maxPairs = Math.min(Math.floor(n / 2), availOf(survivor));
@@ -1092,7 +1092,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.53';
+const APP_VER = 'v0.1.54';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -1957,7 +1957,7 @@ function waveTick(dt) {
     if (DIVIDEND_WAVES.includes(G.wave) && G.wave < WAVES) settle();
     if (CYCLE === 'end') newCycle();
     recSnapshot('wave');
-    if (G.wave < WAVES) { announce(`WAVE ${G.wave} クリア`, '時間が補充された。株を公開できる'); sfx('clear'); }
+    if (G.wave < WAVES) { announce(`WAVE ${G.wave} クリア`, '全員の時間が戻った。株も公開できる'); sfx('clear'); }
   }
   if (G.wave >= WAVES) return finish(true);
   if (AUTO) G.waveTimer -= dt;   // 全員 CPU の試し：今までどおり秒数で次の波
@@ -1976,7 +1976,7 @@ function waveTick(dt) {
   }
   if (G.waveTimer <= 0) { G.wave++; G.lastSettle = null; if (CYCLE === 'start') newCycle(); G.spawnQueue = G.nextWave && G.nextWave.n === G.wave ? G.nextWave.list : makeWave(G.wave); G.spawnTimer = 0;
     if (G.wave < WAVES) G.nextWave = { n:G.wave + 1, list:makeWave(G.wave + 1) }; log(`波 ${G.wave} が来た（${G.spawnQueue.length}体）`);
-    announce(`WAVE ${G.wave}`, `${G.spawnQueue.length}体のウイルス` + (G.spawnQueue.includes('big') ? '・大きいのが来る' : ''));
+    announce(`WAVE ${G.wave}`, `ウイルス${G.spawnQueue.length}体` + (G.spawnQueue.includes('big') ? '。大きいのもいる' : ''));
     for (const [x, y] of ENTRANCES) { shock(...center(x, y), 2); burst(...center(x, y), '#ff4dff', 30, 1.6); } sfx('wave'); shake(5); }
 }
 function enemyTick(dt) {
@@ -2151,7 +2151,7 @@ function finish(win) {
   // 結果：順位と、お金の内訳・会社ごとの公開した株（筆頭◎・次点○）も出す（最終ポイントだけだと、なぜその順位か分からなかった。ユーザー）
   const inc = (p, ks) => ks.reduce((a, k) => a + ((p.income || {})[k] || 0), 0);
   const parts = p => [['終わりのボーナス', inc(p, ['終わりのボーナス'])], ['株の売却', inc(p, ['終わりの売却'])], ['配当', inc(p, DIV_BANK ? ['預かりの配当'] : ['決算の配当'])],
-    ['合併', inc(p, ['合併のボーナス', '合併の売却'])], ['投資信託', inc(p, ['投資信託の売却'])], ['払った', inc(p, ['払った（会社）', '払った（投資信託）'])]].filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join('・');
+    ['合併', inc(p, ['合併のボーナス', '合併の売却'])], ['投資信託', inc(p, ['投資信託の売却'])], ['払った', inc(p, ['払った（会社）', '払った（投資信託）'])]].filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join('、');
   const coLines = G.final.activeIds.map(id => {
     const n = G.final.shares.map(sh => sh[id]), sorted = [...new Set(n)].filter(v => v > 0).sort((a, b) => b - a);
     return `${G.cos[id].name}（株価${G.final.price[id]}）：` + G.players.map((q, i) => `${q.name.replace('CPU', 'C')} ${n[i]}${n[i] && n[i] === sorted[0] ? '◎' : n[i] && n[i] === sorted[1] ? '○' : ''}`).join('　');
@@ -2623,8 +2623,8 @@ function renderInfo() {
   }
   const nd = DIVIDEND_WAVES.find(w => w >= Math.max(1, G.wave) && w < WAVES && (w > G.wave || waveActive()));
   const soon = nd ? nd <= G.wave + 1 : G.wave >= WAVES - 1;
-  if (soon) parts.push(nd ? `<span data-tip="この波が終わると、各社の筆頭に株価の4倍、次点に2倍の配当">${nd > G.wave ? 'この波のあと決算' : '決算'}</span>` : `<span data-tip="最後の波を守りきると、筆頭に株価の10倍、次点に5倍のボーナスと、株の売却">最後の波のあと清算</span>`);
-  if (G.lastSettle) parts.push(`<span data-tip="直近の決算で受け取った配当">${G.lastSettle}</span>`);
+  if (soon) parts.push(nd ? `<span data-tip="この波が終わると、会社ごとに、筆頭に株価の4倍、次点に2倍の配当が出ます">${nd > G.wave ? 'この波のあと決算' : '決算'}</span>` : `<span data-tip="最後の波を守りきると、筆頭に株価の10倍、次点に5倍のボーナスが出て、公開した株を全部売ります">最後の波のあと最終決算</span>`);
+  if (G.lastSettle) parts.push(`<span data-tip="前回の決算でもらった配当">${G.lastSettle}</span>`);
   el.innerHTML = parts.join('');
 }
 function renderTop() {
@@ -2634,12 +2634,12 @@ function renderTop() {
   { const el = document.getElementById('wave'), mine = me(), n = `波${G.wave + 1}/${WAVES}`;
     const done = !mine || mine.t >= G.limit || (!NO_LIMIT && (mine.clock ?? FIRST_WAIT) <= 0);
     // 人が遊ぶとき：自分の考える時間はいつも出す。自分の番で減っている間は明るく、ほかの人の番では灰色
-    el.innerHTML = G.over ? '終了' : ac ? `波 ${G.wave}/${WAVES} 来襲中` : G.wave >= WAVES ? '最後の波'
+    el.innerHTML = G.over ? '終了' : ac ? `波 ${G.wave}/${WAVES} 進行中` : G.wave >= WAVES ? '最後の波'
       : AUTO ? `${n}まで ${Math.ceil(G.waveTimer)}秒`
       : !nextActor() ? `${n}まで ${Math.max(0, Math.ceil(G.waveTimer))}秒`
-      : done ? `${n}まで・番は終わり`
-      : NO_LIMIT ? `${n}まで・${G.actor === mine ? 'あなたの番' : 'みんなの番のあと'}`
-      : `${n}まで <span data-tip="あなたの持ち時間（秒）。自分の番の間だけ減る" style="color:${G.actor === mine ? '#ffe066' : '#6f7a99'}">${Math.max(0, Math.ceil(mine.clock ?? FIRST_WAIT))}秒</span>`; }
+      : done ? `${n}まで・あなたの番は終わり`
+      : NO_LIMIT ? `${n}まで・${G.actor === mine ? 'あなたの番' : 'ほかの人の番'}`
+      : `${n}まで <span data-tip="あなたの持ち時間（秒）。自分の番の間だけ減ります" style="color:${G.actor === mine ? '#ffe066' : '#6f7a99'}">${Math.max(0, Math.ceil(mine.clock ?? FIRST_WAIT))}秒</span>`; }
   document.getElementById('life').textContent = '♥ ' + G.lives;
   document.getElementById('money').textContent = AUTO ? '' : '所持金 ' + me().money + (me().bank ? `（預かり ${me().bank}）` : '');
 }
@@ -2661,29 +2661,29 @@ function renderTrack() {
 function turnText() {
   const p = G.actor;
   if (G.over) return ['終わりました', '<button class="btn" data-end="result">結果を見る</button> <button class="btn" data-end="again">もう一度</button> <button class="btn" data-end="export">記録を書き出す</button>'];
-  const left = AUTO ? '' : `この波で使える時間：あと${Math.max(0, G.limit - me().t)}`;
-  if (!p) return ['全員が時間を使い切りました', `波が終わると${budget()}ずつ補充されます`];
+  const left = AUTO ? '' : `使える時間：あと${Math.max(0, G.limit - me().t)}`;
+  if (!p) return ['全員の番が終わりました', '波が終わると、また行動できます'];
   if (p !== me()) return [`${p.name} の番`, left];
-  if (G.discarding) return [`株の手札が多すぎます。あと${me().cards.length - CARD_MAX}枚捨ててください`, `株の手札は${CARD_MAX}枚まで。下の「株」から捨てる株を選んでください（山札に戻ります）`];
-  if (G.swapping) return ['手札のタイルを1枚入れ替えますか', '入れ替えるタイルを手札から押すと、山から1枚引き直します（入れ替えたタイルは山の底へ）。しないなら「入れ替えない」'];
-  if (G.taking) return ['株を1枚、手札に入れてください', '下の「株」から、場の会社の株か山札の一番上のどちらか。お金はかかりません。数えるのは、あとで公開した株だけです'];
-  if (G.exchanging) return ['いらない株を、投資信託に替えますか', '手札の株を1枚手放すと、投資信託を1口もらえます。お金はかからず、もらった投資信託は最初から公開した状態です。替えないなら「替えない」'];
-  if (G.waitPlace && G.waitPlace.p === me()) return [`建設待ち：敵が通り過ぎたら ${label(...G.waitPlace.at)} に${TYPES[G.waitPlace.t.type].name}が建ちます`, `あと${Math.max(0, Math.ceil(G.waitPlace.until - (G.clock || 0)))}秒で建たなければ取り消します。すぐやめるときは、盤の「やめる」を押す`];
+  if (G.discarding) return [`株の手札は${CARD_MAX}枚までです。あと${me().cards.length - CARD_MAX}枚捨ててください`, '下の「株」から、捨てる株を選んでください'];
+  if (G.swapping) return ['手札のタイルを1枚入れ替えられます', '入れ替えたいタイルを押してください。入れ替えないなら「入れ替えない」を押します'];
+  if (G.taking) return ['株を1枚もらえます', '下の「株」で、場の5枚か山札から1枚選んでください。お金はかかりません'];
+  if (G.exchanging) return ['いらない株を投資信託に替えられます', '手札の株1枚と引き換えに、投資信託を1口もらえます。お金はかからず、公開した状態でもらえます。替えないなら「替えない」を押します'];
+  if (G.waitPlace && G.waitPlace.p === me()) return [`敵が通り過ぎたら、${label(...G.waitPlace.at)} に${TYPES[G.waitPlace.t.type].name}が建ちます`, `あと${Math.max(0, Math.ceil(G.waitPlace.until - (G.clock || 0)))}秒たっても建てられなければ、取りやめます。今すぐやめるなら、盤の「やめる」を押してください`];
   const sel = G.selected !== null ? me().hand[G.selected] : null, up = G.upSel ? G.tiles[G.upSel] : null;
-  if (up) return [`${label(up.x, up.y)} の${TYPES[up.type].name}（${TYPE_SHORT[up.type]}）`, canUpgrade(up) ? `盤のメニューの「強化する」で射程と威力が上がります（時間${TYPES[up.type].time}）。強化したあとも株を1枚もらえます。${left}` : 'このタワーは強化できません。手札のタイルを選び直してください'];
+  if (up) return [`${label(up.x, up.y)} の${TYPES[up.type].name}（${TYPE_SHORT[up.type]}）`, canUpgrade(up) ? `「強化する」を押すと、射程と威力が上がります（時間${TYPES[up.type].time}）。強化しても株を1枚もらえます。${left}` : 'このタワーは強化できません'];
   if (sel && AREA_MODE) { const c = canPlace(sel), tg = chosenOf(sel);
     if (!c.ok) return [`${tileName(sel)}には置けません（${c.why}）`, '別のタイルを選んでください'];
-    if (!tg) return [`${tileName(sel)}の光っているマスに${TYPES[sel.type].name}を置けます`, `${TYPES[sel.type].name}：${TYPE_DESC[sel.type]}。光っているマスを押すと、そこに置けます。置くのに時間${normalTime(sel.type)}${CELL_EXTRA ? `（点線の印のマスなら${CELL_EXTRA}少ない）` : ''}。札をもう一度押すか、光っていないところを押すとやめます。${left}`];
+    if (!tg) return [`${tileName(sel)}の光っているマスに${TYPES[sel.type].name}を置けます`, `${TYPES[sel.type].name}：${TYPE_DESC[sel.type]}。光っているマスを押してください。時間${normalTime(sel.type)}${CELL_EXTRA ? `（印のマスなら${CELL_EXTRA}少ない）` : ''}。やめるときは、札をもう一度押します。${left}`];
     // メニューに並んだタイルの種類の説明も出す（札を押したときと同じように。ユーザー）
     const descs = [...new Set(buildOptions(...tg).map(([t]) => t.type))].map(ty => `${TYPES[ty].name}：${TYPE_DESC[ty]}。`).join('');
-    return [`${label(...tg)} に置くタイルを選んでください`, `${descs}盤に出たメニューから選ぶと、その場で置きます。置いたら株を1枚もらえます。${left}`]; }
-  if (sel) { const c = canPlace(sel), tg = targetOf(sel); return [c.ok ? `${label(...tg)} に${TYPES[sel.type].name}を置けます` : `${tileName(sel)}${AREA_MODE ? '' : ' のまわり'}には置けません（${c.why}）`, c.ok ? `${AREA_MODE ? tileName(sel) + 'の中の' : label(sel.x, sel.y) + ' か、そのまわりの'}光っているマスに置けます。盤で場所を選び、「置く」かもう一度押す。置いたら株を1枚もらえます。${left}` : '別のタイルを選んでください'];  }
+    return [`${label(...tg)} に置くタイルを選んでください`, `${descs}盤のメニューから選ぶと、そこに置きます。置くと株を1枚もらえます。${left}`]; }
+  if (sel) { const c = canPlace(sel), tg = targetOf(sel); return [c.ok ? `${label(...tg)} に${TYPES[sel.type].name}を置けます` : `${tileName(sel)}${AREA_MODE ? '' : ' のまわり'}には置けません（${c.why}）`, c.ok ? `${AREA_MODE ? tileName(sel) + 'の中の' : label(sel.x, sel.y) + ' か、そのまわりの'}光っているマスに置けます。マスを選んで「置く」を押してください。置くと株を1枚もらえます。${left}` : '別のタイルを選んでください'];  }
   const can = [];
   if (me().hand.some(t => canPlace(t).ok)) can.push('タイルを置く（盤の光るマスを押す）');
   if (Object.values(G.tiles).some(t => canUpgrade(t))) can.push('タワーを強化する（盤のタワーを押す）');
   if ([...new Set(me().cards)].some(id => canReveal(me(), id, 1))) can.push('手札の株を公開する（お金を払う）');
   if (!can.length) return ['あなたの番：できることがありません', '「タイルを捨てて引き直す」を押してください（時間1）'];
-  return ['あなたの番：どれか1つ', can.join(' ／ ') + (waveActive() && me().cards.length ? '。敵が来ている間は公開できません' : '') + `。${left}`];
+  return ['あなたの番です。どれか1つ選んでください', can.join(' ／ ') + (waveActive() && me().cards.length ? '。敵が来ている間は公開できません' : '') + `。${left}`];
 }
 function renderTurn() {
   const [a, b] = turnText(), el = document.getElementById('turn');
@@ -2740,8 +2740,8 @@ function renderHand() {
   } else {
     pb.style.display = sel && ok.ok && tg ? '' : 'none';
     pb.disabled = !(mine && ok && ok.ok && tg);
-    pb.textContent = sel ? (ok.ok ? (tg ? `${label(...tg)} に置く（時間${placeTime(sel, ...tg)}${skipWarn(placeTime(sel, ...tg))}）` : '盤で置くマスを選ぶ') : `置けない：${ok.why}`) : 'タイルを選ぶ（盤の置かれたタイルを押すと強化）';
-    if (G.taking) { pb.disabled = true; pb.textContent = '株の場から1枚選んでください'; }
+    pb.textContent = sel ? (ok.ok ? (tg ? `${label(...tg)} に置く（時間${placeTime(sel, ...tg)}${skipWarn(placeTime(sel, ...tg))}）` : '盤で置くマスを選ぶ') : `置けない：${ok.why}`) : 'タイルを選ぶ（盤のタワーを押すと強化）';
+    if (G.taking) { pb.disabled = true; pb.textContent = '株を1枚選んでください'; }
     if (G.exchanging) { pb.disabled = true; pb.textContent = '投資信託に替えるか選んでください'; }
   }
   const rb = document.getElementById('removeBtn');
@@ -2750,7 +2750,7 @@ function renderHand() {
   if (G.swapping && G.swapping.p === me()) { sb.style.display = ''; sb.disabled = false; sb.textContent = '入れ替えない'; }
   else { sb.textContent = 'タイルを捨てて引き直す（時間1）'; sb.disabled = !(mine && !canDoSomething(me())); sb.style.display = sb.disabled ? 'none' : ''; }
   const nb = document.getElementById('renewBtn'), nf = me().hand.filter(printedFilled).length;
-  nb.style.display = mine && nf && !G.swapping ? '' : 'none'; nb.textContent = `印が使えないタイルを入れ替える（${nf}枚・時間${renewTime(me())}）`;
+  nb.style.display = mine && nf && !G.swapping ? '' : 'none'; nb.textContent = `印が使えないタイルを入れ替える（${nf}枚、時間${renewTime(me())}）`;
   const db = document.getElementById('redrawBtn');
   db.style.display = REDRAW && mine && G.selected !== null && me().hand[G.selected] && !G.swapping && G.bag.length ? '' : 'none'; db.textContent = `このタイルを引き直す（時間${renewTime(me())}）`;
   renderMenu();
@@ -2792,7 +2792,7 @@ function renderMenu() {
     if (!opts.length) { el.style.display = 'none'; return; }
     h += `<div class="mh">${label(m.x, m.y)} に置く${mine ? '' : '（あなたの番になったら）'}</div>`;
     const wt = opts.length && !canPlace(opts[0][0]).spots.some(s2 => s2.x === m.x && s2.y === m.y);   // 敵が通っているマス
-    if (wt) h += '<div class="mh" style="color:#ffe9a8">敵が通っています。選ぶと、通り過ぎたときに建ちます</div>';
+    if (wt) h += '<div class="mh" style="color:#ffe9a8">敵が通っています。選ぶと、通り過ぎたあとに建ちます</div>';
     h += opts.map(([t, i]) => `<button class="mi" data-i="${i}" ${mine ? '' : 'disabled'}><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}<span class="t">${CELL_EXTRA && t.x === m.x && t.y === m.y ? '<b style="color:#ffe9a8">印のマス</b> ' : ''}時間${placeTime(t, m.x, m.y)}${skipWarn(placeTime(t, m.x, m.y))}</span></button>`).join('');
   }
   el.innerHTML = h; el.style.display = 'block';
@@ -2812,10 +2812,10 @@ function renderCos() {
   const el = document.getElementById('cos');
   const mine = G.actor === me() && !G.over && !G.busy && !AUTO;
   const th = (t, tip) => `<th data-tip="${tip}">${t}</th>`;
-  let h = '<tr>' + th('会社', '灰色の会社はまだ盤にない（設立前、または合併で消えた）') + th('格', '★が多い会社ほど、同じ倒した数でも株価が100ずつ高い')
-    + th('タイル', 'その会社のタイルの数。11枚以上は安全で、合併で吸収されない') + th('倒した', 'その会社のタワーが倒した敵の数。株価はこれで上がる。ファイアウォールで遅くした敵をほかの会社が倒したら、半分ずつ分ける')
-    + th('株価', '公開するときに1枚あたり払う額。合併と終わりのボーナス・売却もこの値段で決まる') + th('残り株', '場と山札に残っている株の枚数')
-    + th('公開した株', '各プレイヤーが公開した枚数。◎が筆頭（決算で株価の4倍、終わりに10倍）、○が次点（決算で2倍、終わりに5倍）') + '</tr>';
+  let h = '<tr>' + th('会社', '灰色の会社は、いま盤にありません') + th('格', '★が1つ多いと、株価が100高くなります')
+    + th('タイル', 'その会社のタイルの数。11枚以上になると、合併で吸収されません') + th('倒した', 'その会社のタワーが倒した敵の数。多いほど株価が上がります。ファイアウォールで遅くした敵をほかの会社が倒したら、半分ずつ数えます')
+    + th('株価', '株を1枚公開するときに払う額。ボーナスと、売るときの値段も、この株価で決まります') + th('残り株', '場と山札に残っている株の枚数')
+    + th('公開した株', 'それぞれが公開した枚数。◎は筆頭で、決算で株価の4倍、最後に10倍をもらえます。○は次点で、決算で2倍、最後に5倍です') + '</tr>';
   const rowOf = co => co.active || G.players.some(p => p.shares[co.id]);
   G.cos.filter(rowOf).forEach(co => {
     h += `<tr style="opacity:${co.active ? 1 : .4}"><td><span class="sw" style="background:${co.color}"></span>${co.name}${POWERS ? ` <small data-tip="${POWER[co.id].name}：${POWER[co.id].desc}">${POWER[co.id].name}</small>` : ''}</td><td>${'★'.repeat(co.tier + 1)}</td>` +
@@ -2827,12 +2827,12 @@ function renderCos() {
       })()}</td></tr>`;
   });
   const cp = G.players.filter(p => p.shares[CENTRAL]).map(p => `<span style="color:${p.color}">${p.name.replace('CPU', 'C')}×${p.shares[CENTRAL]}</span>`).join(' ');
-  h += `<tr><td data-tip="値段は会社の株価の加重平均。筆頭も配当もなく、終わりにそのときの値段で売る"><span class="sw" style="background:${CENTRAL_CO.color}"></span>投資信託</td><td>-</td><td>-</td><td>-</td><td>${centralPrice()}</td><td>${G.centralLeft}</td><td style="text-align:left">${cp}</td></tr>`;
+  h += `<tr><td data-tip="値段は、盤にある会社の株価の平均です。筆頭も配当もなく、最後にそのときの値段で売れます"><span class="sw" style="background:${CENTRAL_CO.color}"></span>投資信託</td><td>-</td><td>-</td><td>-</td><td>${centralPrice()}</td><td>${G.centralLeft}</td><td style="text-align:left">${cp}</td></tr>`;
   const notYet = G.cos.filter(co => !rowOf(co));
   if (!AUTO) { const cnt = {}; me().cards.forEach(id => cnt[id] = (cnt[id] || 0) + 1);
     h += `<tr><td colspan="7" style="text-align:left">あなたの株の手札：${Object.keys(cnt).length ? Object.entries(cnt).map(([id, n]) => { const co = id == CENTRAL ? CENTRAL_CO : G.cos[id]; return `<span style="color:${co.color}">${co.name}×${n}</span>`; }).join(' ') : 'なし'}</td></tr>`; }
   if (notYet.length) h += `<tr><td colspan="7" class="note" style="text-align:left">まだない会社：` + notYet.map(co => `<span data-tip="${co.name}：${'★'.repeat(co.tier + 1)}、株価${price(co)}、残り株${availOf(co.id)}${POWERS ? '、' + POWER[co.id].name + '：' + POWER[co.id].desc : ''}"><span class="sw" style="background:${co.color}"></span>${co.name}${'★'.repeat(co.tier + 1)}</span>`).join('　') + '</td></tr>';
-  if (POWERS) h += `<tr><td colspan="7" style="text-align:left;padding-top:8px"><b>会社の能力</b>（その会社のタワー全部に効く。吸収された会社の能力は消える）` + G.cos.map(co => `<div style="margin:3px 0"><span class="sw" style="background:${co.color}"></span>${co.name}：<span style="color:#ffe9a8">${POWER[co.id].name}</span><span class="note">　${POWER[co.id].desc}</span></div>`).join('') + '</td></tr>';
+  if (POWERS) h += `<tr><td colspan="7" style="text-align:left;padding-top:8px"><b>会社の能力</b>（その会社のタワー全部に効きます）` + G.cos.map(co => `<div style="margin:3px 0"><span class="sw" style="background:${co.color}"></span>${co.name}：<span style="color:#ffe9a8">${POWER[co.id].name}</span><span class="note">　${POWER[co.id].desc}</span></div>`).join('') + '</td></tr>';
   el.innerHTML = h;
 
 }
@@ -2855,11 +2855,11 @@ function renderMarket() {
   };
   // 交換・捨てる：その場面のボタンだけ
   if (ex) {
-    grid(`手放す株を選ぶ → 投資信託1口（いま${centralPrice()}・公開済み・お金はいらない）`, [
+    grid(`投資信託に替える株を選ぶ（投資信託はいま1口${centralPrice()}）`, [
       // 手札の枚数と、公開した枚数（自分・ほかでいちばん多い人）も出す（替えるか決めるのに要る。ユーザー）
       ...[...new Set(me().cards.filter(x => x !== CENTRAL))].map(id => { const co = G.cos[id], n = me().cards.filter(c => c === id).length;
         const top = G.players.filter(q => q !== me()).sort((a, b) => b.shares[id] - a.shares[id])[0];
-        const pub = co.active ? `<br><span class="note">公開 自分${me().shares[id]}・最多${top.shares[id]}</span>` : '';
+        const pub = co.active ? `<br><span class="note">公開 あなた${me().shares[id]}、最多${top.shares[id]}</span>` : '';
         return [`${co.name} ×${n}<br><span class="note">${co.active ? '株価' + price(co) : 'まだない'}</span>${pub}${powerLine(id)}`, co.color, () => act(G.viewer || 0, { t:'exchange', id }), true]; }),
       ['替えない', null, () => act(G.viewer || 0, { t:'exchange', id:null }), true]]);
   } else if (dc) {
@@ -2867,18 +2867,18 @@ function renderMarket() {
       [...new Set(me().cards)].map(id => [`${coOf(id).name} ×${me().cards.filter(c => c === id).length}<br><span class="note">1枚捨てる</span>${powerLine(id)}`, coOf(id).color, () => act(G.viewer || 0, { t:'discard', id }), true]));
   } else if (!MOBILE.matches || tk) {
     // 株の場（5枚）・山札・投資信託
-    grid(tk ? '株を1枚選んで手札に入れる（お金はかからない）' : '株の場', [
+    grid(tk ? '株を1枚もらう（お金はかからない）' : '場の株', [
       ...G.market.map((id, mi) => { const co = G.cos[id]; return [`${co.name}<br><span class="note">${co.active ? price(co) : 'まだない'}</span>${powerLine(id)}`, co.color, () => act(G.viewer || 0, { t:'take', mi }), tk,
-        (co.active ? `${co.name}の株。いまの株価${price(co)}（公開するときに払う）` : `${co.name}はまだ盤にない。手札に入れておけるが、公開できるのは設立されてから`) + powerTip(id)]; }),
-      ['山札<br><span class="note">何が来るか</span>', null, () => act(G.viewer || 0, { t:'take', mi:-1 }), tk && G.deck.length, '山札の一番上を、見ないで手札に入れる'],
-      ...(TRUST_PILE === '0' ? [] : [[`投資信託<br><span class="note">${G.centralLeft > 0 ? '残り' + G.centralLeft : '売り切れ'}</span>`, CENTRAL_CO.color, () => act(G.viewer || 0, { t:'take', mi:-2 }), tk && canTakeTrust(), `投資信託。値段は盤にある会社の株価の平均（いま${centralPrice()}）。筆頭も配当もなく、終わりにそのときの値段で売れる`]])]);
+        (co.active ? `${co.name}の株。いまの株価は${price(co)}です` : `${co.name}はまだ盤にありません。もらっておいて、設立されたら公開できます`) + powerTip(id)]; }),
+      ['山札<br><span class="note">中身は見えない</span>', null, () => act(G.viewer || 0, { t:'take', mi:-1 }), tk && G.deck.length, '山札の一番上の株を、見ないでもらいます'],
+      ...(TRUST_PILE === '0' ? [] : [[`投資信託<br><span class="note">${G.centralLeft > 0 ? '残り' + G.centralLeft : '売り切れ'}</span>`, CENTRAL_CO.color, () => act(G.viewer || 0, { t:'take', mi:-2 }), tk && canTakeTrust(), `投資信託。値段は、盤にある会社の株価の平均です（いま${centralPrice()}）。筆頭も配当もなく、最後にそのときの値段で売れます`]])]);
     if (tk && canReset(me())) {
-      const r = document.createElement('button'); r.className = 'btn'; r.textContent = RESET_FREE ? '場を入れ替える（どれも公開できないときの1回だけ）' : `場を入れ替える（時間${resetTime(me())}）`; r.style.marginTop = '4px';
+      const r = document.createElement('button'); r.className = 'btn'; r.textContent = RESET_FREE ? '場を入れ替える（どれも公開できないときの1回だけ）' : `場の株を並べ直す（時間${resetTime(me())}）`; r.style.marginTop = '4px';
       r.onclick = () => act(G.viewer || 0, { t:'reset' }); el.appendChild(r);
     }
   } else if (G.actor === me() && !G.over) {
     // スマホの自分の番：置く・強化したらもらえる株を、押せない見本として小さく1行で
-    el.insertAdjacentHTML('beforeend', `<div class="shead">置いたらもらえる株（どれか1枚）</div><div class="peek">${G.market.map(id => { const co = G.cos[id]; return `<span style="border-color:${co.color}">${co.name}<small>${co.active ? price(co) : 'まだない'}${POWERS ? '・' + POWER[id].name : ''}</small></span>`; }).join('')}<span>山札</span>${TRUST_PILE === '0' ? '' : G.centralLeft > 0 ? `<span style="border-color:${CENTRAL_CO.color}">投資信託</span>` : `<span style="opacity:.45">投資信託<small>売り切れ</small></span>`}</div>`);
+    el.insertAdjacentHTML('beforeend', `<div class="shead">置くともらえる株（どれか1枚）</div><div class="peek">${G.market.map(id => { const co = G.cos[id]; return `<span style="border-color:${co.color}">${co.name}<small>${co.active ? price(co) : 'まだない'}${POWERS ? '・' + POWER[id].name : ''}</small></span>`; }).join('')}<span>山札</span>${TRUST_PILE === '0' ? '' : G.centralLeft > 0 ? `<span style="border-color:${CENTRAL_CO.color}">投資信託</span>` : `<span style="opacity:.45">投資信託<small>売り切れ</small></span>`}</div>`);
   }
   // 株の手札：押して公開する株を選び（押すたびに1枚ずつ増える）、最後に「公開する」で決める。
   // 1社なら何枚でも、2社なら1枚ずつ。選び方に合わない押し方をしたら、その会社だけを選び直す
@@ -2888,7 +2888,7 @@ function renderMarket() {
   if (!mine) G.revSel = {};
   if (ex || dc) return;   // 交換・捨てるの場面は、上のボタンだけ
   const box = document.createElement('div'); box.style.cssText = 'width:100%;margin-top:6px';
-  box.innerHTML = `<div class="shead">株の手札${ids.length && mine && !waveActive() ? '（押して公開する株を選ぶ）' : ''}${ids.length ? '' : '：なし'}</div>`;
+  box.innerHTML = `<div class="shead">株の手札${ids.length && mine && !waveActive() ? '（公開する株を押して選ぶ）' : ''}${ids.length ? '' : '：なし'}</div>`;
   const chips = document.createElement('div'); chips.className = 'sgrid'; box.appendChild(chips);
   ids.forEach(id => {
     const co = coOf(id), n = me().cards.filter(c => c === id).length, k = G.revSel[id] || 0;
@@ -3032,7 +3032,7 @@ const CHOICE_NAME = { found:'会社の設立', survivor:'残す会社', dispose:
 function peekChoice() { peeking = true; const b = document.getElementById('backChoice'); b.textContent = `${CHOICE_NAME[G.choosing.kind] || '選ぶ画面'}に戻る`; b.style.display = 'block'; renderLayout(); }
 document.getElementById('backChoice').onclick = () => { peeking = false; shownChoice = 0; document.getElementById('backChoice').style.display = 'none'; renderChoice(); };
 // 自分の株：手札の枚数と公開した枚数
-const myShares = id => { const n = me().cards.filter(x => x === id).length, m = me().shares[id]; return n || m ? `あなた：手札${n}・公開${m}` : 'あなたの株：なし'; };
+const myShares = id => { const n = me().cards.filter(x => x === id).length, m = me().shares[id]; return n || m ? `あなたの株：手札${n}、公開${m}` : 'あなたの株：なし'; };
 function renderChoice() {
   const c = G.choosing;
   if (!c || c.p !== me()) { peeking = false; document.getElementById('backChoice').style.display = 'none'; if (shownChoice) { shownChoice = 0; hideModal(); } return; }
@@ -3045,7 +3045,7 @@ function renderChoice() {
   if (c.kind === 'dispose') chooseDisposal(me(), G.cos[c.data.co], G.cos[c.data.sv], c.data.pr, c.data.n, c.data.maxPairs, send);
 }
 function hideModal() { document.getElementById('modal').style.display = 'none'; }
-function chooseCompany(free, cb) { modal('<h3>会社を設立する</h3><div class="note">どの会社にしますか（★が多いほど株価が高い）。</div>', [...free.map(c => [`${c.name} ${'★'.repeat(c.tier + 1)}${POWERS ? '（' + POWER[c.id].name + '）' : ''}　${myShares(c.id)}`, () => cb(c.id), c.color]), ['盤と会社を見る', peekChoice]]); }
+function chooseCompany(free, cb) { modal('<h3>会社を設立する</h3><div class="note">どの会社にしますか。★が多いほど株価が高くなります。</div>', [...free.map(c => [`${c.name} ${'★'.repeat(c.tier + 1)}${POWERS ? '（' + POWER[c.id].name + '）' : ''}　${myShares(c.id)}`, () => cb(c.id), c.color]), ['盤と会社を見る', peekChoice]]); }
 function chooseSurvivor(ids, cb) { modal('<h3>合併</h3><div class="note">同じ大きさです。どちらを残しますか。</div>', [...ids.map(id => [`${G.cos[id].name}　${myShares(id)}`, () => cb(id), G.cos[id].color]), ['盤と会社を見る', peekChoice]]); }
 function chooseDisposal(p, co, sv, pr, n, maxPairs, cb) {
   // 吸収された会社の株：売る・交換する（2枚→残る会社の株1枚）・持ち続ける。
@@ -3063,7 +3063,7 @@ function chooseDisposal(p, co, sv, pr, n, maxPairs, cb) {
     if (!KEEP_OK) sell = n - pairs * 2;
     const keep = n - sell - pairs * 2;
     document.getElementById('dispBody').innerHTML =
-      (KEEP_OK ? row('s', '売る', sell, `1枚 ${pr}`) : `<div style="margin:6px 0">売る：<b>${sell}</b>枚 <span class="note">（1枚 ${pr}。交換しない株は売る）</span></div>`) +
+      (KEEP_OK ? row('s', '売る', sell, `1枚 ${pr}`) : `<div style="margin:6px 0">売る：<b>${sell}</b>枚 <span class="note">（1枚 ${pr}。交換しなかった株は売ります）</span></div>`) +
       (maxPairs ? row('x', '交換', pairs, `2枚 → ${sv.name}株1枚（${maxPairs}組まで）`) : '') +
       (KEEP_OK ? `<div style="margin-top:6px">持ち続ける：<b>${keep}</b>枚 <span class="note">（${keepNote}）</span></div>` : '') + `<div>もらうお金：<b style="color:#ffe066">${sell * pr}</b>${pairs ? `　${sv.name}株：<b>${pairs}</b>枚` : ''}</div>`;
     document.querySelectorAll('#dispBody [data-m],#dispBody [data-p]').forEach(b => b.onclick = () => {
@@ -3080,40 +3080,43 @@ function chooseDisposal(p, co, sv, pr, n, maxPairs, cb) {
 }
 // ルールのまとめ
 const RULES_HTML = () => `<h3>電脳都市のルール</h3>
-<h4>どんなゲーム？</h4><p>タワーを建てて、ウイルス（敵）の波から街を守る。<b>守るのは全員で協力、勝つのは1人</b>。${WAVES}回の波を守りきったとき、<b>いちばんお金の多い人</b>の勝ち。ライフ（最初は${LIVES}）が0になったら<b>全員の負け</b>。</p>
-<p>お金は株で増やす。タワーのかたまりは会社になり、敵を倒すほど株価が上がる。会社の株をいちばん多く持つ人（筆頭）と2番目の人（次点）に、ボーナスが入る。</p>
-<h4>進み方</h4><p>「全員が順番に行動する」→「敵の波が来る」を${WAVES}回くり返す。</p>
-<ul><li>行動には<b>時間</b>がかかる。1つの波の前に1人が使える時間は、2人なら12、3人なら8、4人なら6、5人と6人は5。<b>最初の波の前だけは2倍</b>。</li>
-<li>次に動くのは、時間トラックで<b>いちばん後ろの人</b>。行動すると、かかった時間だけ前へ進む。</li>
-<li>使える時間の線を越えたら、波が終わるまで待つ。越えた分は、次の波で使える時間から引かれる（どれだけ越えても、次の波で最低1回は動ける）。使わなかった時間はためられない。</li>
-<li>「持ち時間：あり」で始めたときは、自分の番に考える時間の制限がある（最初の波の前は90秒、あとは45秒）。なくなったら、その波の残りの手番は飛ばす。</li></ul>
-<h4>自分の番にできること（どれか1つ）</h4><ul>
-<li><b>タイルを置く</b>（時間はタイルの種類で決まる）：手札のタイルを、札に書かれたエリア（盤のうすい文字 A〜F）の空いたマスに置くと、タワーが建つ。${CELL_EXTRA ? `札の<b>印のマス</b>（盤に黄色の点線で出る）に置けば、時間が${CELL_EXTRA}少ない。` : ''}置いたマスは壁になり、敵はよけて進む（遠回りさせるほど長く撃てる）。入口から出口への道を完全にふさぐ置き方はできない。置いたら<b>株を1枚もらう</b>。</li>
-<li><b>タワーを強化する</b>（時間は、そのタワーを${CELL_EXTRA ? '印のマスに' : ''}置くときと同じ）：盤のタワーを押して強化する。3段階まで。誰が置いたタワーでもよい。ノードは強化できない。強化しても<b>株を1枚もらう</b>。</li>
-<li><b>株を公開する</b>：手札の株に、お金（その会社の株価）を払って表にする。1回に出せるのは「1社の株を何枚でも」か「2社の株を1枚ずつ」。時間は${REV_TIME ? `1回につき${REV_TIME}` : '1枚につき1'}${REVX === '0' || REV_TIME ? '' : `。同じ波の前に${REVX === 'same' ? '同じ会社の株をもう一度公開すると' : '公開を2回以上に分けると'}、2回目は時間が${REVX === 'tri' ? '+2、3回目は+5' : '+1、3回目は+2'}と増えていく`}。<b>敵が来ている間は公開できない</b>。</li>
-<li><b>タイルを引き直す</b>：手札のタイルを1枚選んで引き直すか、印のマスが使えなくなったタイルをまとめて入れ替える。時間は、同じ波の前の1回目が1、2回目が2、3回目が3…。手札の印のマスが全部使えなくなったら、時間を使わずに手札を全部入れ替える。</li></ul>
-<p class="note">2人のときだけ、タイルを置いたあとに手札のタイルを1枚入れ替えてもよい。</p>
-<h4>株のもらい方</h4><p>タイルを置くか強化するたびに、<b>場に並んだ5枚</b>か<b>山札の一番上</b>から1枚選んで手札に入れる（お金はいらない）。手札の株は伏せていて、<b>まだ数えない</b>。お金を払って<b>公開した株だけ</b>が、ボーナスと売却で数えられる。終わりに手札に残った株は価値がない。</p>
-<ul><li>株の手札は8枚まで。超えたら捨てる。</li>
-<li>場に、盤にある会社の株が1枚もないときは、時間を使って場の5枚を並べ直せる（同じ波の前の1回目が1、2回目が2…）。</li></ul>
-<h4>会社と株価</h4><ul>
-<li><b>設立</b>：会社のないタイルが2枚以上つながると、つなげた人が会社を1つ選んで設立する。</li>
-<li><b>株価</b>：その会社のタワーが<b>敵を倒すたびに</b>上がる。ファイアウォールで遅くなっている敵をほかの会社のタワーが倒したら、倒した数を半分ずつ分ける。どこにもつながっていない1枚だけのタイルは会社がなく、倒しても株価は動かない。</li>
-<li><b>筆頭と次点</b>：その会社の株をいちばん多く公開している人が筆頭、2番目が次点。同じ枚数ならボーナスを分け合う。株主が1人だけなら、筆頭と次点の両方の分をもらう。</li></ul>
+<h4>どんなゲーム？</h4><p>タワーを建てて、ウイルスの波から街を守ります。守るのは全員で協力しますが、勝つのは1人です。</p>
+<p>${WAVES}回の波を守りきったとき、<b>お金がいちばん多い人</b>の勝ちです。ライフ（最初は${LIVES}）が0になると、<b>全員の負け</b>です。</p>
+<p>お金は株で増やします。タイルがつながると会社になり、その会社のタワーが敵を倒すほど株価が上がります。会社の株をいちばん多く持つ人を筆頭、2番目の人を次点と呼び、この2人にボーナスが入ります。</p>
+<h4>ゲームの流れ</h4><p>全員が順番に行動して、そのあと敵の波が来ます。これを${WAVES}回くり返します。</p>
+<ul><li>行動には<b>時間</b>を使います。1回の波の前に1人が使える時間は、2人なら12、3人なら8、4人なら6、5人と6人は5です。最初の波の前だけ2倍あります。</li>
+<li>次に動くのは、時間トラックでいちばん後ろにいる人です。行動すると、使った時間だけ前に進みます。</li>
+<li>使える時間の線を越えたら、波が終わるまで待ちます。越えた分は、次の波で使える時間から引かれます。どれだけ越えても、次の波で1回は動けます。余った時間は持ち越せません。</li>
+<li>「持ち時間：あり」で始めると、自分の番に考える時間に制限がつきます。最初の波の前は90秒、そのあとは45秒です。使い切ると、その波の残りの番は飛ばされます。</li></ul>
+<h4>自分の番にできること</h4><p>次のどれか1つを選びます。</p><ul>
+<li><b>タイルを置く</b>：手札のタイルを、そのタイルのエリア（盤のうすい文字 A〜F）の空いたマスに置きます。置いたマスにタワーが建ち、<b>株を1枚もらえます</b>。${CELL_EXTRA ? `タイルには印のマスが1つ決まっていて（盤に黄色の点線で出ます）、そこに置くと時間が${CELL_EXTRA}少なくて済みます。` : ''}タワーは壁にもなるので、敵はよけて進みます。遠回りさせるほど、長く撃てます。入口から出口までの道を完全にふさぐことはできません。</li>
+<li><b>タワーを強化する</b>：盤のタワーを押して強化します。誰が置いたタワーでも強化でき、<b>株を1枚もらえます</b>。3段階まで強くなります。ノードは強化できません。かかる時間は、そのタワーを${CELL_EXTRA ? '印のマスに' : ''}置くときと同じです。</li>
+<li><b>株を公開する</b>：手札の株に、その会社の株価と同じお金を払って表にします。1回で出せるのは、1社の株を好きな枚数か、2社の株を1枚ずつです。時間は${REV_TIME ? `1回につき${REV_TIME}` : '1枚につき1'}です。${REVX === '0' || REV_TIME ? '' : `同じ波の前に${REVX === 'same' ? '同じ会社の株をもう一度公開すると' : '公開を2回以上に分けると'}、2回目は時間が${REVX === 'tri' ? '+2、3回目は+5' : '+1、3回目は+2'}と増えます。`}<b>敵が来ている間は公開できません</b>。</li>
+<li><b>タイルを引き直す</b>：手札のタイルを1枚選んで引き直します。印のマスが使えなくなったタイルは、まとめて入れ替えることもできます。時間は、同じ波の前の1回目が1、2回目が2、3回目が3と増えます。手札のタイルの印のマスが全部使えなくなったときは、時間を使わずに手札を全部入れ替えます。</li></ul>
+<p class="note">2人で遊ぶときだけ、タイルを置いたあとに手札のタイルを1枚入れ替えられます。</p>
+<h4>株</h4><p>タイルを置くか強化するたびに、株を1枚もらえます。<b>場に並んだ5枚</b>か、<b>山札の一番上</b>から選びます。お金はかかりません。</p>
+<p>もらった株は手札に入るだけで、まだ数えません。お金を払って<b>公開した株だけ</b>が、ボーナスや売るときに数えられます。最後まで手札に残った株は、お金になりません。</p>
+<ul><li>株の手札は${CARD_MAX}枚までです。超えた分は捨てます。</li>
+<li>場の5枚に、盤にある会社の株が1枚もないときは、時間を使って並べ直せます。時間は、同じ波の前の1回目が1、2回目が2と増えます。</li></ul>
+<h4>会社</h4><ul>
+<li><b>設立</b>：会社のないタイルが2枚以上つながると、つなげた人が会社を1つ選んで設立します。</li>
+<li><b>株価</b>：その会社のタワーが敵を倒すたびに上がります。ファイアウォールで遅くした敵をほかの会社のタワーが倒したときは、倒した数を半分ずつ数えます。どこにもつながっていないタイルは会社に入っていないので、敵を倒しても株価は動きません。</li>
+<li><b>筆頭と次点</b>：その会社の株をいちばん多く公開している人が筆頭、2番目の人が次点です。同じ枚数のときはボーナスを分け合います。株主が1人だけなら、筆頭と次点の両方の分をもらえます。</li></ul>
 <h4>お金が入るとき</h4><ul>
-<li><b>合併</b>：会社どうしがつながると、大きい方が小さい方を吸収する（タイル${SAFE}枚以上の会社は吸収されない）。吸収された会社の筆頭に<b>株価の10倍</b>、次点に<b>5倍</b>。吸収された会社の公開した株は、${KEEP_OK ? '売る（株価でお金に）・2枚を残る会社の株1枚と交換・持ち続ける、を選ぶ' : '売る（株価でお金に）か、2枚を残る会社の株1枚と交換する'}。${KEEP_OK ? '持ち続けた株は、その会社がまた設立されたらまた数える。' : ''}手札にあった株はそのまま手札に残り、その会社がまた設立されたら公開できる。</li>
-<li><b>決算</b>：${DIVIDEND_WAVES.length ? DIVIDEND_WAVES.join('回目と') + '回目の波が終わったとき、盤にある会社ごとに、筆頭に<b>株価の4倍</b>、次点に<b>2倍</b>の配当。' + (DIV_BANK ? '配当は終わりまで「預かり」になり、株の公開には使えない。終わりに所持金に足す。' : '') : 'なし。'}</li>
-<li><b>終わり</b>：${WAVES}回守りきったら、盤にある会社すべてで、筆頭に<b>株価の10倍</b>、次点に<b>5倍</b>。そのあと、公開した株を全部そのときの株価で売る。</li></ul>
-<h4>投資信託</h4><p>株をもらったあと、手札の株を1枚差し出すと、投資信託を1口もらえる（お金はいらず、最初から公開した状態。全部で${CENTRAL_CARDS}口）。値段は盤にある会社の株価の平均。筆頭のボーナスも配当もなく、終わりにそのときの値段で売れる。いらない株の使い道になる。</p>
-<h4>タワーの種類</h4><p>タイルの<b>色は会社</b>（灰色は会社のないタイル）、<b>マークはタワーの種類</b>。</p>
+<li><b>合併</b>：会社どうしがつながると、大きい方が小さい方を吸収します。タイルが${SAFE}枚以上の会社は吸収されません。吸収された会社の筆頭に<b>株価の10倍</b>、次点に<b>5倍</b>が入ります。吸収された会社の株は、公開していた分を${KEEP_OK ? '売るか、2枚を残った会社の株1枚と交換するか、そのまま持ち続けるかを選びます' : '売るか、2枚を残った会社の株1枚と交換します'}。売ると、1枚につき株価と同じお金が入ります。${KEEP_OK ? '持ち続けた株は、その会社がまた設立されたときに数えます。' : ''}手札にあった株はそのまま残り、その会社がまた設立されれば公開できます。</li>
+<li><b>決算</b>：${DIVIDEND_WAVES.length ? DIVIDEND_WAVES.join('回目と') + '回目の波のあと、盤にある会社ごとに、筆頭に<b>株価の4倍</b>、次点に<b>2倍</b>の配当が出ます。' + (DIV_BANK ? '配当は「預かり」になり、株の公開には使えません。最後に所持金に足されます。' : '') : 'ありません。'}</li>
+<li><b>最後の波のあと</b>：盤にあるすべての会社で、筆頭に<b>株価の10倍</b>、次点に<b>5倍</b>が入ります。そのあと、公開した株を全部そのときの株価で売ります。</li></ul>
+<h4>投資信託</h4><p>株をもらったあと、手札の株1枚と引き換えに、投資信託を1口もらえます。お金はかからず、公開した状態でもらえます。全部で${CENTRAL_CARDS}口です。</p>
+<p>値段は、盤にある会社の株価の平均です。筆頭のボーナスも配当もありませんが、最後にそのときの値段で売れます。使い道のない株を、お金に変える手段です。</p>
+<h4>タワーの種類</h4><p>タイルの色は会社を、マークはタワーの種類を表します。灰色のタイルは、まだ会社に入っていません。</p>
 <ul>${Object.keys(TYPES).map(k => `<li><img src="${iconUrl(k)}" alt="" style="width:18px;height:18px;vertical-align:-4px;background:#16213d;border-radius:4px"> <b>${TYPES[k].name}</b>（時間${normalTime(k)}${CELL_EXTRA ? `、印のマスなら${TYPES[k].time}` : ''}）：${TYPE_DESC[k]}</li>`).join('')}</ul>
-${POWERS ? `<h4>会社の能力</h4><p>会社ごとに能力があり、その会社のタワー全部に効く。吸収された会社の能力は消える。</p><ul>${POWER.map((w, i) => `<li>${COMPANIES[i].name}（${w.name}）：${w.desc}</li>`).join('')}</ul>` : ''}
+${POWERS ? `<h4>会社の能力</h4><p>会社ごとに能力があり、その会社のタワー全部に効きます。吸収された会社の能力は消えます。</p><ul>${POWER.map((w, i) => `<li>${COMPANIES[i].name}（${w.name}）：${w.desc}</li>`).join('')}</ul>` : ''}
 <h4>画面の上のボタン</h4><ul>
-<li><b>縦棒2本</b>：一時停止（ひとりで遊ぶときだけ）</li>
-<li><b>三角</b>：早回し。押すたびに 1倍 → 2倍 → 3倍（ひとりで遊ぶときだけ）</li>
-<li><b>♪</b>：効果音を鳴らす・消す</li></ul>
-<p>「？」の付いた見出しや、数字・ボタンは、カーソルを合わせるか長押しすると説明が出る。</p>
-<h4>設定</h4><p>操作の案内（次に押す場所を光らせる）： <button class="btn" id="guideChk" style="padding:4px 12px">${guideOff ? 'オフ' : 'オン'}</button></p>`;
+<li><b>縦棒2本</b>：一時停止。ひとりで遊ぶときだけ使えます</li>
+<li><b>三角</b>：早回し。押すたびに1倍、2倍、3倍と切り替わります。ひとりで遊ぶときだけ使えます</li>
+<li><b>♪</b>：効果音のオンとオフ</li></ul>
+<p>「？」のついた見出しや、数字、ボタンは、カーソルを合わせるか長押しすると説明が出ます。</p>
+<h4>設定</h4><p>次に押す場所を光らせて案内する： <button class="btn" id="guideChk" style="padding:4px 12px">${guideOff ? 'オフ' : 'オン'}</button></p>`;
 function showRules() {
   modal(RULES_HTML(), [['閉じる', () => {}]]);
   document.getElementById('guideChk').onclick = e => { setGuide(!guideOff); e.target.textContent = guideOff ? 'オフ' : 'オン'; };
@@ -3214,7 +3217,7 @@ function applyState(m) {
 function hostLobby(n, hostName) {
   const room = Array.from({ length:4 }, () => ROOM_CHARS[rnd(ROOM_CHARS.length)]).join('');
   G.net = { role:'host', room, peers:{}, fx:[], syncT:0, joined:[], pending:[], hostName:hostName || 'ホスト', n };
-  modal('<h3>部屋を作っています…</h3><p class="note">PeerJS（相手を見つける無料の仲介）につないでいます</p>', [['やめる', () => location.reload()]]);
+  modal('<h3>部屋を作っています…</h3><p class="note">通信の準備をしています</p>', [['やめる', () => location.reload()]]);
   Promise.all([loadPeer(), loadQR()]).then(() => {
     const peer = new Peer(NET_PREFIX + room); G.net.peer = peer;
     peer.on('error', err => { if (err.type === 'unavailable-id') { peer.destroy(); hostLobby(n, hostName); } else modal(`<h3>つなげませんでした</h3><p class="note">${err.type}</p>`, [['戻る', () => location.reload()]]); });
@@ -3246,7 +3249,7 @@ function drawLobby() {
   const full = nt.joined.length + 1 >= nt.n;
   modal(`<h3>部屋 ${nt.room}</h3><div style="background:#fff;display:inline-block;padding:6px;border-radius:6px">${qr}</div>
     <p><button class="btn" data-inv="1">招待リンクを送る</button> <span class="note" id="invNote"></span></p>
-    <p class="note">招待リンクを送るか、QR を読むか、「部屋に入る」で番号 <b>${nt.room}</b> を入れてもらう。${nt.n}人の部屋で、空いた席は CPU が入る</p>
+    <p class="note">招待リンクを送るか、QR コードを読んでもらってください。「部屋に入る」で番号 <b>${nt.room}</b> を入れても参加できます。${nt.n}人の部屋で、空いた席には CPU が入ります</p>
     <h4>参加する人</h4><p>${[nt.hostName + '（ホスト）', ...nt.joined.map(j => j.name)].join('、')}</p>
     ${nt.pending.length ? '<h4>参加の申し込み</h4>' + nt.pending.map((j, i) => `<div style="margin:4px 0">${j.name} <button class="btn" data-ok="${i}" ${full ? 'disabled' : ''}>許可</button> <button class="btn" data-ng="${i}">断る</button></div>`).join('') : ''}`,
     [['はじめる', () => hostStart()], ['やめる', () => location.reload()]]);
@@ -3430,7 +3433,7 @@ function reopenHost(sv) {
 }
 function startGame() {
   setup(); resize(); renderAll(); renderLog();
-  log(`始まり：最初の波まで${FIRST_WAIT}秒。手札のタイルを置いて迷路を作ろう`);
+  log('ゲーム開始。タイルを置いてタワーを建てよう');
   G.started = true; announce('電脳都市', COURSES[COURSE].name);
 }
 // コースの小さな盤の図：入口（桃）・出口（白）・じゃまなマス（灰）・速くなるマス（黄）・回復するマス（緑）
@@ -3468,13 +3471,13 @@ function showStart() {
   // 2. ルールを選ぶ：1項目1行
   const line = (label, items, attr, cur) => `<div style="display:flex;align-items:center;gap:6px;margin:7px 0"><span style="width:5.4em;flex:none;color:#7cf9ff;font-weight:bold;font-size:13px">${label}</span><div class="pick" style="margin:0;gap:4px;flex-wrap:nowrap">${items.map(([k, t]) => `<button class="btn${k === cur ? ' on' : ''}" data-${attr}="${k}" style="padding:5px 7px;font-size:13px;white-space:nowrap">${t}</button>`).join('')}</div></div>`;
   const rules = () => {
-    modal(`<h3>${mode === 'host' ? '部屋を作る' : 'ひとりで遊ぶ'}：ルールを選ぶ</h3>` +
+    modal(`<h3>${mode === 'host' ? '部屋を作る' : 'ひとりで遊ぶ'}：遊び方を決める</h3>` +
       line('人数', [2, 3, 4, 5, 6].map(k => [k, k + '人']), 'n', n) +
       line('難しさ', Object.entries(DIFFS).map(([k, d]) => [k, d.name]), 'df', DIFF) +
       line('持ち時間', [[0, 'あり'], [1, '制限なし']], 'nl', NO_LIMIT ? 1 : 0) +
       line('CPU の強さ', [['strong', 'つよい'], ['normal', 'ふつう'], ['easy', 'よわい']], 'lv', CPU_LEVEL) +
       line('会社の能力', [[1, 'あり'], [0, 'なし']], 'pw', POWERS ? 1 : 0) +
-      `<p class="note">${mode === 'host' ? '人数は、ほかの人と CPU を合わせた数。空いた席は CPU が入る。' : '人数は、あなたと CPU を合わせた数。'}</p>`,
+      `<p class="note">${mode === 'host' ? '人数は、参加する人と CPU を合わせた数です。空いた席には CPU が入ります。' : '人数は、あなたと CPU を合わせた数です。'}</p>`,
       [['次へ（コースを選ぶ）', courses], ['戻る', title]]);
     const on = (a, f) => document.querySelectorAll(`#mbox [data-${a}]`).forEach(b => b.onclick = () => { f(b.dataset[a]); rules(); });
     on('n', v => n = +v); on('df', v => DIFF = v); on('nl', v => { NO_LIMIT = v === '1'; nlSet = true; }); on('lv', v => CPU_LEVEL = v); on('pw', v => POWERS = v === '1');
