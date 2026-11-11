@@ -127,7 +127,7 @@
     <button class="btn" id="pauseBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="一時停止"><svg width="11" height="12" viewBox="0 0 11 12" style="vertical-align:-1px" aria-label="一時停止"><rect x="1" y="1" width="3" height="10" rx="1" fill="currentColor"/><rect x="7" y="1" width="3" height="10" rx="1" fill="currentColor"/></svg></button>
     <button class="btn" id="ffBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="早回し。押すたびに1倍、2倍、3倍と切り替わります。持ち時間は早回ししても同じ速さで減ります"><svg width="11" height="12" viewBox="0 0 11 12" style="vertical-align:-1px" aria-label="早回し"><path d="M2 1.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L2.9.7a.6.6 0 0 0-.9.5z" fill="currentColor"/></svg></button>
     <button class="btn" id="soundBtn" style="padding:4px 8px;font-size:13px" data-tip="効果音のオンとオフ"></button>
-    <button class="btn" id="helpBtn">？<span class="hl"> ルール</span></button>
+    <button class="btn" id="helpBtn">？<span class="hl"> 遊び方</span></button>
   </div>
   <div style="position:relative"><canvas id="cv"></canvas><div id="bmenu"></div></div>
   <div id="turn"></div>
@@ -1092,7 +1092,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.54';
+const APP_VER = 'v0.1.55';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -3117,11 +3117,61 @@ ${POWERS ? `<h4>会社の能力</h4><p>会社ごとに能力があり、その�
 <li><b>♪</b>：効果音のオンとオフ</li></ul>
 <p>「？」のついた見出しや、数字、ボタンは、カーソルを合わせるか長押しすると説明が出ます。</p>
 <h4>設定</h4><p>次に押す場所を光らせて案内する： <button class="btn" id="guideChk" style="padding:4px 12px">${guideOff ? 'オフ' : 'オン'}</button></p>`;
-function showRules() {
-  modal(RULES_HTML(), [['閉じる', () => {}]]);
+// ===== 遊び方（ページをめくる。1ページに1つのことを、絵か表と短い文で見せる。ユーザー：文章の一覧では頭に入ってこない） =====
+const HT_R = 15;
+const htXY = (c, r) => [22 + c * HT_R * 1.732 + (r % 2) * HT_R * .866, 20 + r * HT_R * 1.5];
+const htHex = (c, r, fill = '#141d38', stroke = '#2b3a66', extra = '') => { const [x, y] = htXY(c, r); const pts = [0, 1, 2, 3, 4, 5].map(i => { const a = Math.PI / 180 * (60 * i - 90); return (x + HT_R * .92 * Math.cos(a)).toFixed(1) + ',' + (y + HT_R * .92 * Math.sin(a)).toFixed(1); }).join(' '); return `<polygon points="${pts}" fill="${fill}" stroke="${stroke}" stroke-width="1.5" ${extra}/>`; };
+const htIcon = (c, r, type) => { const [x, y] = htXY(c, r); return `<image href="${iconUrl(type)}" x="${x - 9}" y="${y - 9}" width="18" height="18"/>`; };
+const htText = (x, y, t, fill = '#cfd8ff', size = 11, anchor = 'middle') => `<text x="${x}" y="${y}" fill="${fill}" font-size="${size}" text-anchor="${anchor}" font-weight="bold">${t}</text>`;
+const htSvg = (w, h, body) => `<svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:360px;display:block;margin:8px auto;background:#0a0f22;border:1px solid #2b3a66;border-radius:8px">${body}</svg>`;
+const htGrid = (cols, rows, paint = {}) => { let g = ''; for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const p = paint[c + ',' + r]; g += p ? htHex(c, r, p[0], p[1], p[2] || '') : htHex(c, r); } return g; };
+const htTile = (color) => [color + '33', color];
+const htTable = (head, rows) => `<table style="width:100%;border-collapse:collapse;font-size:13px;margin:8px 0"><tr>${head.map(h => `<th style="border-bottom:1px solid #4d6bb3;padding:4px;text-align:left;color:#7cf9ff">${h}</th>`).join('')}</tr>${rows.map(r => `<tr>${r.map(d => `<td style="border-bottom:1px solid #22305a;padding:6px 4px;vertical-align:top;text-align:left">${d}</td>`).join('')}</tr>`).join('')}</table>`;
+const htBox = (t, sub, color = '#4d6bb3') => `<div style="flex:1;border:1.5px solid ${color};border-radius:8px;padding:8px 4px;text-align:center;font-size:13px;font-weight:bold">${t}${sub ? `<div class="note" style="font-weight:normal;font-size:11px">${sub}</div>` : ''}</div>`;
+const HOWTO = [
+  () => { const g = COMPANIES[0].color, b = COMPANIES[2].color, [ex, ey] = htXY(3, 1), [tx, ty] = htXY(3, 0);
+    return ['全員で守る。勝つのは1人', htSvg(260, 88, htGrid(9, 3, { '3,0':htTile(g), '5,2':htTile(b), '6,0':htTile(b) }) + htIcon(3, 0, 'av') + htIcon(5, 2, 'scan') + htIcon(6, 0, 'fw')
+      + `<line x1="${tx}" y1="${ty}" x2="${ex}" y2="${ey}" stroke="${g}" stroke-width="2"/>` + [1, 2, 3].map(c => { const [x, y] = htXY(c, 1); return `<circle cx="${x}" cy="${y}" r="5" fill="#7cf9ff"/>`; }).join('')
+      + htText(htXY(0, 1)[0], htXY(0, 1)[1] + 4, '入', '#ff4dff', 12) + htText(htXY(8, 1)[0], htXY(8, 1)[1] + 4, '◆', '#fff', 13))
+      + `<p>ウイルスが、入口から出口（◆）へ進みます。みんなでタワーを建てて、着く前に倒します。</p><p>出口に着かれるとライフが減ります。0になったら<b>全員の負け</b>です。</p><p>${WAVES}回守りきったら、<b>お金がいちばん多い人</b>の勝ちです。</p>`]; },
+  () => ['自分の番にやること', `<p>次の3つから、1つ選びます。</p>` + htTable(['やること', '使うもの', 'もらえるもの'], [['<b>タイルを置く</b>', '時間', 'タワーが建つ<br>株を1枚'], ['<b>タワーを強化する</b>', '時間', 'タワーが強くなる<br>株を1枚'], ['<b>株を公開する</b>', 'お金と時間', 'その会社の株主になる']])
+    + `<p>お金は、株を公開するときにだけ使います。最初は${START_MONEY}持っています。</p>`],
+  () => { const paint = {}; for (const c of [3, 4, 5]) for (const r of [0, 1, 2]) paint[c + ',' + r] = ['#16284a', '#7cf9ff']; paint['4,1'] = ['#3a3413', '#ffe14d', 'stroke-dasharray="4 3"']; paint['3,2'] = htTile(COMPANIES[4].color);
+    return ['タイルを置く', `<div style="display:flex;justify-content:center"><div style="border:1.5px solid #7cf9ff;border-radius:8px;padding:6px 12px;font-size:13px"><img src="${iconUrl('scan')}" alt="" style="width:18px;height:18px;vertical-align:-4px"> <b>${TYPES.scan.name}</b>　エリアB　時間${normalTime('scan')}</div></div>`
+      + htSvg(260, 88, htGrid(9, 3, paint) + htIcon(3, 2, 'av') + htText(htXY(4, 1)[0], htXY(4, 1)[1] + 4, '印', '#ffe9a8', 12) + htText(htXY(4, 0)[0], htXY(4, 0)[1] + 4, 'B', '#7cf9ff88', 12))
+      + `<p>タイルには、置けるエリアが書いてあります。そのエリアの空いたマス（光っているマス）なら、どこにでも置けます。</p>${CELL_EXTRA ? `<p>黄色い点線の<b>印のマス</b>に置くと、時間が${CELL_EXTRA}少なくて済みます。</p>` : ''}<p>タワーは壁になります。敵はよけて進むので、遠回りさせるほど長く撃てます。</p>`]; },
+  () => { const cols = ['#ffffff', '#7cf9ff', '#ff9a3c', '#b07cff'], xs = [40, 95, 120, 215];
+    return ['時間と順番', htSvg(260, 70, `<line x1="15" y1="30" x2="245" y2="30" stroke="#2b3a66" stroke-width="6" stroke-linecap="round"/><line x1="180" y1="10" x2="180" y2="50" stroke="#ff4dff" stroke-width="2"/>`
+      + xs.map((x, i) => `<circle cx="${x}" cy="30" r="8" fill="${cols[i]}"/>`).join('') + htText(40, 60, '↑ 次に動く人', '#ffe066', 11) + htText(180, 64, '使える時間はここまで', '#ff4dff', 10))
+      + `<p>行動すると、使った時間だけ右へ進みます。次に動くのは、<b>いちばん左の人</b>です。</p><p>ピンクの線を越えた人は、波が終わるまで待ちます。全員が越えると、敵の波が来ます。</p>`
+      + htTable(['人数', '2人', '3人', '4人', '5人', '6人'], [['1回の波の前に<br>使える時間', ...[2, 3, 4, 5, 6].map(k => PARAMS.get('tt') ? Math.round(+PARAMS.get('tt') / k) : Math.max(5, Math.round(24 / k)))]])]; },
+  () => { const g = COMPANIES[0].color;
+    return ['会社と株価', htSvg(260, 76, htHex(1, 1, '#2a3050', '#8a94b4') + htIcon(1, 1, 'av') + htText(htXY(1, 1)[0], 66, '1枚だけ', '#8a94b4', 10) + htText(105, 34, '→', '#cfd8ff', 18)
+      + htHex(5, 1, ...htTile(g)) + htHex(6, 1, ...htTile(g)) + htIcon(5, 1, 'av') + htIcon(6, 1, 'node') + htText((htXY(5, 1)[0] + htXY(6, 1)[0]) / 2, 66, `つながると会社（${COMPANIES[0].name}）`, g, 10))
+      + `<p>タイルが2枚以上つながると、<b>会社</b>になります。つなげた人が、どの会社にするか選びます。</p><p>その会社のタワーが敵を倒すたびに、<b>株価</b>が上がります。</p><p>よく倒すタワーを持つ会社ほど、株が高くなります。</p>`]; },
+  () => ['株をもらう、公開する', `<div style="display:flex;gap:4px;align-items:center;margin:8px 0">${htBox('置く、強化する', '')}<b>→</b>${htBox('株を1枚もらう', '手札に入る')}<b>→</b>${htBox('公開する', '株価と同じお金を払う', '#7cf9ff')}</div>`
+    + `<p>もらった株は<b>手札</b>に入ります。手札の株は、まだ数えません。</p><p>その会社の株価と同じお金を払うと、<b>公開</b>できます。数えられるのは、公開した株だけです。</p><p>公開できるのは、敵が来ていない間だけです。最後まで手札に残った株は、お金になりません。</p>`],
+  () => ['お金が入るとき', `<p>会社ごとに、公開した株がいちばん多い人が<b>筆頭</b>、2番目の人が<b>次点</b>です。</p>`
+    + htTable(['いつ', '筆頭', '次点'], [['会社が吸収されたとき', '株価の10倍', '5倍'], ...(DIVIDEND_WAVES.length ? [[DIVIDEND_WAVES.join('回目と') + '回目の波のあと', '4倍', '2倍']] : []), ['最後の波のあと', '10倍', '5倍']])
+    + `<p>同じ枚数のときは分け合います。株主が1人だけなら、筆頭と次点の両方の分をもらえます。</p><p>最後に、公開した株を全部、そのときの株価で売ります。</p>`],
+  () => { const a = COMPANIES[2].color, b = COMPANIES[4].color, paint = { '4,1':['#3a3413', '#ffe14d', 'stroke-dasharray="4 3"'] };
+    for (const k of ['0,0', '1,0', '2,0', '1,1', '2,1', '3,1']) paint[k] = htTile(a); for (const k of ['5,1', '6,1']) paint[k] = htTile(b);
+    return ['合併', htSvg(260, 76, htGrid(9, 3, paint) + htText(htXY(4, 1)[0], htXY(4, 1)[1] + 4, '置く', '#ffe9a8', 9) + htText(htXY(1, 2)[0] + 14, htXY(1, 2)[1] + 8, COMPANIES[2].name + '（6枚）', a, 10) + htText(htXY(6, 2)[0], htXY(6, 2)[1] + 8, COMPANIES[4].name + '（2枚）', b, 10))
+      + `<p>会社どうしがつながると、<b>大きい方が小さい方を吸収</b>します。</p><p>吸収された会社の筆頭と次点に、ボーナスが入ります。その会社の公開した株は、売るか、2枚を相手の会社の株1枚と交換します。</p><p>タイルが${SAFE}枚以上の会社は、吸収されません。</p>`]; },
+  () => ['タワーの種類', htTable(['タワー', '時間', 'はたらき'], Object.keys(TYPES).map(k => [`<img src="${iconUrl(k)}" alt="" style="width:18px;height:18px;vertical-align:-4px;background:#16213d;border-radius:4px"> <b>${TYPES[k].name}</b>`, normalTime(k), TYPE_SHORT[k]]))
+    + `<p>強化すると、射程と威力が上がります（3段階まで）。</p>`],
+];
+function showHowTo(i = 0, onClose) {
+  const [ttl, body] = HOWTO[i](), n = HOWTO.length, last = i === n - 1;
+  modal(`<div class="note" style="text-align:right">遊び方 ${i + 1} / ${n}</div><h3 style="margin-top:0">${ttl}</h3>${body}`,
+    [...(last ? [] : [['次へ', () => showHowTo(i + 1, onClose), '#7cf9ff']]), ...(i ? [['前へ', () => showHowTo(i - 1, onClose)]] : []),
+     ...(last ? [['くわしいルール', () => showRules(() => showHowTo(i, onClose))]] : []), ['閉じる', onClose || (() => {})]]);
+}
+function showRules(onClose) {
+  modal(RULES_HTML(), [['閉じる', onClose || (() => {})]]);
   document.getElementById('guideChk').onclick = e => { setGuide(!guideOff); e.target.textContent = guideOff ? 'オフ' : 'オン'; };
 }
-document.getElementById('helpBtn').onclick = showRules;
+document.getElementById('helpBtn').onclick = () => showHowTo(0);
 const soundBtn = document.getElementById('soundBtn');
 const drawSoundBtn = () => { soundBtn.textContent = soundOn ? '♪' : '♪×'; soundBtn.style.opacity = soundOn ? 1 : .5; };
 soundBtn.onclick = () => { soundOn = !soundOn; try { localStorage.setItem(SOUND_KEY, soundOn ? '1' : '0'); } catch (e) {} drawSoundBtn(); if (soundOn) sfx('coin'); };
@@ -3465,19 +3515,19 @@ function showStart() {
       <div style="color:#7cf9ff;font-weight:bold;margin-top:6px">タワーディフェンス × 株ゲー</div></div>
       <p class="note" style="text-align:center">タワーを建てて会社を作り、ウイルスの波から街を守りつつ、自身の資産を最大化する、半協力型対戦ゲームです。<br>あのころのタワーディフェンスと、そのまたあのころの株ゲームの駆け引きが1つに！</p>`,
       [...cont, ['ひとりで遊ぶ（CPUと）', () => pickMode('solo')], ['部屋を作る', () => pickMode('host')], ['部屋に入る', () => showJoin('')],
-       ['ルールを読む', () => { showRules(); document.querySelector('#mbox .row button').onclick = () => { document.getElementById('modal').style.display = 'none'; title(); }; }]]);
+       ['遊び方', () => showHowTo(0, title)]]);
     document.querySelectorAll('#mbox .row button').forEach(b => { b.style.width = '100%'; });   // 縦に並べる
   };
   // 2. ルールを選ぶ：1項目1行
   const line = (label, items, attr, cur) => `<div style="display:flex;align-items:center;gap:6px;margin:7px 0"><span style="width:5.4em;flex:none;color:#7cf9ff;font-weight:bold;font-size:13px">${label}</span><div class="pick" style="margin:0;gap:4px;flex-wrap:nowrap">${items.map(([k, t]) => `<button class="btn${k === cur ? ' on' : ''}" data-${attr}="${k}" style="padding:5px 7px;font-size:13px;white-space:nowrap">${t}</button>`).join('')}</div></div>`;
   const rules = () => {
-    modal(`<h3>${mode === 'host' ? '部屋を作る' : 'ひとりで遊ぶ'}：遊び方を決める</h3>` +
+    modal(`<h3>${mode === 'host' ? '部屋を作る' : 'ひとりで遊ぶ'}</h3>` +
       line('人数', [2, 3, 4, 5, 6].map(k => [k, k + '人']), 'n', n) +
       line('難しさ', Object.entries(DIFFS).map(([k, d]) => [k, d.name]), 'df', DIFF) +
       line('持ち時間', [[0, 'あり'], [1, '制限なし']], 'nl', NO_LIMIT ? 1 : 0) +
       line('CPU の強さ', [['strong', 'つよい'], ['normal', 'ふつう'], ['easy', 'よわい']], 'lv', CPU_LEVEL) +
       line('会社の能力', [[1, 'あり'], [0, 'なし']], 'pw', POWERS ? 1 : 0) +
-      `<p class="note">${mode === 'host' ? '人数は、参加する人と CPU を合わせた数です。空いた席には CPU が入ります。' : '人数は、あなたと CPU を合わせた数です。'}</p>`,
+      (mode === 'host' ? '<p class="note">空いた席には CPU が入ります。</p>' : ''),
       [['次へ（コースを選ぶ）', courses], ['戻る', title]]);
     const on = (a, f) => document.querySelectorAll(`#mbox [data-${a}]`).forEach(b => b.onclick = () => { f(b.dataset[a]); rules(); });
     on('n', v => n = +v); on('df', v => DIFF = v); on('nl', v => { NO_LIMIT = v === '1'; nlSet = true; }); on('lv', v => CPU_LEVEL = v); on('pw', v => POWERS = v === '1');
@@ -3496,6 +3546,7 @@ function showStart() {
 }
 useCourse(COURSE); resize(); G.dist = distanceField();
 if (AUTO || PARAMS.has('start')) startGame(); else if (PARAMS.has('room')) showJoin(PARAMS.get('room')); else showStart();
+if (PARAMS.has('howto')) showHowTo(+PARAMS.get('howto') || 0);   // 遊び方のページを直接開く（見た目の確認用）
 requestAnimationFrame(loop);
 window.__G = G;
 </script>
