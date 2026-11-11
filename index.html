@@ -1094,7 +1094,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.62';
+const APP_VER = 'v0.1.63';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -3198,8 +3198,12 @@ const HOWTO = [
 function showHowTo(i = 0, onClose) {
   const pages = HOWTO.map(f => f()).filter(Boolean), n = pages.length; i = Math.max(0, Math.min(n - 1, i));
   const [ttl, body] = pages[i], last = i === n - 1;
-  modal(`<div class="note" style="text-align:right">遊び方 ${i + 1} / ${n}</div><h3 style="margin-top:0">${ttl}</h3>${body}`,
-    [...(last ? [] : [['次へ', () => showHowTo(i + 1, onClose), '#7cf9ff']]), ...(i ? [['前へ', () => showHowTo(i - 1, onClose)]] : []), ['閉じる', onClose || (() => {})]]);
+  // 前へは左、次へは右。閉じるは右上の×（最後のページだけ、右のボタンが「閉じる」になる）
+  const close = () => { document.getElementById('modal').style.display = 'none'; (onClose || (() => {}))(); };
+  modal(`<div style="display:flex;justify-content:space-between;align-items:center"><span class="note">遊び方 ${i + 1} / ${n}</span><button class="btn" id="htClose" aria-label="閉じる" style="padding:2px 12px;font-size:16px">×</button></div><h3 style="margin-top:4px">${ttl}</h3>${body}`,
+    [['← 前へ', () => showHowTo(i - 1, onClose)], last ? ['閉じる', onClose || (() => {}), '#7cf9ff'] : ['次へ →', () => showHowTo(i + 1, onClose), '#7cf9ff']]);
+  const row = document.querySelector('#mbox .row'); row.style.justifyContent = 'space-between'; if (!i) row.firstChild.style.visibility = 'hidden';
+  document.getElementById('htClose').onclick = close;
   const gc = document.getElementById('guideChk'); if (gc) gc.onclick = e => { setGuide(!guideOff); e.target.textContent = guideOff ? '案内：オフ' : '案内：オン'; };
 }
 document.getElementById('helpBtn').onclick = () => showHowTo(0);
