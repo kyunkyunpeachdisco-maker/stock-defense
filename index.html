@@ -1092,7 +1092,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.52';
+const APP_VER = 'v0.1.53';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -3108,11 +3108,15 @@ const RULES_HTML = () => `<h3>電脳都市のルール</h3>
 <h4>タワーの種類</h4><p>タイルの<b>色は会社</b>（灰色は会社のないタイル）、<b>マークはタワーの種類</b>。</p>
 <ul>${Object.keys(TYPES).map(k => `<li><img src="${iconUrl(k)}" alt="" style="width:18px;height:18px;vertical-align:-4px;background:#16213d;border-radius:4px"> <b>${TYPES[k].name}</b>（時間${normalTime(k)}${CELL_EXTRA ? `、印のマスなら${TYPES[k].time}` : ''}）：${TYPE_DESC[k]}</li>`).join('')}</ul>
 ${POWERS ? `<h4>会社の能力</h4><p>会社ごとに能力があり、その会社のタワー全部に効く。吸収された会社の能力は消える。</p><ul>${POWER.map((w, i) => `<li>${COMPANIES[i].name}（${w.name}）：${w.desc}</li>`).join('')}</ul>` : ''}
-<h4>画面</h4><p>ひとりで遊ぶときは、上の縦棒2本のボタンで一時停止、三角のボタンで早回し（押すたびに1倍・2倍・3倍）。「？」の付いた見出し・数字・ボタンは、カーソルを合わせるか長押しすると説明が出る。</p>
-<p><label><input type="checkbox" id="guideChk" ${guideOff ? '' : 'checked'}> 押す場所を光らせて案内する</label></p>`;
+<h4>画面の上のボタン</h4><ul>
+<li><b>縦棒2本</b>：一時停止（ひとりで遊ぶときだけ）</li>
+<li><b>三角</b>：早回し。押すたびに 1倍 → 2倍 → 3倍（ひとりで遊ぶときだけ）</li>
+<li><b>♪</b>：効果音を鳴らす・消す</li></ul>
+<p>「？」の付いた見出しや、数字・ボタンは、カーソルを合わせるか長押しすると説明が出る。</p>
+<h4>設定</h4><p>操作の案内（次に押す場所を光らせる）： <button class="btn" id="guideChk" style="padding:4px 12px">${guideOff ? 'オフ' : 'オン'}</button></p>`;
 function showRules() {
   modal(RULES_HTML(), [['閉じる', () => {}]]);
-  document.getElementById('guideChk').onchange = e => setGuide(!e.target.checked);
+  document.getElementById('guideChk').onclick = e => { setGuide(!guideOff); e.target.textContent = guideOff ? 'オフ' : 'オン'; };
 }
 document.getElementById('helpBtn').onclick = showRules;
 const soundBtn = document.getElementById('soundBtn');
