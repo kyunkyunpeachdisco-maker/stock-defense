@@ -817,7 +817,7 @@ function mergeChain(placer, survivor, absorbed, done) {
       // CPU：残る会社の株価が、2枚を売った額より高ければ交換し、残りは売る
       if (p.cpu) {
         let pairs = price(sv) > pr * 2 ? maxPairs : Math.floor(maxPairs / 2);
-        if (dispSmart(p)) {
+        if (dispSmart(p) || tac(p, 'xchg')) {   // ?tac=xchg、試し中（ユーザーの局：交換で本命の筆頭を取っていた。CPU はほとんど売っている）
           // 売る・交換するの組み合わせを全部比べる：交換した株は、残る会社のこれからの株価と、筆頭・次点に近づく分の値打ち
           FP_P = p; const fp = futurePrice(sv), base = bonusShareBase(p, survivor, p.shares[survivor]);
           let best = -1e9;
@@ -826,6 +826,7 @@ function mergeChain(placer, survivor, absorbed, done) {
             if (v > best) { best = v; pairs = k; }
           }
         }
+        TR({ k:'xch', w:G.wave, p:p.id, co:id, sv:survivor, n, pr, svpr:price(sv), fp:Math.round(futurePrice(sv)), maxPairs, pairs, old:price(sv) > pr * 2 ? maxPairs : Math.floor(maxPairs / 2), mine:p.shares[survivor], others:G.players.filter(q => q !== p).map(q => q.shares[survivor]).join(','), money:p.money });
         apply({ pairs, sell:n - pairs * 2 });
       }
       else requestChoice(p, 'dispose', { co:id, sv:survivor, pr, n, maxPairs }, v => {
@@ -1125,10 +1126,12 @@ const CAND_PATH = PARAMS.get('cand') === 'path';
 //   noreset：場の入れ替えをしない（入れ替えがどれだけ得かを測る用）
 //   spoil：撃たないタイル（ノード・ハニーポット・ボルテックス）は、育ってほしくない会社の良いマスに置き、自分の会社の良いマスには置かない
 //   hold：自分で立てた会社の株を持ち続ける。取るとき・公開するときに、その会社はこれから伸びるとみる（ユーザー：「入り口にヘリオス作って株持っておく」）
+// 試しの手が出た場面を書き出す（?dbg=1 のときだけ。回す前に、狙った場面で出ているかを数局分読むため）
+const TR = PARAMS.get('dbg') ? o => (G.stats.tr = G.stats.tr || []).push(o) : () => {};
 const TAC = new Set((PARAMS.get('tac') || '').split(',').filter(Boolean));
 // 暫定で、つよい CPU の標準にした戦術（?lead=0 で外す）：margin・focus・refound（筆頭を固める・筆頭を取りにいく・立て直し）。
 // 席を入れ替えた300組で、平均順位 2.40 対 2.60（誤差の3.7倍）、終わりのボーナスが約 +1200
-const STD_TAC = PARAMS.get('lead') === '0' ? new Set() : new Set(['margin', 'focus', 'refound']);
+const STD_TAC = PARAMS.get('lead') === '0' ? new Set() : new Set(['margin', 'focus', 'refound', 'full', 'rst', 'xchg']);   // full・rst・xchg は、出た場面を数局読んでから比べた：100組で順位 2.36 対 2.64（2.9倍）、終わりのボーナス +1800、守りは全員どうしで 87 → 90
 const tac = (p, name) => (TAC.has(name) && tryOn(p)) || (STD_TAC.has(name) && !!p.strong);
 const UPCOV = PARAMS.get('upcov') !== '0';   // 敵の道に届かないタワーを、株をもらうためだけに強化しない
 const keepFp = (p, id, fp) => p.keep && p.keep[id] ? Math.max(fp, price(G.cos[id]) + 400) : fp;
@@ -1273,9 +1276,16 @@ function denyValue(p, id, mine, fp) {
 }
 const DENY_LEAD = PARAMS.get('denylead') || '1';   // mix で偶数番だけ
 const WEAK_RAND = +(PARAMS.get('wk') || 1);   // よわい CPU が、場の株を選ばずに取る割合
+// 場を入れ替えたとき、今ある会社の株が何枚出そうか：公開された株・場・自分の手札は見えるので、残り（山とほかの人の手札）のうち今ある会社の株の割合 × 5枚
+function liveDraw(p) {
+  const pool = G.deck.length + G.players.filter(q => q !== p).reduce((a, q) => a + q.cards.filter(c => c !== CENTRAL).length, 0); if (!pool) return 0;
+  const live = G.cos.filter(c => c.active).reduce((a, c) => a + Math.max(0, SHARES_BY_CO[c.id] - G.players.reduce((b, q) => b + q.shares[c.id], 0) - G.market.filter(m => m === c.id).length - p.cards.filter(m => m === c.id).length), 0);
+  return 5 * Math.min(1, live / pool);
+}
 function cpuTake(p) {
   FP_P = p;
-  if (canReset(p) && !tac(p, 'noreset') && resetTime(p) <= RESET_CPU_MAX) doReset(p);
+  if (PARAMS.get('dbg') === 'link') TR({ k:'ld', w:G.wave, n:G.stats.taken || 0, d:G.cos.filter(c => c.active).map(c => [c.id, linkDist(c.id), coSize(c.id)]), m:(G.stats.mergeInfo || []).length });
+  if (canReset(p) && !tac(p, 'noreset') && (tac(p, 'rst') ? resetTime(p) <= (liveDraw(p) >= 1.5 ? 2 : liveDraw(p) >= .75 ? 1 : 0) : resetTime(p) <= RESET_CPU_MAX)) { const b = G.market.join(''), rt = resetTime(p), ld = +liveDraw(p).toFixed(1); doReset(p); TR({ k:'rst', ld, w:G.wave, p:p.id, rt, before:b, after:G.market.join(''), live:G.market.filter(id => G.cos[id].active).length, act:G.cos.filter(c => c.active).map(c => c.id).join('') }); }   // ?tac=rst、試し中：見えていない株を数えて、今ある会社の株が出る見込みがあるときだけ入れ替える（見込みが高ければ時間2まで）
   if (p.weak && G.market.length && RNG.cpu() < WEAK_RAND) return takeShare(p, Math.floor(RNG.cpu() * G.market.length));
   let best = { mi:-1, v:200 + RNG.cpu() * 50 };  // 山札の一番上
   G.market.forEach((id, mi) => { const v = cardValue(p, id) + RNG.cpu() * 30; if (v > best.v) best = { mi, v }; });
@@ -1306,7 +1316,9 @@ function cpuExchange(p) {
   FP_P = p;
   if (!canExchange(p)) return;
   // 取り合い（?tac=race、試し中）：投資信託の残りが少なくなったら、望みのある会社の株でも、投資信託より安ければ先に替える
-  const race = tac(p, 'race') && G.centralLeft <= +(PARAMS.get('raceat') || 6);
+  // 詰まりをほどく（?tac=unstick、試し中。ユーザーの局：CPU が所持金100のまま手札に8枚抱えて4位）：公開するお金がなく、手札の株が5枚以上たまっていたら、望みのある株でも投資信託に替える
+  const stuck = tac(p, 'unstick') && p.cards.length >= 5 && !p.cards.some(c => c !== CENTRAL && G.cos[c].active && price(G.cos[c]) <= p.money);
+  const race = stuck || tac(p, 'race') && G.centralLeft <= +(PARAMS.get('raceat') || 6);
   const worst = [...new Set(p.cards.filter(c => c !== CENTRAL))].filter(id => !exchCareful(p) || race || hopeless(p, id)).map(id => ({ id, v:cardValue(p, id, true) })).sort((a, b) => a.v - b.v)[0];
   // 受け取る1口は公開済みで、終わりに売れる。差し出す株の値打ちより高ければ交換する。
   // 差し出した株はゲームから消えるので、渡さないために取った株も、自分に要らなければ投資信託に替えてよい（自分にとっての値打ちだけで比べる）
@@ -1534,7 +1546,10 @@ function cpuAct(p) {
   replaceDead(p);
   const alts = tac(p, 'foresee') ? altBlocks(G.dist) : [], fore = (tiles, def) => alts.length ? foreDef(alts, tiles, def) : def;
   const dist0 = G.dist, def0 = estimate(G.tiles, dist0), u0 = dangerOf(fore(G.tiles, def0)), L0 = loseChance(u0), myW = Math.max(3000, wealth(p));
-  const bestCard = Math.max(200, ...G.market.map(id => cardValue(p, id, true)));   // 手番の比べ方には、渡さない分を入れない
+  // 株の手札が上限のとき（?tac=full、試し中）：もらっても1枚捨てるので、値打ちは、いちばん要らない手札と入れ替える得だけ
+  const cardFull = tac(p, 'full') && CARD_MAX && p.cards.length >= CARD_MAX;
+  const bestCard = cardFull ? Math.max(0, Math.max(200, ...G.market.map(id => cardValue(p, id, true))) - Math.min(...p.cards.map(id => cardValue(p, id, true))))
+    : Math.max(200, ...G.market.map(id => cardValue(p, id, true)));   // 手番の比べ方には、渡さない分を入れない
   const opts = [];
   // 置く：守りの増え方（危なさが下がる分）と、株を持つ会社が育つ分と、手札に入る株の値打ち
   const len0 = pathFrom(dist0).length, RT = routeOn(p), sh0 = RT ? coShares(G.tiles, dist0, k => G.owner[k]) : null;
@@ -1573,7 +1588,7 @@ function cpuAct(p) {
     // 守りが危ないときは、守りの足しにならない置き方（ノードなど）を、株をもらうためだけには打たない（暫定で全員。?guard=0 で前の形。ユーザーの局：30枚中11枚がノードで5波目に全員の負け）。
     // ほかの株の案とまとめて全員 CPU の100局ずつで、守りきる割合が 87% → 92%、残りライフが +1.0。この打ち方をする席だけを見ると順位はわずかに下がる
     const lazy = GUARD && L0 > GUARD_L && safety <= 0;
-    opts.push({ v:safety + (1 - L0) * (growth + (lazy ? 0 : stake + bestCard) + mergeGain(p, t) + rv + fnd + spoil) + plan, time:placeTime(t0, t.x, t.y), run:() => placeTile(p, i, () => takeStep(p, afterAction), [t.x, t.y]) });
+    opts.push({ v:safety + (1 - L0) * (growth + (lazy ? 0 : stake + bestCard) + mergeGain(p, t) + rv + fnd + spoil) + plan, hi:i, time:placeTime(t0, t.x, t.y), run:() => placeTile(p, i, () => takeStep(p, afterAction), [t.x, t.y]) });
     }
   });
   // 取り除く：守りの変化と、経路で株価がどう動くか（自分が株を持つ会社に倒させる道に変わるなら得）
@@ -1643,13 +1658,15 @@ function cpuAct(p) {
   // 時間あたりの値打ちがいちばん高い手を選ぶ
   let best = null;
   for (const o of opts) { const score = o.v / o.time + RNG.cpu() * 20; if (!best || score > best.score) best = { ...o, score }; }
+  if (PARAMS.get('dbg') && best) (G.stats.bs = G.stats.bs || []).push(Math.round(best.score));
+  if (cardFull && best) TR({ k:'full', w:G.wave, p:p.id, v:Math.round(best.v), t:best.time, kind:best.hi !== undefined ? 'place:' + p.hand[best.hi].type : 'other', money:p.money, bestCard:Math.round(bestCard) });
   if (best && best.v > 0) return best.run();
   // どの手も得に見えなくても、置けるタイルがあればパスより置く（守りの火力がいちばん増える手）
   const fallback = opts.filter(o => o.time <= 5).sort((a, b) => b.v - a.v)[0];
   // 得な手がないとき、いちばん重いタイルを引き直す方が置くより時間が安ければ、引き直す
   if (REDRAW && G.bag.length && p.hand.length && (!fallback || renewTime(p) < fallback.time)) {
     const idx = p.hand.reduce((bi, t, i) => TYPES[t.type].time > TYPES[p.hand[bi].type].time ? i : bi, 0);
-    redrawTile(p, idx); return afterAction();
+    { const h = p.hand.map(t => t.type); redrawTile(p, idx); TR({ k:'fbr', w:G.wave, p:p.id, hand:h.join(','), out:h[idx], got:p.hand[p.hand.length - 1].type, rt:p.renewN, fb:fallback && Math.round(fallback.v) + '/' + fallback.time, money:p.money, cards:p.cards.length, full:cardFull }); } return afterAction();
   }
   if (fallback) return fallback.run();
   swapTile(p, 0); afterAction();
