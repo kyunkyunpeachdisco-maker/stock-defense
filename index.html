@@ -119,7 +119,7 @@
 <body>
 <div id="wrap">
   <div id="top">
-    <span id="wave" class="big" data-tip="いま何回目の波か。波と波の間に、全員が順番に行動します"></span>
+    <span id="wave" class="big" data-tip="いま何回目のWAVEか。WAVEとWAVEの間に、全員が順番に行動します"></span>
     <span id="life" class="big" data-tip="全員で共有するライフ。ウイルスが出口に着くと減り、0になると全員の負けです"></span>
     <span id="money" class="big" data-tip="あなたの所持金。株券を公開するときに払います。ゲームが終わったとき、所持金がいちばん多い人が勝ちます"></span>
     <span class="note" id="setupNote"></span>
@@ -134,7 +134,7 @@
   <div id="info" class="note" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:2px 2px 4px"></div>
   <div id="tabs"><button class="btn on" data-tab="op">操作</button><button class="btn" data-tab="cos">会社</button><button class="btn" data-tab="log">記録</button></div>
   <div class="grp" id="gTrack">
-  <div class="sec">時間トラック<span class="q" data-tip="丸は1人ひとりのコマです。コマがいちばん左にある人が、次に行動します。行動すると、使った時間の分だけコマが右へ進みます。コマがピンクの線に着くか、線を越えた人は、次の波が終わるまで行動できません">？</span></div>
+  <div class="sec">時間トラック<span class="q" data-tip="丸は1人ひとりのコマです。コマがいちばん左にある人が、次に行動します。行動すると、使った時間の分だけコマが右へ進みます。コマがピンクの線に着くか、線を越えた人は、次のWAVEが終わるまで行動できません">？</span></div>
   <div id="track"></div>
   </div>
   <div class="grp" id="gHand">
@@ -655,7 +655,7 @@ const normalTime = type => TYPES[type].time + CELL_EXTRA;   // 札に出すふ�
 const placeTime = (t0, x, y) => TYPES[t0.type].time + (CELL_EXTRA && (x !== t0.x || y !== t0.y) ? CELL_EXTRA : 0);
 function spend(p, time) { p.t += time; p.order = ++G.seq + 100; }
 // ?carry=full（持ち越しの上限なしの前の形）のときだけ：この手で線を1人ぶん以上越えると、次の波は一度も手番が来ないので、打つ前にボタンに出す
-const skipWarn = time => PARAMS.get('carry') === 'full' && me() && me().t + time >= G.limit + budget() ? '・次の波は手番なし' : '';
+const skipWarn = time => PARAMS.get('carry') === 'full' && me() && me().t + time >= G.limit + budget() ? '・次のWAVEは手番なし' : '';
 function waveActive() { return G.spawnQueue.length > 0 || G.enemies.length > 0; }
 
 // 2人のときだけ：タイルを置いたあと、任意で手札のタイルを1枚入れ替えられる（ユーザー）。入れ替えたタイルは山の底へ。
@@ -1106,7 +1106,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.76';
+const APP_VER = 'v0.1.77';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -1921,7 +1921,7 @@ function settle() {
   if (DIV_BANK) G.players.forEach((q, i) => { q.money -= got[i]; q.bank = (q.bank || 0) + got[i]; });
   announce('決算', G.players.map((q, i) => got[i] ? `${q.name.replace('CPU', 'C')} +${got[i]}` : '').filter(Boolean).join('  ') || '配当なし');
   G.lastSettle = `前回の決算（${G.wave}回目のあと）：` + G.players.map((q, i) => `<span style="color:${q.color}">${q.name.replace('CPU', 'C')} +${got[i]}</span>`).join(' ');
-  sfx('coin'); log(`決算（${G.wave}回目の波のあと）：` + G.players.map((q, i) => `${q.name} +${got[i]}`).join('、'));
+  sfx('coin'); log(`決算（${G.wave}回目のWAVEのあと）：` + G.players.map((q, i) => `${q.name} +${got[i]}`).join('、'));
 }
 function expandCheck() {
   const st = EXPAND_STAGES[expandAxis()].find(([w]) => w === G.wave);
@@ -1936,7 +1936,7 @@ function expandCheck() {
   G.stats.expanded = (G.stats.expanded || 0) + 1;
   announce('都市が広がった', '新しい回線から、ワームが入ってくる');
   for (const [x, y] of ENTRANCES) { shock(...center(x, y), 3); burst(...center(x, y), '#ff6bd6', 40, 2); }
-  log('都市が広がった。新しい場所にタイルを置ける。次の波にはワームが来る');
+  log('都市が広がった。新しい場所にタイルを置ける。次のWAVEにはワームが来る');
 }
 function waveTick(dt) {
   if (G.over) return;
@@ -1971,7 +1971,7 @@ function waveTick(dt) {
     if (DIVIDEND_WAVES.includes(G.wave) && G.wave < WAVES) settle();
     if (CYCLE === 'end') newCycle();
     recSnapshot('wave');
-    if (G.wave < WAVES) { announce(`波${G.wave}を守りきった`, '次の波が来る前に、また全員が行動する'); sfx('clear'); }
+    if (G.wave < WAVES) { announce(`WAVE ${G.wave}を守りきった`, '次のWAVEが来る前に、また全員が行動する'); sfx('clear'); }
   }
   if (G.wave >= WAVES) return finish(true);
   if (AUTO) G.waveTimer -= dt;   // 全員 CPU の試し：今までどおり秒数で次の波
@@ -1982,15 +1982,15 @@ function waveTick(dt) {
     if (a && !a.cpu) {
       if (a.clock === undefined) a.clock = FIRST_WAIT;
       if (!NO_LIMIT) a.clock -= dt / FF;   // 考える時間は、早回ししても本当の秒で減る
-      if (a.clock <= 0 && !G.busy && !G.choosing) { a.t = Math.max(a.t, G.limit); G.selected = null; G.menu = null; log(`${a.name}：持ち時間が切れたので、この波の手番は終わり`); renderAll(); }
+      if (a.clock <= 0 && !G.busy && !G.choosing) { a.t = Math.max(a.t, G.limit); G.selected = null; G.menu = null; log(`${a.name}：持ち時間が切れたので、このWAVEの手番は終わり`); renderAll(); }
     }
     // 株を選ぶ・替える・捨てる・会社を選ぶなどの途中は待つ（最後のタイルを置いて株を選んでいる間に波が来ていた。ユーザー）
     const picking = G.busy || G.choosing || G.taking || G.exchanging || G.discarding || G.swapping;
     if (!nextActor() && !waveActive() && !picking) { G.waveTimer = Math.min(G.waveTimer, 3); G.waveTimer -= dt; }   // 一瞬だけ手番の人がいない間を数えないよう、時間トラックで判断する
   }
   if (G.waveTimer <= 0) { G.wave++; G.lastSettle = null; if (CYCLE === 'start') newCycle(); G.spawnQueue = G.nextWave && G.nextWave.n === G.wave ? G.nextWave.list : makeWave(G.wave); G.spawnTimer = 0;
-    if (G.wave < WAVES) G.nextWave = { n:G.wave + 1, list:makeWave(G.wave + 1) }; log(`波 ${G.wave} が来た（${G.spawnQueue.length}体）`);
-    announce(`波${G.wave}`, `ウイルス${G.spawnQueue.length}体` + (G.spawnQueue.includes('big') ? '。大きいのもいる' : ''));
+    if (G.wave < WAVES) G.nextWave = { n:G.wave + 1, list:makeWave(G.wave + 1) }; log(`WAVE ${G.wave} が来た（${G.spawnQueue.length}体）`);
+    announce(`WAVE ${G.wave}`, `ウイルス${G.spawnQueue.length}体` + (G.spawnQueue.includes('big') ? '。大きいのもいる' : ''));
     for (const [x, y] of ENTRANCES) { shock(...center(x, y), 2); burst(...center(x, y), '#ff4dff', 30, 1.6); } sfx('wave'); shake(5); }
 }
 function enemyTick(dt) {
@@ -2152,8 +2152,8 @@ function absorbFx(x, y, tx, ty) {
 function finish(win) {
   if (G.over) return;
   G.over = true; sfx(win ? 'win' : 'lose');
-  if (!win) { G.result = `ライフが0になった。全員の負け（${G.wave}回目の波）`; log(G.result); recSnapshot('end'); renderAll(); showResult(); return; }
-  log('最後の波を守りきった。最終決算');
+  if (!win) { G.result = `ライフが0になった。全員の負け（${G.wave}回目のWAVE）`; log(G.result); recSnapshot('end'); renderAll(); showResult(); return; }
+  log('最後のWAVEを守りきった。最終決算');
   G.final = { price:G.cos.map(co => co.active ? price(co) : 0), shares:G.players.map(q => [...q.shares]), cardsLeft:G.players.map(q => q.cards.length), activeIds:G.cos.filter(c => c.active).map(c => c.id) };
   for (const co of G.cos.filter(c => c.active)) bonuses(co);
   for (const p of G.players) G.cos.forEach(co => { if (co.active) { p.money += p.shares[co.id] * price(co); earn(p, '終わりの売却', p.shares[co.id] * price(co)); } });
@@ -2633,11 +2633,11 @@ function renderInfo() {
   // そのとき要るものだけ出す：次の波の中身は波と波の間だけ、決算は次の波のあとのときだけ、前回の決算は次の波が来るまで
   if (G.nextWave && !waveActive()) {
     const cnt = {}; G.nextWave.list.forEach(t => cnt[t] = (cnt[t] || 0) + 1);
-    parts.push(`<span data-tip="次の波で来るウイルス。色はウイルスの種類">次の波 ${G.nextWave.n}：` + Object.entries(cnt).map(([t, n]) => `<span style="color:${ENEMY[t].color}">${ENEMY[t].name}${n}</span>`).join(' ') + '</span>');
+    parts.push(`<span data-tip="次のWAVEで来るウイルス。色はウイルスの種類">次のWAVE ${G.nextWave.n}：` + Object.entries(cnt).map(([t, n]) => `<span style="color:${ENEMY[t].color}">${ENEMY[t].name}${n}</span>`).join(' ') + '</span>');
   }
   const nd = DIVIDEND_WAVES.find(w => w >= Math.max(1, G.wave) && w < WAVES && (w > G.wave || waveActive()));
   const soon = nd ? nd <= G.wave + 1 : G.wave >= WAVES - 1;
-  if (soon) parts.push(nd ? `<span data-tip="この波が終わると、会社ごとに、筆頭に株価の4倍、次点に2倍の配当が出ます">${nd > G.wave ? 'この波のあと決算' : '決算'}</span>` : `<span data-tip="最後の波を守りきると、会社ごとに、筆頭に株価の10倍、次点に5倍のお金が出ます。そのあと、公開した株券を全部売ります">最後の波のあと最終決算</span>`);
+  if (soon) parts.push(nd ? `<span data-tip="このWAVEが終わると、会社ごとに、筆頭に株価の4倍、次点に2倍の配当が出ます">${nd > G.wave ? 'このWAVEのあと決算' : '決算'}</span>` : `<span data-tip="最後のWAVEを守りきると、会社ごとに、筆頭に株価の10倍、次点に5倍のお金が出ます。そのあと、公開した株券を全部売ります">最後のWAVEのあと最終決算</span>`);
   if (G.lastSettle) parts.push(`<span data-tip="前回の決算でもらった配当">${G.lastSettle}</span>`);
   el.innerHTML = parts.join('');
 }
@@ -2645,10 +2645,10 @@ function renderTop() {
   document.getElementById('pauseBtn').style.display = canPause() ? '' : 'none';
   document.getElementById('ffBtn').style.display = canPause() ? '' : 'none';
   const ac = waveActive();
-  { const el = document.getElementById('wave'), mine = me(), n = `次は波${G.wave + 1}/${WAVES}`;
+  { const el = document.getElementById('wave'), mine = me(), n = `次はWAVE ${G.wave + 1}/${WAVES}`;
     const done = !mine || mine.t >= G.limit || (!NO_LIMIT && (mine.clock ?? FIRST_WAIT) <= 0);
     // 人が遊ぶとき：自分の考える時間はいつも出す。自分の番で減っている間は明るく、ほかの人の番では灰色
-    el.innerHTML = G.over ? '終了' : ac ? `波 ${G.wave}/${WAVES} 進行中` : G.wave >= WAVES ? '最後の波'
+    el.innerHTML = G.over ? '終了' : ac ? `WAVE ${G.wave}/${WAVES} 進行中` : G.wave >= WAVES ? '最後のWAVE'
       : AUTO ? `${n}・あと${Math.ceil(G.waveTimer)}秒`
       : !nextActor() ? `${n}・あと${Math.max(0, Math.ceil(G.waveTimer))}秒`
       : done ? `${n}・あなたの番は終わり`
@@ -2661,7 +2661,7 @@ function renderTrack() {
   const el = document.getElementById('track'), max = Math.max(...G.players.map(p => p.t)), min = Math.min(...G.players.map(p => p.t));
   const span = Math.max(8, Math.max(max, G.limit) - min);
   el.innerHTML = '';
-  const lim = document.createElement('div'); lim.style.cssText = `position:absolute;top:0;bottom:0;width:2px;background:#ff4dff;left:${Math.min(98, (G.limit - min) / span * 85)}%`; lim.title = 'この波で使える時間の終わり'; el.appendChild(lim);
+  const lim = document.createElement('div'); lim.style.cssText = `position:absolute;top:0;bottom:0;width:2px;background:#ff4dff;left:${Math.min(98, (G.limit - min) / span * 85)}%`; lim.title = 'このWAVEで使える時間の終わり'; el.appendChild(lim);
   const stacked = {};
   [...G.players].sort((a, b) => a.order - b.order).forEach(p => {
     const d = document.createElement('div'); d.className = 'mk'; d.style.background = p.color;
@@ -2676,7 +2676,7 @@ function turnText() {
   const p = G.actor;
   if (G.over) return ['終わりました', '<button class="btn" data-end="result">結果を見る</button> <button class="btn" data-end="again">もう一度</button> <button class="btn" data-end="export">記録を書き出す</button>'];
   const left = AUTO ? '' : `使える時間：あと${Math.max(0, G.limit - me().t)}`;
-  if (!p) return ['全員の番が終わりました', '波が終わると、また行動できます'];
+  if (!p) return ['全員の番が終わりました', 'WAVEが終わると、また行動できます'];
   if (p !== me()) return [`${p.name} の番`, left];
   if (G.discarding) return [`株券の手札は${CARD_MAX}枚までです。あと${me().cards.length - CARD_MAX}枚捨ててください`, '下の「株券」から、捨てる株券を選んでください'];
   if (G.swapping) return ['手札のタイルを1枚入れ替えられます', '入れ替えたいタイルを押してください。入れ替えないなら「入れ替えない」を押します'];
@@ -3114,14 +3114,14 @@ const HOWTO = [
   () => ['このゲームの目的', `<p>あなたは、ほかのプレイヤーと協力して、ウイルスから街を守ります。それと同時に、会社の株でお金を稼ぎます。</p>`
     + `<p>ウイルスに街を落とされると、<b>プレイヤー全員の負け</b>です。</p><p>街を最後まで守りきったときは、<b>所持金がいちばん多いプレイヤー1人</b>が勝ちます。</p>`
     + `<p>守るときは全員で協力し、お金を稼ぐときは全員で競争するゲームです。</p>`],
-  () => ['ウイルスと波', htBoard1() + htCap('丸がウイルス。色のついたマスがタワー')
-    + `<p>ウイルスは、${WAVES}回に分かれて街に攻めてきます。この1回分の攻撃を<b>波</b>と呼びます。</p>`
-    + `<p>波が来ると、ウイルスは入口（入）から出口（出）へ向かって進みます。タワーは、射程に入ったウイルスを自動で撃ちます。</p>`
+  () => ['ウイルスとWAVE', htBoard1() + htCap('丸がウイルス。色のついたマスがタワー')
+    + `<p>ウイルスは、${WAVES}回に分かれて街に攻めてきます。この1回分の攻撃を<b>WAVE</b>と呼びます。</p>`
+    + `<p>WAVEが来ると、ウイルスは入口（入）から出口（出）へ向かって進みます。タワーは、射程に入ったウイルスを自動で撃ちます。</p>`
     + `<p>ウイルスが1体出口に着くたびに、全員で共有しているライフが減ります。ライフは最初に${LIVES}あります。ライフが0になると、その時点で全員の負けです。</p>`],
-  () => ['ゲームの流れ', `<div style="display:flex;gap:4px;align-items:center;margin:8px 0">${htBox('全員が行動する', '1人ずつ順番に')}<b>→</b>${htBox('波が来る', 'タワーが自動で撃つ', '#ff4dff')}</div>${htCap(`この2つを${WAVES}回くり返します`)}`
-    + `<p>波が来る前に、全員が順番に行動します。タワーを建てたり、株券を公開したりできるのは、この行動のときです。</p>`
-    + `<p>全員の行動が終わると、波が来ます。波が来ている間、プレイヤーは何もしません。タワーが自動でウイルスを撃ちます。</p>`
-    + `<p>波が終わると、次の波が来る前に、また全員が行動します。</p>`],
+  () => ['ゲームの流れ', `<div style="display:flex;gap:4px;align-items:center;margin:8px 0">${htBox('全員が行動する', '1人ずつ順番に')}<b>→</b>${htBox('WAVEが来る', 'タワーが自動で撃つ', '#ff4dff')}</div>${htCap(`この2つを${WAVES}回くり返します`)}`
+    + `<p>WAVEが来る前に、全員が順番に行動します。タワーを建てたり、株券を公開したりできるのは、この行動のときです。</p>`
+    + `<p>全員の行動が終わると、WAVEが来ます。WAVEが来ている間、プレイヤーは何もしません。タワーが自動でウイルスを撃ちます。</p>`
+    + `<p>WAVEが終わると、次のWAVEが来る前に、また全員が行動します。</p>`],
   () => { const cols = ['#ffffff', '#7cf9ff', '#ff9a3c', '#b07cff'], xs = [40, 95, 120, 215];
     return ['順番と時間', `<p>行動するたびに、その行動で決まっている量の<b>時間</b>を使います。</p><p class="note">例：${TYPES.av.name}のタイルを置く（時間${normalTime('av')}）→ 株券を1枚公開する（時間1）→ ${TYPES.node.name}のタイルを置く（時間${normalTime('node')}）。この3つの行動で、合わせて${normalTime('av') + 1 + normalTime('node')}の時間を使います。</p>`
       + htSvg(260, 74, `<line x1="15" y1="30" x2="245" y2="30" stroke="#2b3a66" stroke-width="6" stroke-linecap="round"/><line x1="180" y1="10" x2="180" y2="50" stroke="#ff4dff" stroke-width="2"/>`
@@ -3129,9 +3129,9 @@ const HOWTO = [
       + htCap('画面にある「時間トラック」')
       + `<p>上の絵が時間トラックです。丸は、プレイヤー1人ひとりのコマです。あなたが時間を使うと、あなたのコマが、使った時間の分だけ右へ進みます。</p>`
       + `<p>次に行動するのは、<b>コマがいちばん左にあるプレイヤー</b>です。</p>`
-      + `<p>ピンクの線は、1人が次の波までに使える時間の上限です。あなたのコマがピンクの線に着くか、線を越えると、あなたは次の波が終わるまで行動できません。全員のコマがピンクの線に着くか、線を越えると、波が来ます。</p>`
-      + htTable(['遊ぶ人数', '2人', '3人', '4人', '5人', '6人'], [['1人が次の波までに<br>使える時間', ...[2, 3, 4, 5, 6].map(k => PARAMS.get('tt') ? Math.round(+PARAMS.get('tt') / k) : Math.max(5, Math.round(24 / k)))]])
-      + `<p>1回目の波の前だけは、使える時間がこの表の2倍あります。</p>`]; },
+      + `<p>ピンクの線は、1人が次のWAVEまでに使える時間の上限です。あなたのコマがピンクの線に着くか、線を越えると、あなたは次のWAVEが終わるまで行動できません。全員のコマがピンクの線に着くか、線を越えると、WAVEが来ます。</p>`
+      + htTable(['遊ぶ人数', '2人', '3人', '4人', '5人', '6人'], [['1人が次のWAVEまでに<br>使える時間', ...[2, 3, 4, 5, 6].map(k => PARAMS.get('tt') ? Math.round(+PARAMS.get('tt') / k) : Math.max(5, Math.round(24 / k)))]])
+      + `<p>1回目のWAVEの前だけは、使える時間がこの表の2倍あります。</p>`]; },
   () => ['自分の番にやること', `<p>自分の番が来たら、次の3つの行動から1つを選びます。</p>`
     + htTable(['行動', '使うもの', 'その行動で起きること'], [['<b>タイルを置く</b>', '時間', '置いたマスにタワーが建つ。<br>あなたは株券を1枚得る'], ['<b>タワーを強化する</b>', '時間', 'そのタワーの射程と威力が上がる。<br>あなたは株券を1枚得る'], ['<b>株券を公開する</b>', 'お金と時間', 'あなたがその会社の株主になる']])
     + `<p>タワーを建てるか強化することで株券が得られますが、株主になるためには株券を公開する必要があります。</p><p>株券の公開には、株価ぶんのお金がかかります。</p>`],
@@ -3166,7 +3166,7 @@ const HOWTO = [
     + htTable(['', '株券を公開するときの決まり'], [['かかるお金', '株券1枚につき、その会社のいまの株価と同じ額'], ['かかる時間', '株券1枚につき1'], ['1回の行動で<br>公開できる株券', '1つの会社の株券を、好きな枚数。<br>または、2つの会社の株券を、1枚ずつ']])
     + `<p class="note">例：株価300の${COMPANIES[0].name}の株券を2枚公開すると、お金を600、時間を2使います。</p>`
     + `<p>お金は、あなたの所持金から払います。ゲームの最初に、全員が所持金${START_MONEY}を持っています。</p>`
-    + (REVX === '0' || REV_TIME ? '' : `<p>次の波が来るまでの間に、${REVX === 'same' ? '同じ会社の株券を公開する行動を' : '公開の行動を'}2回以上すると、2回目の行動は時間が${REVX === 'tri' ? 2 : 1}、3回目の行動は時間が${REVX === 'tri' ? 5 : 2}、余分にかかります。</p>`)
+    + (REVX === '0' || REV_TIME ? '' : `<p>次のWAVEが来るまでの間に、${REVX === 'same' ? '同じ会社の株券を公開する行動を' : '公開の行動を'}2回以上すると、2回目の行動は時間が${REVX === 'tri' ? 2 : 1}、3回目の行動は時間が${REVX === 'tri' ? 5 : 2}、余分にかかります。</p>`)
     + `<p>ゲームが終わったときに手札に残っていた株券は、お金になりません。</p>`
     + `<p>持ち株の枚数が多いプレイヤーは、その会社からお金をもらえます。次のページで説明します。</p>`],
   () => ['筆頭と次点', `<p>会社ごとに、その会社の株券を公開している枚数を、プレイヤーどうしで比べます。いちばん多く公開しているプレイヤーを<b>筆頭</b>、2番目に多く公開しているプレイヤーを<b>次点</b>と呼びます。</p>`
@@ -3175,7 +3175,7 @@ const HOWTO = [
     + `<p>公開している枚数が同じプレイヤーがいるときは、そのプレイヤーたちでお金を等分します。</p>`
     + `<p>その会社の株券を公開しているプレイヤーが1人だけのときは、その1人が、筆頭の額と次点の額の両方をもらいます。</p>`],
   () => { const bank = DIVIDEND_WAVES.length && DIV_BANK ? '<br><span class="note">（預かり）</span>' : '';
-    return ['筆頭と次点がお金をもらえるとき', htTable(['いつ', '筆頭がもらう額', '次点がもらう額'], [['その会社が、ほかの会社に吸収されたとき', '株価の10倍', '株価の5倍'], ...(DIVIDEND_WAVES.length ? [[DIVIDEND_WAVES.join('回目と') + '回目の波が終わったとき', '株価の4倍' + bank, '株価の2倍' + bank]] : []), [`${WAVES}回目の波が終わったとき`, '株価の10倍', '株価の5倍']])
+    return ['筆頭と次点がお金をもらえるとき', htTable(['いつ', '筆頭がもらう額', '次点がもらう額'], [['その会社が、ほかの会社に吸収されたとき', '株価の10倍', '株価の5倍'], ...(DIVIDEND_WAVES.length ? [[DIVIDEND_WAVES.join('回目と') + '回目のWAVEが終わったとき', '株価の4倍' + bank, '株価の2倍' + bank]] : []), [`${WAVES}回目のWAVEが終わったとき`, '株価の10倍', '株価の5倍']])
     + `<p class="note">例：株価500の会社が、ほかの会社に吸収されたとき、その会社の筆頭は5000、次点は2500をもらいます。</p>`
     + (bank ? `<p><b>預かり</b>は、もらったあと、ゲームが終わるまで使えないお金です。画面では所持金の横に出ていて、ゲームが終わったときに所持金に足されます。</p>` : '')
     + `<p>会社がほかの会社に吸収されること（合併）は、次のページで説明します。</p>`]; },
@@ -3190,7 +3190,7 @@ const HOWTO = [
       + `<p><b>売る</b>と、1枚につき、株価と同じ額のお金をもらいます。<b>交換する</b>と、2枚が、吸収した会社の株券1枚（公開した状態）に換わります。</p>`
       + `<p>2つの会社のタイルの枚数が同じときは、タイルを置いてつなげたプレイヤーが、どちらの会社が吸収するかを選びます。</p>`
       + `<p>タイルが${SAFE}枚以上ある会社は、吸収されません。${SAFE}枚以上ある会社どうしをつなげる置き方は、できません。</p>`]; },
-  () => ['ゲームの終わり', `<p>${WAVES}回目の波が終わったとき、ライフが1以上残っていれば、街を守りきったことになり、ゲームが終わります。そのあと、次の順にお金を計算します。</p>`
+  () => ['ゲームの終わり', `<p>${WAVES}回目のWAVEが終わったとき、ライフが1以上残っていれば、街を守りきったことになり、ゲームが終わります。そのあと、次の順にお金を計算します。</p>`
     + `<ol style="padding-left:20px;font-size:13px;line-height:1.6"><li>盤にある会社ごとに、それぞれ、その会社の筆頭がその会社の株価の10倍、その会社の次点が株価の5倍をもらいます。</li><li>全員が、公開している株券をすべて売ります。1枚につき、その会社のそのときの株価と同じ額をもらいます。</li>${DIVIDEND_WAVES.length && DIV_BANK ? '<li>預かりになっていたお金を、所持金に足します。</li>' : ''}<li>所持金がいちばん多いプレイヤーが勝ちます。</li></ol>`
     + `<p class="note">例：株価800の会社の株券を3枚公開していて、その会社の筆頭だった場合、ボーナスで8000、株券を売って2400をもらいます。</p>`],
   () => ['タワーの種類', htTable(['タワー', '時間', 'はたらき'], Object.keys(TYPES).map(k => [`<span style="white-space:nowrap"><img src="${iconUrl(k)}" alt="" style="width:18px;height:18px;vertical-align:-4px;background:#16213d;border-radius:4px"> <b>${TYPES[k].name}</b></span>`, normalTime(k), TYPE_MID[k]]))
@@ -3205,7 +3205,7 @@ const HOWTO = [
     + `<p>盤にない会社の株券のように、公開できる見込みのない株券を、お金に換えたいときに使います。</p>`],
   () => ['手札を入れ替える', `<p>自分の番に、時間を使って、次の2つをすることができます。</p>`
     + htTable(['できること', '中身'], [['<span style="white-space:nowrap"><b>タイルを引き直す</b></span>', `手札のタイルを1枚選んで山に戻し、新しいタイルを1枚引く${CELL_EXTRA ? '。印のマスにもうタワーが建っているタイルは、1回の行動で、何枚でもまとめて引き直せる' : ''}`], ['<span style="white-space:nowrap"><b>場の株券を並べ直す</b></span>', '場に並んだ5枚の株券を山札に戻して、新しく5枚を並べる。場の5枚の中に、盤にある会社の株券が1枚もないときだけできる']])
-    + `<p>どちらも、使う時間は、次の波が来るまでの1回目が1、2回目が2、3回目が3です。</p>`
+    + `<p>どちらも、使う時間は、次のWAVEが来るまでの1回目が1、2回目が2、3回目が3です。</p>`
     + `<p class="note">2人で遊ぶときだけ、タイルを置いたあとに、手札のタイルを1枚、時間を使わずに引き直すことができます。</p>`],
   () => ['画面のボタン', htTable(['画面の上のボタン', 'はたらき'], [['縦棒2本', 'ゲームを一時停止します。1人で遊ぶときだけ使えます'], ['三角', '早回しします。押すたびに、1倍、2倍、3倍と切り替わります。1人で遊ぶときだけ使えます'], ['♪', '効果音を鳴らすか、消すかを切り替えます'], ['？', 'この「遊び方」を開きます']])
     + `<p>画面の見出しや数字の横にある「？」は、指で長押しするか、マウスのカーソルを合わせると、その項目の説明が出ます。</p>`
@@ -3516,8 +3516,8 @@ function resumeGame(sv) {
   Object.assign(G, sv.g); PLAN = new Set(sv.plan || []);
   G.dist = distanceField(); G.actor = null; G.busy = false; G.selected = null; G.menu = null;
   G.started = true; renderAll(); renderLog();
-  log(`続きから：${sv.g.wave ? `波${sv.g.wave}のあと` : '最初の波の前'}から再開`);
-  announce('続きから', `次は波 ${G.wave + 1}`);
+  log(`続きから：${sv.g.wave ? `WAVE ${sv.g.wave}のあと` : '最初のWAVEの前'}から再開`);
+  announce('続きから', `次はWAVE ${G.wave + 1}`);
 }
 // ホスト：保存したところから、同じ部屋番号で部屋を開き直す。参加者が戻るまでは CPU が代わりに打つ
 function reopenHost(sv) {
@@ -3562,7 +3562,7 @@ function showStart() {
     const sv = loadSave(), ns = loadNetSave();
     const cont = [];
     if (ns && ns.role === 'client') cont.push([`部屋 ${ns.room} に戻る（席${ns.seat + 1}）`, () => joinRoom(ns.room, ns.name, ns)]);
-    if (sv) cont.push([sv.net ? `部屋 ${sv.net.room} を開き直す（${sv.g.wave ? `波${sv.g.wave}のあと` : '最初の波の前'}）` : `続きから（${sv.g.wave ? `波${sv.g.wave}のあと` : '最初の波の前'}・${sv.n}人・${COURSES[sv.course].name}）`, () => sv.net ? reopenHost(sv) : resumeGame(sv)]);
+    if (sv) cont.push([sv.net ? `部屋 ${sv.net.room} を開き直す（${sv.g.wave ? `WAVE ${sv.g.wave}のあと` : '最初のWAVEの前'}）` : `続きから（${sv.g.wave ? `WAVE ${sv.g.wave}のあと` : '最初のWAVEの前'}・${sv.n}人・${COURSES[sv.course].name}）`, () => sv.net ? reopenHost(sv) : resumeGame(sv)]);
     modal(`<div style="text-align:center;padding:10px 0 4px"><div style="font-size:40px;font-weight:900;color:#fff;letter-spacing:4px;text-shadow:0 0 18px #33f0ff,0 0 6px #33f0ff">電脳都市</div>
       <div style="color:#7cf9ff;font-weight:bold;margin-top:6px">タワーディフェンス × 株ゲー</div></div>
       <p class="note" style="text-align:center">タワーを建てて会社を作り、ウイルスの波から街を守りつつ、自身の資産を最大化する、半協力型対戦ゲームです。<br>あのころのタワーディフェンスと、そのまたあのころの株ゲームの駆け引きが1つに！</p>`,
