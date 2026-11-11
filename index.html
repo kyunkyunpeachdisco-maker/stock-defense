@@ -730,7 +730,10 @@ function resolveGroup(p, x, y, onDone) {
       const found = id => { foundCompany(p, id, grp); onDone(); };
       // CPU の設立：手札と公開した株の多い会社を選び、同じならくじ。前は同じなら★の多い会社で、序盤はヘリオス・オメガばかり立っていた（?found=tier で前の形）
       const held = c => p.cards.filter(x => x === c.id).length + p.shares[c.id];
-      if (p.cpu) found(free.map(c => ({ id:c.id, v:tac(p, 'found') ? foundValue(p, c) + RNG.cpu() * 5 : held(c) * 10 + (PARAMS.get('found') === 'tier' ? c.tier + RNG.cpu() : RNG.cpu() * 5) })).sort((a, b) => b.v - a.v)[0].id);
+      // ほかの人の会社を建てない（暫定でつよい CPU の標準。手元の12組で順位 2.43 対 2.57。ユーザーの局：CPU がオメガを3回建て、そのたびに手札を持つ別の人が1枚出して合併し 6,000 ずつ取った。建てた CPU は4位）：
+      // 自分が1枚も持たない会社のうち、ほかの人が株を持ち続けている会社と、前に一度立った会社（ほかの人の手札に残っていやすい）は避ける
+      const avoid = c => tac(p, 'found2') && !held(c) ? G.players.filter(q => q !== p).reduce((a, q) => a + q.shares[c.id], 0) * 10 + (c.founder !== undefined && c.founder !== null ? 6 : 0) : 0;
+      if (p.cpu) found(free.map(c => ({ id:c.id, v:tac(p, 'found') ? foundValue(p, c) + RNG.cpu() * 5 : held(c) * 10 - avoid(c) + (PARAMS.get('found') === 'tier' ? c.tier + RNG.cpu() : RNG.cpu() * 5) })).sort((a, b) => b.v - a.v)[0].id);
       else requestChoice(p, 'found', { ids:free.map(c => c.id) }, found);
       return;
     }
@@ -830,11 +833,15 @@ function mergeChain(placer, survivor, absorbed, done) {
           }
         }
         TR({ k:'xch', w:G.wave, p:p.id, co:id, sv:survivor, n, pr, svpr:price(sv), fp:Math.round(futurePrice(sv)), maxPairs, pairs, old:price(sv) > pr * 2 ? maxPairs : Math.floor(maxPairs / 2), mine:p.shares[survivor], others:G.players.filter(q => q !== p).map(q => q.shares[survivor]).join(','), money:p.money });
-        apply({ pairs, sell:n - pairs * 2 });
+        // 1枚残す（?tac=keep1、試し中。ユーザーの局：吸収されたヘリオスを1枚持ち続け、建て直されるたびに1人だけの株主として合併で 6,000 を2回）：
+        // 売る分があれば1枚は売らずに持ち続ける（終わりの4波は、建て直して合併する間がないのでしない）
+        const keep = KEEP_OK && tac(p, 'keep1') && n - pairs * 2 >= 1 && G.wave <= WAVES - 4 ? 1 : 0;
+        if (keep) TR({ k:'kp', w:G.wave, p:p.id, co:id, pr });
+        apply({ pairs, sell:n - pairs * 2 - keep });
       }
       else requestChoice(p, 'dispose', { co:id, sv:survivor, pr, n, maxPairs }, v => {
         // 届いた数が決まりに合うかを確かめる（別の端末から来ることがあるため）
-        const sell = Math.max(0, Math.floor(v.sell || 0)), pairs = Math.max(0, Math.min(maxPairs, Math.floor(v.pairs || 0)));
+        const pairs = Math.max(0, Math.min(maxPairs, Math.floor(v.pairs || 0))), sell = KEEP_OK ? Math.max(0, Math.floor(v.sell || 0)) : n - pairs * 2;
         apply(sell + pairs * 2 <= n ? { sell, pairs } : { sell:0, pairs:0 });
       });
     };
@@ -1071,7 +1078,10 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.40';
+const APP_VER = 'v0.1.41';
+// 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
+// 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
+const KEEP_OK = PARAMS.get('keep') === '1';
 const AHEAD = PARAMS.get('ahead') !== '0', AH_L = +(PARAMS.get('ahl') || .5), AH_B = +(PARAMS.get('ahb') || 1);
 function waveHard(n) {
   const st = WAVE_STYLE[COURSE] || WAVE_STYLE[0], mix = st.mix(effWave(n)); let rest = 1, a = 0;
@@ -1149,7 +1159,7 @@ const TR = PARAMS.get('dbg') ? o => (G.stats.tr = G.stats.tr || []).push(o) : ()
 const TAC = new Set((PARAMS.get('tac') || '').split(',').filter(Boolean));
 // 暫定で、つよい CPU の標準にした戦術（?lead=0 で外す）：margin・focus・refound（筆頭を固める・筆頭を取りにいく・立て直し）。
 // 席を入れ替えた300組で、平均順位 2.40 対 2.60（誤差の3.7倍）、終わりのボーナスが約 +1200
-const STD_TAC = PARAMS.get('lead') === '0' ? new Set() : new Set(['margin', 'focus', 'refound', 'full', 'rst', 'xchg', 'cash2', 'rdw3']);   // full・rst・xchg は、出た場面を数局読んでから比べた：100組で順位 2.36 対 2.64（2.9倍）、終わりのボーナス +1800、守りは全員どうしで 87 → 90
+const STD_TAC = PARAMS.get('lead') === '0' ? new Set() : new Set(['margin', 'focus', 'refound', 'full', 'rst', 'xchg', 'cash2', 'rdw3', 'found2']);   // full・rst・xchg は、出た場面を数局読んでから比べた：100組で順位 2.36 対 2.64（2.9倍）、終わりのボーナス +1800、守りは全員どうしで 87 → 90
 const tac = (p, name) => (TAC.has(name) && tryOn(p)) || (STD_TAC.has(name) && !!p.strong);
 const UPCOV = PARAMS.get('upcov') !== '0';   // 敵の道に届かないタワーを、株をもらうためだけに強化しない
 const keepFp = (p, id, fp) => p.keep && p.keep[id] ? Math.max(fp, price(G.cos[id]) + 400) : fp;
@@ -3017,26 +3027,27 @@ function chooseDisposal(p, co, sv, pr, n, maxPairs, cb) {
     + `<div class="note">${sv.name}：株価 <b style="color:var(--text)">${price(sv)}</b>　公開した株 ${G.players.map(q => `${q === me() ? 'あなた' : q.name} ${q.shares[sv.id]}`).join('・')}</div>`;
   const keepNote = `${co.name}がまた立ったら使える`;
   if (n === 1 && maxPairs === 0) {
-    modal(head, [[`売る（+${pr}）`, () => cb({ sell:1, pairs:0 })], [`持ち続ける（${keepNote}）`, () => cb({ sell:0, pairs:0 })], ['盤と会社を見る', peekChoice]]);
+    modal(head, [[`売る（+${pr}）`, () => cb({ sell:1, pairs:0 })], ...(KEEP_OK ? [[`持ち続ける（${keepNote}）`, () => cb({ sell:0, pairs:0 })]] : []), ['盤と会社を見る', peekChoice]]);
     return;
   }
   let sell = 0, pairs = 0;
   const row = (k, label, val, note) => `<div style="display:flex;align-items:center;gap:8px;margin:6px 0"><span style="width:3em;flex:none">${label}</span><button class="btn" data-m="${k}" style="width:2.4em">−</button><b style="min-width:2em;text-align:center">${val}</b><button class="btn" data-p="${k}" style="width:2.4em">＋</button><span class="note">${note}</span></div>`;
   const draw = () => {
+    if (!KEEP_OK) sell = n - pairs * 2;
     const keep = n - sell - pairs * 2;
     document.getElementById('dispBody').innerHTML =
-      row('s', '売る', sell, `1枚 ${pr}`) +
+      (KEEP_OK ? row('s', '売る', sell, `1枚 ${pr}`) : `<div style="margin:6px 0">売る：<b>${sell}</b>枚 <span class="note">（1枚 ${pr}。交換しない株は売る）</span></div>`) +
       (maxPairs ? row('x', '交換', pairs, `2枚 → ${sv.name}株1枚（${maxPairs}組まで）`) : '') +
-      `<div style="margin-top:6px">持ち続ける：<b>${keep}</b>枚 <span class="note">（${keepNote}）</span></div><div>もらうお金：<b style="color:#ffe066">${sell * pr}</b>${pairs ? `　${sv.name}株：<b>${pairs}</b>枚` : ''}</div>`;
+      (KEEP_OK ? `<div style="margin-top:6px">持ち続ける：<b>${keep}</b>枚 <span class="note">（${keepNote}）</span></div>` : '') + `<div>もらうお金：<b style="color:#ffe066">${sell * pr}</b>${pairs ? `　${sv.name}株：<b>${pairs}</b>枚` : ''}</div>`;
     document.querySelectorAll('#dispBody [data-m],#dispBody [data-p]').forEach(b => b.onclick = () => {
       const up = !!b.dataset.p, k = b.dataset.p || b.dataset.m;
       if (k === 's') sell = Math.max(0, Math.min(n - pairs * 2, sell + (up ? 1 : -1)));
-      else pairs = Math.max(0, Math.min(maxPairs, Math.floor((n - sell) / 2), pairs + (up ? 1 : -1)));
+      else pairs = Math.max(0, Math.min(maxPairs, Math.floor((KEEP_OK ? n - sell : n) / 2), pairs + (up ? 1 : -1)));
       draw();
     });
   };
-  const presets = [['全部売る', () => cb({ sell:n, pairs:0 })], ['全部持ち続ける', () => cb({ sell:0, pairs:0 })]];
-  if (maxPairs) presets.push(['できるだけ交換', () => { const pp = Math.min(maxPairs, Math.floor(n / 2)); cb({ sell:0, pairs:pp }); }]);
+  const presets = [['全部売る', () => cb({ sell:n, pairs:0 })], ...(KEEP_OK ? [['全部持ち続ける', () => cb({ sell:0, pairs:0 })]] : [])];
+  if (maxPairs) presets.push(['できるだけ交換', () => { const pp = Math.min(maxPairs, Math.floor(n / 2)); cb({ sell:KEEP_OK ? 0 : n - pp * 2, pairs:pp }); }]);
   modal(head + '<div id="dispBody" style="margin-top:6px"></div>', [['この内容で決める', () => cb({ sell, pairs })], ...presets, ['盤と会社を見る', peekChoice]]);
   draw();
 }
@@ -3054,7 +3065,7 @@ const RULES_HTML = () => `<h3>電脳都市のルール（まとめ）</h3>${POWE
 <ul>${Object.keys(TYPES).map(k => `<li><img src="${iconUrl(k)}" alt="" style="width:18px;height:18px;vertical-align:-4px;background:#16213d;border-radius:4px"> <b>${TYPES[k].name}</b>：${TYPE_DESC[k]}</li>`).join('')}</ul>
 <h4>株</h4><p>手札の株は伏せていて、まだ数えない。<b>公開した株だけ</b>がボーナスと売却で数えられる。終わりに手札に残った株は価値がない。<b>株の手札は8枚まで</b>で、超えたら捨てる（捨て札の山へ。山札がなくなったら混ぜて山札にする）。</p>
 <h4>会社と株価</h4><p>2枚以上つながったタイルのかたまりに会社を付ける。株価は、その会社のタワーが<b>倒した敵の数</b>で上がる。ファイアウォールで遅くなっている敵をほかの会社のタワーが倒したら、倒した数を半分ずつ分ける。1枚だけでどこにもつながっていないタイルは会社がないので、倒しても誰の株価にもならない。</p>
-<h4>合併</h4><p>会社どうしがつながると、大きい方が小さい方を吸収する（タイル11枚以上の会社は安全で吸収されない）。吸収された会社の筆頭に株価の10倍、次点に5倍のボーナス。公開した株は、売る（株価でお金に）・2枚→1枚で残る会社の株と交換・持ち続けるを選べる。売った株と交換に出した株は<b>山札に戻して混ぜる</b>（捨て札にはしない）。持ち続けた株は公開したまま残り、その会社がまた設立されたらまた数える。手札にあった吸収された会社の株は、そのまま手札に残る（その会社がまた設立されたら公開できる）。</p>
+<h4>合併</h4><p>会社どうしがつながると、大きい方が小さい方を吸収する（タイル11枚以上の会社は安全で吸収されない）。吸収された会社の筆頭に株価の10倍、次点に5倍のボーナス。公開した株は、${KEEP_OK ? '売る（株価でお金に）・2枚→1枚で残る会社の株と交換・持ち続けるを選べる' : '売る（株価でお金に）か、2枚→1枚で残る会社の株と交換する。交換しない株は売る'}。売った株と交換に出した株は<b>山札に戻して混ぜる</b>（捨て札にはしない）。${KEEP_OK ? '持ち続けた株は公開したまま残り、その会社がまた設立されたらまた数える。' : ''}手札にあった吸収された会社の株は、そのまま手札に残る（その会社がまた設立されたら公開できる）。</p>
 <h4>決算</h4><p>${DIVIDEND_WAVES.length ? DIVIDEND_WAVES.join('回目と') + '回目の波が終わったとき、盤にある会社ごとに、筆頭に株価の4倍、次点に2倍の配当。' + (DIV_BANK ? '配当は<b>終わりまで預かり</b>で、株を買うのには使えない（所持金の横に「預かり」と出る）。終わりに所持金に足す。' : '') : 'なし'}</p>
 <h4>投資信託</h4><p>値段は盤にある会社の株価の平均。筆頭も配当もなく、終わりにそのときの値段で売れる。場から取ることはできない。株を取ったあと、手札の株1枚を差し出して、投資信託1口を払わずに公開した状態で受け取れる。</p>
 <h4>終わり</h4><p>${WAVES}回守りきったら、盤にある会社すべてでボーナスを出し、公開した株と投資信託をその値段で売る。</p>
