@@ -272,7 +272,7 @@ const playerHp = () => +(PARAMS.get('php') || PLAYER_HP[NPLAYERS] || 1);
 // 印のマス（ユーザー）：タイルに書かれたマスに置けば書かれた時間、同じエリアのほかのマスなら CELL_EXTRA だけ多く払う。
 // 余分を払うぶん迷路が作りにくくなるので、敵の硬さを 8.5n から 5.5n に下げた（CPU の試し 4人・ゲートウェイで20回中13回守りきる）。?cell=0 で前の形（エリアのどこでも同じ時間）
 const CELL_EXTRA = PARAMS.has('cell') ? +PARAMS.get('cell') : 1;
-const HP_GROWTH = +(PARAMS.get('hp') || (CELL_EXTRA ? 5.5 : 8.5));
+const HP_GROWTH = +(PARAMS.get('hp') || (CELL_EXTRA ? 5.2 : 8.5));   // 5.5 → 5.2（暫定）：公開を分けると時間が増える決まり（?revx）を入れると守りが落ちたので、敵を少し弱くして合わせた（ユーザー）。全員 CPU の60局の負け：前 5、上乗せだけ 12、上乗せ＋5.2 で 7
 const SAFE = +(PARAMS.get('safe') || 11), START_MONEY = 3000, HAND = +(PARAMS.get('hand') || 6), LIVES = 10, WAVES = +(PARAMS.get('waves') || 12);   // 12回（ユーザー。20回だと8回目以降は合併が起きず、動きのない後半が長かった）
 // 波の回数を変えたとき：?wavescale=1 なら最後の波の強さ・種類の時期・ボスの割合を20回のときにそろえる（敵が速く強くなる）。
 // ふつうは20回のときと同じ上がり方で、早く終わるだけ
@@ -952,10 +952,10 @@ const canRevealPair = (p, a, b) => a !== b && canReveal(p, a, 1) && canReveal(p,
 // ?revtime=1 で「何枚でも1」、?revtime=2 などで変えて比べる（試し中・暫定）
 const REV_TIME = (PARAMS.get('revtime') || 'card') === 'card' ? null : PARAMS.get('revtime');
 const revealTime = n => REV_TIME ? +REV_TIME : n;
-// 細切れの公開（試し中。ユーザー：1枚ずつ分けて出す方が得になっていた）：?revx=same で、同じ合間に同じ会社の株をもう一度公開すると、2回目は時間+1、3回目は+2…。まとめて出せば上乗せなし。
-// ?revx=1 は会社を問わず2回目の公開から上乗せ、?revx=tri は会社を問わず 2回目+2・3回目+5（三角数-1）。
-// 全員 CPU の60局で、負けが 今の形 5・same 9・1 は 11。CPU が1枚ずつ出すのでタワーの時間が減る。CPU がまとめて出すように直してから入れる
-const REVX = PARAMS.get('revx') || '0';
+// 細切れの公開（暫定で標準。ユーザー：1枚ずつ分けて出す方が得になっていた）：同じ合間の2回目の公開は時間+1、3回目は+2…。まとめて出せば（2社セットも1回）上乗せなし。
+// ?revx=0 で前の形、?revx=same は同じ会社をもう一度出したときだけ、?revx=tri は 2回目+2・3回目+5（三角数-1）。
+// 入れると全員 CPU の負けが増えた（60局で 5 → 11〜12。CPU がまとめて出すように直しても同じ）ので、敵の体力の伸びを 5.5 → 5.2 にして合わせた
+const REVX = PARAMS.get('revx') || '1';
 const revExtra = (p, ids) => { if (REV_TIME || REVX === '0') return 0; const k = REVX === 'same' ? Math.max(...ids.map(id => (p.revBy || {})[id] || 0)) : p.revN || 0; return REVX === 'tri' ? k * (k + 3) / 2 : k; };
 function revealPair(p, a, b) {
   const x = revExtra(p, [a, b]); G.pairing = true; revealShares(p, a, 1); revealShares(p, b, 1); G.pairing = false;
@@ -1085,7 +1085,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.43';
+const APP_VER = 'v0.1.44';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
