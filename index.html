@@ -1094,7 +1094,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.57';
+const APP_VER = 'v0.1.58';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -3135,33 +3135,61 @@ const HOWTO = [
     return ['全員で守る。勝つのは1人', htSvg(260, 88, htGrid(9, 3, { '3,0':htTile(g), '5,2':htTile(b), '6,0':htTile(b) }) + htIcon(3, 0, 'av') + htIcon(5, 2, 'scan') + htIcon(6, 0, 'fw')
       + `<line x1="${tx}" y1="${ty}" x2="${ex}" y2="${ey}" stroke="${g}" stroke-width="2"/>` + [1, 2, 3].map(c => { const [x, y] = htXY(c, 1); return `<circle cx="${x}" cy="${y}" r="5" fill="#7cf9ff"/>`; }).join('')
       + htText(htXY(0, 1)[0], htXY(0, 1)[1] + 4, '入', '#ff4dff', 12) + htText(htXY(8, 1)[0], htXY(8, 1)[1] + 4, '出', '#fff', 12))
-      + `<p>ウイルスの群れが、入口（入）から出口（出）へ進みます。みんなでタワーを建てて、出口に着く前に倒します。</p><p>出口に着かれるとライフが減ります。0になったら<b>全員の負け</b>です。</p><p>ウイルスの群れは、全部で${WAVES}回来ます。最後まで守りきったとき、<b>お金がいちばん多い人</b>の勝ちです。</p>`]; },
-  () => ['自分の番にやること', `<p>次の3つから、1つ選びます。</p>` + htTable(['やること', '使うもの', 'もらえるもの'], [['<b>タイルを置く</b>', '時間', 'タワーが建つ<br>株を1枚'], ['<b>タワーを強化する</b>', '時間', 'タワーが強くなる<br>株を1枚'], ['<b>株を公開する</b><br><span class="note">手札の株にお金を払って、自分の持ち株にする</span>', 'お金と時間', 'その会社の株主になる']])
-    + `<p>タワーを建てるのにも強化するのにも、お金はかかりません。お金を払うのは、株を公開するときだけです。</p><p>最初の所持金は${START_MONEY}です。</p>`],
-  () => { const paint = {}; for (const c of [3, 4, 5]) for (const r of [0, 1, 2]) paint[c + ',' + r] = ['#16284a', '#7cf9ff']; paint['4,1'] = ['#3a3413', '#ffe14d', 'stroke-dasharray="4 3"']; paint['3,2'] = htTile(COMPANIES[4].color);
-    return ['タイルを置く', `<div style="display:flex;justify-content:center"><div style="border:1.5px solid #7cf9ff;border-radius:8px;padding:6px 12px;font-size:13px"><img src="${iconUrl('scan')}" alt="" style="width:18px;height:18px;vertical-align:-4px"> <b>${TYPES.scan.name}</b>　エリアB　時間${normalTime('scan')}</div></div>`
-      + htSvg(260, 88, htGrid(9, 3, paint) + htIcon(3, 2, 'av') + htText(htXY(4, 1)[0], htXY(4, 1)[1] + 4, '印', '#ffe9a8', 12) + htText(htXY(4, 0)[0], htXY(4, 0)[1] + 4, 'B', '#7cf9ff88', 12))
-      + `<p>タイルには、置けるエリアが書いてあります。そのエリアの空いたマス（光っているマス）なら、どこにでも置けます。</p>${CELL_EXTRA ? `<p>黄色い点線の<b>印のマス</b>に置くと、消費する時間が${CELL_EXTRA}少なくて済みます。</p>` : ''}<p>敵は、タワーのあるマスを通れません。タワーを並べて道をふさぐと、敵は遠回りして進みます。遠回りさせたぶん、タワーが敵を撃てる時間が長くなります。</p>`]; },
+      + `<p>ウイルスは、${WAVES}回に分かれて街に攻めてきます。この1回分の攻撃を<b>波</b>と呼びます。</p>`
+      + `<p>波が来ると、ウイルスは入口（入）から出口（出）へ向かって進みます。タワーは、射程に入ったウイルスを自動で撃ちます。</p>`
+      + `<p>ウイルスが1体出口に着くたびに、全員で共有しているライフが減ります。ライフが0になると、その時点で<b>全員の負け</b>です。</p>`
+      + `<p>${WAVES}回目の波が終わるまでライフが残っていれば、<b>所持金がいちばん多い人</b>が勝ちます。</p>`]; },
+  () => ['ゲームの流れ', `<div style="display:flex;gap:4px;align-items:center;margin:8px 0">${htBox('全員が行動する', '1人ずつ順番に')}<b>→</b>${htBox('波が来る', 'タワーが自動で撃つ', '#ff4dff')}</div><p style="text-align:center" class="note">この2つを${WAVES}回くり返します</p>`
+    + `<p>波が来る前に、全員が順番に行動します。タワーを建てたり、株を公開したりできるのは、この行動のときです。</p>`
+    + `<p>全員の行動が終わると、波が来ます。波が来ている間、プレイヤーは何もしません。タワーが自動でウイルスを撃ちます。</p>`
+    + `<p>波が終わると、次の波が来る前に、また全員が行動します。</p>`],
   () => { const cols = ['#ffffff', '#7cf9ff', '#ff9a3c', '#b07cff'], xs = [40, 95, 120, 215];
-    return ['時間と順番', htSvg(260, 70, `<line x1="15" y1="30" x2="245" y2="30" stroke="#2b3a66" stroke-width="6" stroke-linecap="round"/><line x1="180" y1="10" x2="180" y2="50" stroke="#ff4dff" stroke-width="2"/>`
-      + xs.map((x, i) => `<circle cx="${x}" cy="30" r="8" fill="${cols[i]}"/>`).join('') + htText(40, 60, '↑ 次に動く人', '#ffe066', 11) + htText(180, 64, '使える時間はここまで', '#ff4dff', 10))
-      + `<p>行動すると、使った時間だけ右へ進みます。次に動くのは、<b>いちばん左の人</b>です。</p><p>ピンクの線を越えた人は、波が終わるまで待ちます。全員が越えると、敵の波が来ます。</p>`
-      + htTable(['人数', '2人', '3人', '4人', '5人', '6人'], [['1回の波の前に<br>使える時間', ...[2, 3, 4, 5, 6].map(k => PARAMS.get('tt') ? Math.round(+PARAMS.get('tt') / k) : Math.max(5, Math.round(24 / k)))]])]; },
+    return ['順番と時間', `<p>行動するたびに、その行動で決まっている量の<b>時間</b>を使います。</p><p class="note">例：${TYPES.av.name}のタイルを置く（時間${normalTime('av')}）→ 株を1枚公開する（時間1）→ ${TYPES.node.name}のタイルを置く（時間${normalTime('node')}）。この3つの行動で、合わせて${normalTime('av') + 1 + normalTime('node')}の時間を使います。</p>`
+      + htSvg(260, 70, `<line x1="15" y1="30" x2="245" y2="30" stroke="#2b3a66" stroke-width="6" stroke-linecap="round"/><line x1="180" y1="10" x2="180" y2="50" stroke="#ff4dff" stroke-width="2"/>`
+      + xs.map((x, i) => `<circle cx="${x}" cy="30" r="8" fill="${cols[i]}"/>`).join('') + htText(40, 60, '↑ 次に行動する人', '#ffe066', 11) + htText(180, 64, '使える時間の上限', '#ff4dff', 10))
+      + `<p>上の絵は、画面にある<b>時間トラック</b>です。丸は、プレイヤー1人ひとりのコマです。あなたが時間を使うと、あなたのコマが、使った時間の分だけ右へ進みます。</p>`
+      + `<p>次に行動するのは、<b>コマがいちばん左にある人</b>です。</p>`
+      + `<p>ピンクの線は、1人が次の波までに使える時間の上限です。あなたのコマがピンクの線を越えると、あなたは次の波が終わるまで行動できません。全員のコマがピンクの線を越えると、波が来ます。</p>`
+      + htTable(['遊ぶ人数', '2人', '3人', '4人', '5人', '6人'], [['1人が次の波までに<br>使える時間', ...[2, 3, 4, 5, 6].map(k => PARAMS.get('tt') ? Math.round(+PARAMS.get('tt') / k) : Math.max(5, Math.round(24 / k)))]])
+      + `<p>1回目の波の前だけは、使える時間がこの表の2倍あります。</p>`]; },
+  () => ['自分の番にやること', `<p>自分の番が来たら、次の3つの行動から1つを選びます。</p>`
+    + htTable(['行動', '使うもの', 'その行動で起きること'], [['<b>タイルを置く</b>', '時間', '置いたマスにタワーが建つ。<br>あなたは株券を1枚得る'], ['<b>タワーを強化する</b>', '時間', 'そのタワーの射程と威力が上がる。<br>あなたは株券を1枚得る'], ['<b>株を公開する</b><br><span class="note">手札の株券にお金を払って、自分の持ち株にすること</span>', 'お金と時間', 'あなたがその会社の株主になる']])
+    + `<p>タワーを建てるときも強化するときも、お金は払いません。お金を払うのは、株を公開するときだけです。</p><p>ゲームの最初に、全員が所持金${START_MONEY}を持っています。</p>`],
+  () => { const paint = {}; for (const c of [3, 4, 5]) for (const r of [0, 1, 2]) paint[c + ',' + r] = ['#16284a', '#7cf9ff']; paint['4,1'] = ['#3a3413', '#ffe14d', 'stroke-dasharray="4 3"']; paint['3,2'] = htTile(COMPANIES[4].color);
+    return ['タイルを置く', `<div style="display:flex;justify-content:center"><div style="border:1.5px solid #7cf9ff;border-radius:8px;padding:6px 12px;font-size:13px"><img src="${iconUrl('scan')}" alt="" style="width:18px;height:18px;vertical-align:-4px"> <b>${TYPES.scan.name}</b>　エリアB　時間${normalTime('scan')}</div></div><p class="note" style="text-align:center">手札のタイル（例）</p>`
+      + htSvg(260, 88, htGrid(9, 3, paint) + htIcon(3, 2, 'av') + htText(htXY(4, 1)[0], htXY(4, 1)[1] + 4, '印', '#ffe9a8', 12) + htText(htXY(4, 0)[0], htXY(4, 0)[1] + 4, 'B', '#7cf9ff88', 12))
+      + `<p>手札のタイルには、タワーの種類と、置けるエリア（A〜F）が書いてあります。タイルは、書いてあるエリアの中の空いたマスなら、どこにでも置けます。タイルを選ぶと、置けるマスが盤の上で光ります。</p>`
+      + (CELL_EXTRA ? `<p>タイルごとに、黄色い点線で示される<b>印のマス</b>が1つ決まっています。タイルを印のマスに置くと、消費する時間が${CELL_EXTRA}少なくて済みます。</p>` : '')
+      + htSvg(260, 88, htGrid(9, 3, { '4,0':htTile(COMPANIES[0].color), '4,1':htTile(COMPANIES[0].color) }) + htIcon(4, 0, 'av') + htIcon(4, 1, 'av')
+        + `<polyline points="${[[0, 1], [1, 1], [2, 1], [3, 1], [4, 2], [5, 2], [5, 1], [6, 1], [7, 1], [8, 1]].map(([c, r]) => htXY(c, r).map(v => v.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="#7cf9ff" stroke-width="2" stroke-dasharray="4 3"/>`
+        + htText(htXY(0, 1)[0], htXY(0, 1)[1] - 8, '入', '#ff4dff', 11) + htText(htXY(8, 1)[0], htXY(8, 1)[1] - 8, '出', '#fff', 11))
+      + `<p>ウイルスは、タワーが建っているマスを通れません。上の絵では、ウイルスがタワー2つをよけて、下へ遠回りしています（点線がウイルスの通る道です）。</p>`
+      + `<p>ウイルスを遠回りさせると、ウイルスがタワーの射程の中にいる時間が長くなり、タワーがウイルスを撃つ回数が増えます。</p>`]; },
   () => { const g = COMPANIES[0].color;
-    return ['会社と株価', htSvg(260, 76, htHex(1, 1, '#2a3050', '#8a94b4') + htIcon(1, 1, 'av') + htText(htXY(1, 1)[0], 66, '1枚だけ', '#8a94b4', 10) + htText(105, 34, '→', '#cfd8ff', 18)
-      + htHex(5, 1, ...htTile(g)) + htHex(6, 1, ...htTile(g)) + htIcon(5, 1, 'av') + htIcon(6, 1, 'node') + htText((htXY(5, 1)[0] + htXY(6, 1)[0]) / 2, 66, `つながると会社（${COMPANIES[0].name}）`, g, 10))
-      + `<p>タイルが2枚以上つながると、<b>会社</b>になります。つなげた人が、どの会社にするか選びます。</p><p>その会社のタワーが敵を倒すたびに、<b>株価</b>が上がります。</p><p>よく倒すタワーを持つ会社ほど、株が高くなります。</p>`]; },
-  () => ['株をもらう、公開する', `<div style="display:flex;gap:4px;align-items:center;margin:8px 0">${htBox('置く、強化する', '')}<b>→</b>${htBox('株を1枚もらう', '手札に入る')}<b>→</b>${htBox('公開する', '株価と同じお金を払う', '#7cf9ff')}</div>`
-    + `<p>もらった株は<b>手札</b>に入ります。手札の株は、まだ数えません。</p><p>その会社の株価と同じお金を払うと、<b>公開</b>できます。数えられるのは、公開した株だけです。</p><p>公開できるのは、敵が来ていない間だけです。最後まで手札に残った株は、お金になりません。</p>`],
-  () => ['お金が入るとき', `<p>会社ごとに、公開した株がいちばん多い人が<b>筆頭</b>、2番目の人が<b>次点</b>です。</p>`
-    + htTable(['いつ', '筆頭', '次点'], [['会社が吸収されたとき', '株価の10倍', '5倍'], ...(DIVIDEND_WAVES.length ? [[DIVIDEND_WAVES.join('回目と') + '回目の波のあと', '4倍', '2倍']] : []), ['最後の波のあと', '10倍', '5倍']])
-    + `<p>同じ枚数のときは分け合います。株主が1人だけなら、筆頭と次点の両方の分をもらえます。</p><p>最後に、公開した株を全部、そのときの株価で売ります。</p>`],
+    return ['会社と株価', htSvg(260, 76, htHex(1, 1, '#2a3050', '#8a94b4') + htIcon(1, 1, 'av') + htText(htXY(1, 1)[0], 66, 'タイル1枚', '#8a94b4', 10) + htText(105, 34, '→', '#cfd8ff', 18)
+      + htHex(5, 1, ...htTile(g)) + htHex(6, 1, ...htTile(g)) + htIcon(5, 1, 'av') + htIcon(6, 1, 'node') + htText((htXY(5, 1)[0] + htXY(6, 1)[0]) / 2, 66, `2枚つながって会社になった`, g, 10))
+      + `<p>会社に入っていないタイルが2枚以上つながると、そのタイルのかたまりが1つの<b>会社</b>になります。タイルをつなげた人が、${COMPANIES.length}つの会社の中から、どの会社にするかを選びます。</p>`
+      + `<p>会社のタワーがウイルスを倒すたびに、その会社の<b>株価</b>が上がります。</p>`]; },
+  () => ['株券を得る、公開する', `<p>タワーを建てるか強化したあとは、場に並んだ5枚の株券のうちいずれか、もしくは山札からランダムに1枚、株券を得ることができます。株券を得るのに、お金はかかりません。</p>`
+    + `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;margin:8px 0">${[0, 2, 2, 4, 6].map(i => `<span style="border:1.5px solid ${COMPANIES[i].color};border-radius:6px;padding:6px 5px;font-size:11px;font-weight:bold">${COMPANIES[i].name}</span>`).join('')}<span style="border:1.5px dashed #8a94b4;border-radius:6px;padding:6px 8px;font-size:11px;font-weight:bold;color:#8a94b4">山札</span></div><p class="note" style="text-align:center">場に並んだ5枚の株券と、山札（例）</p>`
+    + `<p>得た株券は、あなたの手札に入ります。手札の株券は、ほかの人には見えません。</p>`
+    + `<p>手札の株券に、その会社のいまの株価と同じ額のお金を払うと、その株券を<b>公開</b>できます。公開した株は、あなたの持ち株になります。</p>`
+    + `<p>ボーナスをもらえる人は、会社ごとに、公開した株の枚数で決まります（次のページ）。手札にあるだけの株券は、この枚数に入りません。</p>`
+    + `<p>株を公開できるのは、波が来ていないときだけです。ゲームが終わったときに手札に残っていた株券は、お金になりません。</p>`],
+  () => ['お金が入るとき', `<p>会社ごとに、その会社の株をいちばん多く公開している人を<b>筆頭</b>、2番目に多く公開している人を<b>次点</b>と呼びます。筆頭と次点は、次のときにお金をもらえます。</p>`
+    + htTable(['いつ', '筆頭がもらう額', '次点がもらう額'], [['その会社が、ほかの会社に吸収されたとき', 'その会社の株価の10倍', '株価の5倍'], ...(DIVIDEND_WAVES.length ? [[DIVIDEND_WAVES.join('回目と') + '回目の波が終わったとき', '株価の4倍', '株価の2倍']] : []), [`${WAVES}回目の波が終わったとき`, '株価の10倍', '株価の5倍']])
+    + `<p>公開した枚数が同じ人がいるときは、その人たちでお金を分け合います。会社の株を公開している人が1人だけのときは、その人が筆頭と次点の両方の額をもらいます。</p>`
+    + (DIVIDEND_WAVES.length && DIV_BANK ? `<p>${DIVIDEND_WAVES.join('回目と')}回目の波のあとにもらうお金は、ゲームが終わるまで使えません（画面には「預かり」と出ます）。</p>` : '')
+    + `<p>${WAVES}回目の波が終わったら、全員が、公開した株をすべて、そのときの株価で売ってお金に換えます。</p>`],
   () => { const a = COMPANIES[2].color, b = COMPANIES[4].color, paint = { '4,1':['#3a3413', '#ffe14d', 'stroke-dasharray="4 3"'] };
     for (const k of ['0,0', '1,0', '2,0', '1,1', '2,1', '3,1']) paint[k] = htTile(a); for (const k of ['5,1', '6,1']) paint[k] = htTile(b);
-    return ['合併', htSvg(260, 76, htGrid(9, 3, paint) + htText(htXY(4, 1)[0], htXY(4, 1)[1] + 4, '置く', '#ffe9a8', 9) + htText(htXY(1, 2)[0] + 14, htXY(1, 2)[1] + 8, COMPANIES[2].name + '（6枚）', a, 10) + htText(htXY(6, 2)[0], htXY(6, 2)[1] + 8, COMPANIES[4].name + '（2枚）', b, 10))
-      + `<p>会社どうしがつながると、<b>大きい方が小さい方を吸収</b>します。</p><p>吸収された会社の筆頭と次点に、ボーナスが入ります。その会社の公開した株は、売るか、2枚を相手の会社の株1枚と交換します。</p><p>タイルが${SAFE}枚以上の会社は、吸収されません。</p>`]; },
+    return ['合併', htSvg(260, 76, htGrid(9, 3, paint) + htText(htXY(1, 2)[0] + 14, htXY(1, 2)[1] + 8, COMPANIES[2].name + '（6枚）', a, 10) + htText(htXY(6, 2)[0], htXY(6, 2)[1] + 8, COMPANIES[4].name + '（2枚）', b, 10))
+      + `<p>2つの会社のタイルがつながると、タイルの枚数が多い方の会社が、少ない方の会社を<b>吸収</b>します。上の絵では、黄色い点線のマスにタイルを置くと、${COMPANIES[2].name}が${COMPANIES[4].name}を吸収します。</p>`
+      + `<p>吸収された会社の筆頭と次点は、お金をもらいます（前のページの表）。</p>`
+      + `<p>吸収された会社の株を公開していた人は、その株を、1枚につき株価と同じ額で売るか、2枚を、吸収した会社の株1枚と交換します。</p>`
+      + `<p>タイルが${SAFE}枚以上ある会社は、ほかの会社に吸収されません。</p>`]; },
   () => ['タワーの種類', htTable(['タワー', '時間', 'はたらき'], Object.keys(TYPES).map(k => [`<img src="${iconUrl(k)}" alt="" style="width:18px;height:18px;vertical-align:-4px;background:#16213d;border-radius:4px"> <b>${TYPES[k].name}</b>`, normalTime(k), TYPE_SHORT[k]]))
-    + `<p>強化すると、射程と威力が上がります（3段階まで）。</p>`],
+    + `<p>表の「時間」は、そのタワーのタイルを置くときに使う時間です。</p><p>タワーを強化すると、そのタワーの射程と威力が上がります。強化は、1つのタワーに2回までできます。</p>`],
 ];
 function showHowTo(i = 0, onClose) {
   const [ttl, body] = HOWTO[i](), n = HOWTO.length, last = i === n - 1;
