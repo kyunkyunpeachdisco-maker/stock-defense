@@ -1094,7 +1094,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.65';
+const APP_VER = 'v0.1.66';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -2829,7 +2829,7 @@ function renderCos() {
       })()}</td></tr>`;
   });
   const cp = G.players.filter(p => p.shares[CENTRAL]).map(p => `<span style="color:${p.color}">${p.name.replace('CPU', 'C')}×${p.shares[CENTRAL]}</span>`).join(' ');
-  h += `<tr><td data-tip="値段は、盤にある会社の株価の平均です。筆頭も配当もなく、最後にそのときの値段で売れます"><span class="sw" style="background:${CENTRAL_CO.color}"></span>投資信託</td><td>-</td><td>-</td><td>-</td><td>${centralPrice()}</td><td>${G.centralLeft}</td><td style="text-align:left">${cp}</td></tr>`;
+  h += `<tr><td data-tip="1口の価値は、盤にある会社の株価の加重平均です（公開されている株券の枚数が多い会社ほど、大きく数えます）。筆頭も次点もなく、ゲームが終わったときに、そのときの価値と同じ額をもらえます"><span class="sw" style="background:${CENTRAL_CO.color}"></span>投資信託</td><td>-</td><td>-</td><td>-</td><td>${centralPrice()}</td><td>${G.centralLeft}</td><td style="text-align:left">${cp}</td></tr>`;
   const notYet = G.cos.filter(co => !rowOf(co));
   if (!AUTO) { const cnt = {}; me().cards.forEach(id => cnt[id] = (cnt[id] || 0) + 1);
     h += `<tr><td colspan="7" style="text-align:left">あなたの株の手札：${Object.keys(cnt).length ? Object.entries(cnt).map(([id, n]) => { const co = id == CENTRAL ? CENTRAL_CO : G.cos[id]; return `<span style="color:${co.color}">${co.name}×${n}</span>`; }).join(' ') : 'なし'}</td></tr>`; }
@@ -2857,7 +2857,7 @@ function renderMarket() {
   };
   // 交換・捨てる：その場面のボタンだけ
   if (ex) {
-    grid(`投資信託に替える株を選ぶ（投資信託はいま1口${centralPrice()}）`, [
+    grid(`投資信託に替える株券を選ぶ（投資信託の価値は、いま1口${centralPrice()}）`, [
       // 手札の枚数と、公開した枚数（自分・ほかでいちばん多い人）も出す（替えるか決めるのに要る。ユーザー）
       ...[...new Set(me().cards.filter(x => x !== CENTRAL))].map(id => { const co = G.cos[id], n = me().cards.filter(c => c === id).length;
         const top = G.players.filter(q => q !== me()).sort((a, b) => b.shares[id] - a.shares[id])[0];
@@ -2873,7 +2873,7 @@ function renderMarket() {
       ...G.market.map((id, mi) => { const co = G.cos[id]; return [`${co.name}<br><span class="note">${co.active ? price(co) : 'まだない'}</span>${powerLine(id)}`, co.color, () => act(G.viewer || 0, { t:'take', mi }), tk,
         (co.active ? `${co.name}の株。いまの株価は${price(co)}です` : `${co.name}はまだ盤にありません。もらっておいて、設立されたら公開できます`) + powerTip(id)]; }),
       ['山札<br><span class="note">中身は見えない</span>', null, () => act(G.viewer || 0, { t:'take', mi:-1 }), tk && G.deck.length, '山札の一番上の株を、見ないでもらいます'],
-      ...(TRUST_PILE === '0' ? [] : [[`投資信託<br><span class="note">${G.centralLeft > 0 ? '残り' + G.centralLeft : '売り切れ'}</span>`, CENTRAL_CO.color, () => act(G.viewer || 0, { t:'take', mi:-2 }), tk && canTakeTrust(), `投資信託。値段は、盤にある会社の株価の平均です（いま${centralPrice()}）。筆頭も配当もなく、最後にそのときの値段で売れます`]])]);
+      ...(TRUST_PILE === '0' ? [] : [[`投資信託<br><span class="note">${G.centralLeft > 0 ? '残り' + G.centralLeft : '売り切れ'}</span>`, CENTRAL_CO.color, () => act(G.viewer || 0, { t:'take', mi:-2 }), tk && canTakeTrust(), `投資信託。1口の価値は、盤にある会社の株価の加重平均です（いま${centralPrice()}）。筆頭も次点もなく、ゲームが終わったときに、そのときの価値と同じ額をもらえます`]])]);
     if (tk && canReset(me())) {
       const r = document.createElement('button'); r.className = 'btn'; r.textContent = RESET_FREE ? '場を入れ替える（どれも公開できないときの1回だけ）' : `場の株を並べ直す（時間${resetTime(me())}）`; r.style.marginTop = '4px';
       r.onclick = () => act(G.viewer || 0, { t:'reset' }); el.appendChild(r);
@@ -3174,14 +3174,6 @@ const HOWTO = [
   () => ['ゲームの終わり', `<p>${WAVES}回目の波が終わったとき、ライフが1以上残っていれば、街を守りきったことになり、ゲームが終わります。そのあと、次の順にお金を計算します。</p>`
     + `<ol style="padding-left:20px;font-size:13px;line-height:1.6"><li>盤にある会社ごとに、それぞれ、その会社の筆頭がその会社の株価の10倍、その会社の次点が株価の5倍をもらいます。</li><li>全員が、公開している株券をすべて売ります。1枚につき、その会社のそのときの株価と同じ額をもらいます。</li>${DIVIDEND_WAVES.length && DIV_BANK ? '<li>預かりになっていたお金を、所持金に足します。</li>' : ''}<li>所持金がいちばん多いプレイヤーが勝ちます。</li></ol>`
     + `<p class="note">例：株価800の会社の株券を3枚公開していて、その会社の筆頭だった場合、ボーナスで8000、株券を売って2400をもらいます。</p>`],
-  () => ['投資信託', `<p>株券を得たあと、手札の株券1枚と引き換えに、<b>投資信託</b>を1口もらうことができます。</p>`
-    + htList('投資信託のきまり', ['もらうのに、お金はかからない', 'もらったときから、公開した状態になる', '1口の値段は、盤にある会社の株価の平均', '筆頭も次点もない', 'ゲームが終わったとき、1口につき、そのときの値段と同じ額をもらう', `全部で${CENTRAL_CARDS}口。なくなったあとは、もらえない`])
-    + htList('使いどころ', ['盤にない会社の株券のように、公開できる見込みのない株券を、お金に換えたいとき'])],
-  () => ['手札を入れ替える', `<p>自分の番に、時間を使って、次の2つをすることができます。</p>`
-    + htList('タイルを引き直す', ['手札のタイルを1枚選んで山に戻し、新しいタイルを1枚引く', ...(CELL_EXTRA ? ['印のマスにもうタワーが建っているタイルは、何枚でもまとめて引き直せる'] : [])])
-    + htList('場の株券を並べ直す', ['場に並んだ5枚の株券を山札に戻して、新しく5枚を並べる', '場の5枚の中に、盤にある会社の株券が1枚もないときだけできる'])
-    + htList('使う時間（どちらも同じ）', ['次の波が来るまでの1回目は1、2回目は2、3回目は3'])
-    + `<p class="note">2人で遊ぶときだけ、タイルを置いたあとに、手札のタイルを1枚、時間を使わずに引き直すことができます。</p>`],
   () => ['タワーの種類', htTable(['タワー', '時間', 'はたらき'], Object.keys(TYPES).map(k => [`<img src="${iconUrl(k)}" alt="" style="width:18px;height:18px;vertical-align:-4px;background:#16213d;border-radius:4px"> <b>${TYPES[k].name}</b>`, normalTime(k), TYPE_SHORT[k]]))
     + `<p>表の「時間」は、そのタワーのタイルを置くときに使う時間です。${CELL_EXTRA ? `印のマスに置くときは、これより${CELL_EXTRA}少なくなります。` : ''}</p>`
     + `<p>タワーを強化すると、そのタワーの射程と威力が上がります。強化は、1つのタワーに2回まですることができます。${TYPES.node.name}は強化できません。</p>`
@@ -3190,6 +3182,14 @@ const HOWTO = [
     + htTable(['会社', '能力'], COMPANIES.map((c, i) => [`<span class="sw" style="background:${c.color}"></span><b>${c.name}</b> ${'★'.repeat(c.tier + 1)}`, `<b>${POWER[i].name}</b><br><span class="note">${POWER[i].desc}</span>`]))
     + `<p>会社がほかの会社に吸収されると、その会社の能力はなくなります。</p>`
     + `<p>★は会社の格です。★が1つ多い会社は、株価が100高くなります。</p>`] : null,
+  () => ['投資信託', `<p>株券を得たあと、手札の株券1枚と引き換えに、<b>投資信託</b>を1口もらうことができます。</p>`
+    + htList('投資信託のきまり', ['もらうのに、お金はかからない', 'もらったときから、公開した状態になる', '1口の価値は、盤にある会社の株価の平均（公開されている株券の枚数が多い会社ほど、大きく数える加重平均）', '筆頭も次点もない', 'ゲームが終わったとき、1口につき、そのときの価値と同じ額をもらう', `全部で${CENTRAL_CARDS}口。なくなったあとは、もらえない`])
+    + htList('使いどころ', ['盤にない会社の株券のように、公開できる見込みのない株券を、お金に換えたいとき'])],
+  () => ['手札を入れ替える', `<p>自分の番に、時間を使って、次の2つをすることができます。</p>`
+    + htList('タイルを引き直す', ['手札のタイルを1枚選んで山に戻し、新しいタイルを1枚引く', ...(CELL_EXTRA ? ['印のマスにもうタワーが建っているタイルは、何枚でもまとめて引き直せる'] : [])])
+    + htList('場の株券を並べ直す', ['場に並んだ5枚の株券を山札に戻して、新しく5枚を並べる', '場の5枚の中に、盤にある会社の株券が1枚もないときだけできる'])
+    + htList('使う時間（どちらも同じ）', ['次の波が来るまでの1回目は1、2回目は2、3回目は3'])
+    + `<p class="note">2人で遊ぶときだけ、タイルを置いたあとに、手札のタイルを1枚、時間を使わずに引き直すことができます。</p>`],
   () => ['画面のボタン', htTable(['画面の上のボタン', 'はたらき'], [['縦棒2本', 'ゲームを一時停止します。1人で遊ぶときだけ使えます'], ['三角', '早回しします。押すたびに、1倍、2倍、3倍と切り替わります。1人で遊ぶときだけ使えます'], ['♪', '効果音を鳴らすか、消すかを切り替えます'], ['？', 'この「遊び方」を開きます']])
     + `<p>画面の見出しや数字の横にある「？」は、指で長押しするか、マウスのカーソルを合わせると、その項目の説明が出ます。</p>`
     + `<p>自分の番に、次に押す場所を光らせて案内する機能があります。 <button class="btn" id="guideChk" style="padding:4px 12px">${guideOff ? '案内：オフ' : '案内：オン'}</button></p>`],
