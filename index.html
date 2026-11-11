@@ -622,7 +622,7 @@ function newCycle() {
   const base = G.limit;
   const behind = G.players.filter(p => p.t < base).sort((a, b) => a.t - b.t || b.order - a.order);
   behind.forEach((p, i) => { p.t = base; p.order = 1e9 - i; });  // 線ちょうどにいた人より先に動く
-  G.players.forEach(p => { p.resetUsed = false; p.clock = WAVE_GAP; p.renewN = 0; p.resetN = 0; });
+  G.players.forEach(p => { p.resetUsed = false; p.clock = WAVE_GAP; p.renewN = 0; p.resetN = 0; p.revN = 0; p.revBy = {}; });
   G.limit = base + budget();
   renderAll();
 }
@@ -926,8 +926,10 @@ function takeStep(p, done0) {
 }
 function finishTake(mi) {
   const tk = G.taking; if (!tk) return;
-  G.taking = null; takeShare(tk.p, mi);
+  G.taking = null; const n0 = tk.p.cards.length; takeShare(tk.p, mi);
   if (canExchange(tk.p)) { G.exchanging = tk; renderAll(); return; }
+  // 山札から引いて、投資信託に替える画面も出ないときは、何を引いたかを見せてから進む（ユーザー：時間を使い切っていると、見る間もなく次の波が始まった）
+  if (mi === -1 && tk.p === me() && tk.p.cards.length > n0) { const co = coOf(tk.p.cards[tk.p.cards.length - 1]); renderAll(); modal(`<h3>山札から引いた株</h3><p><b style="color:${co.color}">${co.name}</b>${co.active ? `（いまの株価${priceOf(co.id)}）` : '（まだ盤にない会社）'}</p>`, [['OK', () => tk.done()]]); return; }
   tk.done();
 }
 function finishExchange(id) {
@@ -941,8 +943,8 @@ function revealShares(p, id, n) {
   if (PARAMS.get('dbg') === 'cash') TR({ k:'rv', w:G.wave, p:p.id, id, n, pr, after:p.money - pr * n, mine:p.shares[id] + n, top:Math.max(0, ...G.players.filter(q => q !== p).map(q => q.shares[id])) });
   p.shares[id] += n; p.money -= pr * n; G.stats.bought += n; p.resetUsed = false; earn(p, id === CENTRAL ? '払った（投資信託）' : '払った（会社）', -pr * n);
   (G.revLog = G.revLog || []).push({ wave:G.wave, pid:p.id, id, n, pr, after:p.shares[id] });
-  if (!G.pairing) spend(p, revealTime(n)); sfx('coin');
-  log(`${p.name}：${co.name}の株を${n}枚公開（${pr * n}払った${G.pairing ? "" : `、時間${revealTime(n)}`}）`);
+  const rt = revealTime(n) + revExtra(p, [id]); if (!G.pairing) { spend(p, rt); p.revN = (p.revN || 0) + 1; } (p.revBy = p.revBy || {})[id] = (p.revBy[id] || 0) + 1; sfx('coin');
+  log(`${p.name}：${co.name}の株を${n}枚公開（${pr * n}払った${G.pairing ? "" : `、時間${rt}`}）`);
 }
 // 2社の株を1枚ずつ公開する（ユニオン・パシフィックどおり。1回の行動として、時間は2）
 const canRevealPair = (p, a, b) => a !== b && canReveal(p, a, 1) && canReveal(p, b, 1) && p.money >= priceOf(a) + priceOf(b);
@@ -950,9 +952,14 @@ const canRevealPair = (p, a, b) => a !== b && canReveal(p, a, 1) && canReveal(p,
 // ?revtime=1 で「何枚でも1」、?revtime=2 などで変えて比べる（試し中・暫定）
 const REV_TIME = (PARAMS.get('revtime') || 'card') === 'card' ? null : PARAMS.get('revtime');
 const revealTime = n => REV_TIME ? +REV_TIME : n;
+// 細切れの公開（試し中。ユーザー：1枚ずつ分けて出す方が得になっていた）：?revx=same で、同じ合間に同じ会社の株をもう一度公開すると、2回目は時間+1、3回目は+2…。まとめて出せば上乗せなし。
+// ?revx=1 は会社を問わず2回目の公開から上乗せ、?revx=tri は会社を問わず 2回目+2・3回目+5（三角数-1）。
+// 全員 CPU の60局で、負けが 今の形 5・same 9・1 は 11。CPU が1枚ずつ出すのでタワーの時間が減る。CPU がまとめて出すように直してから入れる
+const REVX = PARAMS.get('revx') || '0';
+const revExtra = (p, ids) => { if (REV_TIME || REVX === '0') return 0; const k = REVX === 'same' ? Math.max(...ids.map(id => (p.revBy || {})[id] || 0)) : p.revN || 0; return REVX === 'tri' ? k * (k + 3) / 2 : k; };
 function revealPair(p, a, b) {
-  G.pairing = true; revealShares(p, a, 1); revealShares(p, b, 1); G.pairing = false;
-  spend(p, REV_TIME ? +REV_TIME : 2);
+  const x = revExtra(p, [a, b]); G.pairing = true; revealShares(p, a, 1); revealShares(p, b, 1); G.pairing = false;
+  spend(p, (REV_TIME ? +REV_TIME : 2) + x); p.revN = (p.revN || 0) + 1;
 }
 
 // ===== CPU =====
@@ -1078,7 +1085,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.41';
+const APP_VER = 'v0.1.42';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -1570,7 +1577,12 @@ function settleGain(p, id, n) {
   return (bonusShareBase(p, id, p.shares[id] + n) - bonusShareBase(p, id, p.shares[id])) * price(co) * DIV_M1 / 10;
 }
 // お金を残しておく：自分が筆頭か次点の会社の株価の2枚分は、守りに使えるように手元に置いておきたい。下回る分を損と見る
+// 使い切らない（?tac=rsv、試し中。ユーザー：「本命が払えるうちは安いうちに出しちゃっていいんだけど、それで資金がなくなったら元も子もない」。
+// ユーザーの局：CPU が3回目の波までに全部払って所持金100になり、そのあと合併のお金も入らず、終わりまで手札8枚を抱えたまま4位）：
+// 公開したあとに、いちばん高い会社の株1枚分のお金が残らないなら、足りない分を損と見る。残りの波が多いほど重く見る
+const RSV_W = +(PARAMS.get('rsvw') || 1);
 function reserveCost(p, cost) {
+  if (tac(p, 'rsv')) { const keep = G.cos.filter(c => c.active).reduce((a, c) => Math.max(a, price(c)), 0); return Math.max(0, keep - (p.money - cost)) * RSV_W * (WAVES - G.wave) / WAVES; }
   if (!smart2On(p) || S2 === 'settle') return 0;
   const keep = G.cos.filter(c => c.active && bonusShareBase(p, c.id, p.shares[c.id]) > 0).reduce((a, c) => Math.max(a, price(c) * 2), 0);
   return Math.max(0, keep - (p.money - cost)) * .5;
@@ -1695,7 +1707,7 @@ function cpuAct(p) {
     for (let n = 1; n <= have; n++) {
       if (!canReveal(p, CENTRAL, n)) break;
       const v = n * (futureTrust() - centralPrice()) - (tac(p, 'plan') ? (mainShort(p, centralPrice() * n) - mainShort(p)) * PLAN_K : 0);
-      opts.push({ v:(1 - L0) * v, time:revealTime(n), run:() => { revealShares(p, CENTRAL, n); afterAction(); } });
+      opts.push({ v:(1 - L0) * v, time:revealTime(n) + revExtra(p, [CENTRAL]), run:() => { revealShares(p, CENTRAL, n); afterAction(); } });
     }
   }
   // 2社に1枚ずつ
@@ -1704,7 +1716,7 @@ function cpuAct(p) {
     : (futurePrice(G.cos[id]) - price(G.cos[id])) + (bonusShare(p, id, p.shares[id] + 1) - bonusShare(p, id, p.shares[id])) * futurePrice(G.cos[id]);
   for (let i = 0; i < ids2.length; i++) for (let j = i + 1; j < ids2.length; j++) {
     const a = ids2[i], b = ids2[j]; if (!canRevealPair(p, a, b)) continue;
-    opts.push({ v:(1 - L0) * (oneValue(a) + oneValue(b) + settleGain(p, a, 1) + settleGain(p, b, 1) - reserveCost(p, priceOf(a) + priceOf(b))) * (1 + G.wave / WAVES), time:REV_TIME ? +REV_TIME : 2, run:() => { revealPair(p, a, b); afterAction(); } });
+    opts.push({ v:(1 - L0) * (oneValue(a) + oneValue(b) + settleGain(p, a, 1) + settleGain(p, b, 1) - reserveCost(p, priceOf(a) + priceOf(b))) * (1 + G.wave / WAVES), time:(REV_TIME ? +REV_TIME : 2) + revExtra(p, [a, b]), run:() => { revealPair(p, a, b); afterAction(); } });
   }
   for (const id of new Set(p.cards)) {
     if (id === CENTRAL) continue;
@@ -1724,7 +1736,7 @@ function cpuAct(p) {
       if (planOnP && PARAMS.get('dbg') === 'cash' && (hope2 || hold)) TR({ k:'pv', w:G.wave, p:p.id, id, n, pr, main:mainCo(p), hope2:Math.round(hope2), hold:Math.round(hold), v:Math.round(v), money:p.money });
       // 終わりが近いほど、手札の株は紙くずになりやすいので急ぐ
       // 守りきれなければ全部なくなるので、生き残る見込みを掛ける
-      opts.push({ v:(1 - L0) * v * (1 + G.wave / WAVES), time:revealTime(n), rv:id, rn:n, run:() => { revealShares(p, id, n); afterAction(); } });
+      opts.push({ v:(1 - L0) * v * (1 + G.wave / WAVES), time:revealTime(n) + revExtra(p, [id]), rv:id, rn:n, run:() => { revealShares(p, id, n); afterAction(); } });
     }
   }
   // 時間あたりの値打ちがいちばん高い手を選ぶ
@@ -2884,7 +2896,7 @@ function renderMarket() {
     const ok = chosen.length === 1 ? canReveal(me(), chosen[0][0], chosen[0][1]) : canRevealPair(me(), chosen[0][0], chosen[1][0]);
     const row = document.createElement('div'); row.style.cssText = 'width:100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap';
     row.innerHTML = `<span class="note">${chosen.map(([id, k]) => coOf(id).name + '×' + k).join('と')}を公開：${cost}払う${ok ? '' : '（お金が足りない）'}</span>`;
-    const go = document.createElement('button'); go.className = 'btn'; go.style.borderColor = '#7cf9ff'; go.textContent = `公開する（時間${chosen.length === 1 ? revealTime(chosen[0][1]) : (REV_TIME ? +REV_TIME : 2)}）`; go.disabled = !ok;
+    const go = document.createElement('button'); go.className = 'btn'; go.style.borderColor = '#7cf9ff'; go.textContent = `公開する（時間${(chosen.length === 1 ? revealTime(chosen[0][1]) : (REV_TIME ? +REV_TIME : 2)) + revExtra(me(), chosen.map(c => c[0]))}）`; go.disabled = !ok;
     go.onclick = () => { const c2 = chosen; G.revSel = {}; if (c2.length === 1) act(G.viewer || 0, { t:'reveal', id:c2[0][0], n:c2[0][1] }); else act(G.viewer || 0, { t:'pair', a:c2[0][0], b:c2[1][0] }); };
     const no = document.createElement('button'); no.className = 'btn'; no.textContent = 'やめる'; no.onclick = () => { G.revSel = {}; renderMarket(); };
     row.appendChild(go); row.appendChild(no); box.appendChild(row);
@@ -3058,7 +3070,7 @@ const RULES_HTML = () => `<h3>電脳都市のルール（まとめ）</h3>${POWE
 <h4>手番でできること（どれか1つ）</h4><ul>
 <li><b>タイルを置く</b>：手札のタイルには<b>印のマス</b>（盤に点線で出る）と、そのマスのエリアが書いてある。${CELL_EXTRA ? `<b>同じエリアの空いているマス</b>なら、札の時間で置ける。<b>印のマスに置けば時間が${CELL_EXTRA}少ない</b>` : 'そのエリアの空いているマスならどこにでも置ける'}（盤のうすい文字 A〜F がエリア）。盤の光るマスを押すと、そこに置けるタイルが並ぶ。置いたマスは壁になり、敵はよけて進む（遠回りさせるほど守りやすい）。入口から出口への道をふさぐ置き方はできない。置いたら<b>株を1枚手札に入れる</b>。<b>2人のときだけ</b>、置いたあとに手札のタイルを1枚入れ替えてもよい（入れ替えたタイルは山の底へ）。</li>
 <li><b>強化する</b>：盤のタワーを押して強化（3段階まで）。誰が置いたタワーでもよい。強化しても株を1枚手札に入れる。</li>
-<li><b>株を公開する</b>：手札の株にお金（株価）を払って表にする。1社なら何枚でも、2社なら1枚ずつ。時間は${REV_TIME ? `1回につき${REV_TIME}（何枚出しても同じ）` : '1枚につき1'}。<b>敵が来ている間はできない</b>。</li>
+<li><b>株を公開する</b>：手札の株にお金（株価）を払って表にする。1社なら何枚でも、2社なら1枚ずつ。時間は${REV_TIME ? `1回につき${REV_TIME}（何枚出しても同じ）` : '1枚につき1'}${REVX === '0' || REV_TIME ? '' : `。同じ合間に${REVX === 'same' ? '同じ会社の株をもう一度公開すると' : '公開を分けると'}、2回目は時間が${REVX === 'tri' ? '+2、3回目は+5' : '+1、3回目は+2'}と増えていく`}。<b>敵が来ている間はできない</b>。</li>
 <li>印のマスが埋まった（か、道がふさがるなどで置けなくなった）タイルを、まとめて入れ替える（時間は同じ波の1回目が1、2回目が2、3回目が3…と増える）。手札の印のマスが全部そうなったら、時間を使わずに手札を全部入れ替える。</li>
 <li>どれもできないときだけ、タイルを1枚捨てて引き直す（時間1）。</li></ul>
 <h4>色とマーク</h4><p>タイルの<b>色は会社</b>（灰色は会社のないタイル）。<b>黄色の点線に「印」</b>は、あなたの手札のタイルの印のマス（まだ置いていない）。<b>マークはタワーの種類</b>。撃つ光線も会社の色。</p>
@@ -3269,10 +3281,13 @@ let last = performance.now(), hudTimer = 0;
 let paused = false;
 const canPause = () => G.started && !G.over && !G.net && !AUTO;
 // 早回し（ひとりで遊ぶときだけ）：ゲームの時間を2倍・3倍で進める
-let FF = 1;
+// 早回しの設定は、もう一度遊ぶときも引き継ぐ（ユーザー）
+const FF_KEY = 'stock-defense-ff';
+let FF = 1; try { const v = +localStorage.getItem(FF_KEY); if (!AUTO && (v === 2 || v === 3)) FF = v; } catch (e) {}
 const FF_ICON = '<svg width="11" height="12" viewBox="0 0 11 12" style="vertical-align:-1px" aria-label="早回し"><path d="M2 1.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L2.9.7a.6.6 0 0 0-.9.5z" fill="currentColor"/></svg>';
 const drawFF = () => { const b = document.getElementById('ffBtn'); b.innerHTML = FF_ICON + (FF === 1 ? '' : FF); b.style.color = FF > 1 ? '#ffe066' : ''; };
-document.getElementById('ffBtn').onclick = () => { FF = FF % 3 + 1; drawFF(); };
+document.getElementById('ffBtn').onclick = () => { FF = FF % 3 + 1; try { localStorage.setItem(FF_KEY, String(FF)); } catch (e) {} drawFF(); };
+if (FF > 1) drawFF();
 function setPause(on) { paused = on && canPause(); document.getElementById('pauseOv').style.display = paused ? 'flex' : 'none'; }
 document.getElementById('pauseBtn').onclick = () => setPause(true);
 document.getElementById('resumeBtn').onclick = () => setPause(false);
