@@ -294,7 +294,7 @@ const wallCol = (x, gaps) => Array.from({ length:ROWS }, (_, y) => [x, y]).filte
 const COURSES = [
   // 壁なし（エリアに置けるので、広い場所に自分で迷路を作る。Desktop Tower Defense と同じ形）。
   // 前は縦の壁3本を置いていた：wall:[...wallCol(3, [2, 10, 11]), ...wallCol(6, [0, 6, 12]), ...wallCol(9, [2, 3, 9])]
-  { name:'ゲートウェイ', hpMul:.97, note:'左の入口から右の出口（◆）へ敵が進む、基本の盤。じゃまなマスはない',
+  { name:'ゲートウェイ', hpMul:.97, note:'左の入口から右の出口へ敵が進む、基本の盤。じゃまなマスはない',
     entrances:[[0, 6], [0, 7]], exit:[11, 6],
     block:[], fast:[[1, 6], [1, 7], [2, 6]], heal:[[10, 5], [10, 6]] },
   { name:'はさみうち', hpMul:1, early:.7, note:'入口が左上と左下の2か所。10回目までは片方ずつ交互に、そのあとは両方から敵が来る。群れの敵が多い',
@@ -622,6 +622,8 @@ function chosenOf(t) {
 // 区切り：線を越えて進んでいた分は、そのまま引き継ぐ。
 // 使い切らなかった人は線まで進める（使わなかった時間はためられない）。ただし順番は保ち、後ろにいた人ほど先に動く
 function newCycle() {
+  // 集計：波の終わりに、お金が足りず1枚も公開できないのに、盤にある会社の株を手札に2枚以上抱えている人の数（お金が尽きて動けない状態）
+  { const act = G.cos.filter(c => c.active), mn = Math.min(...act.map(c => price(c))); for (const p of G.players) if (act.length && p.money < mn && p.cards.filter(c => c !== CENTRAL && G.cos[c].active).length >= 2) G.stats.stuck = (G.stats.stuck || 0) + 1; }
   const base = G.limit;
   const behind = G.players.filter(p => p.t < base).sort((a, b) => a.t - b.t || b.order - a.order);
   behind.forEach((p, i) => { p.t = base; p.order = 1e9 - i; });  // 線ちょうどにいた人より先に動く
@@ -1092,7 +1094,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.55';
+const APP_VER = 'v0.1.56';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -2410,7 +2412,7 @@ function draw() {
   if (pv) { const k = key(...pv); if (previewCache.k !== k || previewCache.n !== Object.keys(G.tiles).length) { const d = distanceField({ ...G.tiles, [k]:{ type:'wall', x:pv[0], y:pv[1], lv:1 } }); previewCache.k = k; previewCache.n = Object.keys(G.tiles).length; previewCache.f = ENTRANCES.every(([a, b]) => d[key(a, b)] !== undefined) ? pathFlow(d) : null; } if (previewCache.f) drawFlow(previewCache.f, '255,224,102', .9); }
   // 入口と出口
   for (const [x, y] of ENTRANCES) mark(x, y, '#ff4dff', '入');
-  mark(EXIT[0], EXIT[1], '#ffffff', '◆');
+  mark(EXIT[0], EXIT[1], '#ffffff', '出');
   // 自分の番で何も選んでいないとき：手札のどれかを置けるマスを、うすく光らせる（押すと置けるタイルのメニューが出る）
   if (!sel && !G.upSel && !AUTO && G.actor === me() && !G.busy) {
     // 置けるかの判定は重いので、盤か手札が変わったとき（と1秒ごと）だけ数え直す
@@ -3132,8 +3134,8 @@ const HOWTO = [
   () => { const g = COMPANIES[0].color, b = COMPANIES[2].color, [ex, ey] = htXY(3, 1), [tx, ty] = htXY(3, 0);
     return ['全員で守る。勝つのは1人', htSvg(260, 88, htGrid(9, 3, { '3,0':htTile(g), '5,2':htTile(b), '6,0':htTile(b) }) + htIcon(3, 0, 'av') + htIcon(5, 2, 'scan') + htIcon(6, 0, 'fw')
       + `<line x1="${tx}" y1="${ty}" x2="${ex}" y2="${ey}" stroke="${g}" stroke-width="2"/>` + [1, 2, 3].map(c => { const [x, y] = htXY(c, 1); return `<circle cx="${x}" cy="${y}" r="5" fill="#7cf9ff"/>`; }).join('')
-      + htText(htXY(0, 1)[0], htXY(0, 1)[1] + 4, '入', '#ff4dff', 12) + htText(htXY(8, 1)[0], htXY(8, 1)[1] + 4, '◆', '#fff', 13))
-      + `<p>ウイルスが、入口から出口（◆）へ進みます。みんなでタワーを建てて、着く前に倒します。</p><p>出口に着かれるとライフが減ります。0になったら<b>全員の負け</b>です。</p><p>${WAVES}回守りきったら、<b>お金がいちばん多い人</b>の勝ちです。</p>`]; },
+      + htText(htXY(0, 1)[0], htXY(0, 1)[1] + 4, '入', '#ff4dff', 12) + htText(htXY(8, 1)[0], htXY(8, 1)[1] + 4, '出', '#fff', 12))
+      + `<p>ウイルスの群れが、入口（入）から出口（出）へ進みます。みんなでタワーを建てて、出口に着く前に倒します。</p><p>出口に着かれるとライフが減ります。0になったら<b>全員の負け</b>です。</p><p>ウイルスの群れは、全部で${WAVES}回来ます。最後まで守りきったとき、<b>お金がいちばん多い人</b>の勝ちです。</p>`]; },
   () => ['自分の番にやること', `<p>次の3つから、1つ選びます。</p>` + htTable(['やること', '使うもの', 'もらえるもの'], [['<b>タイルを置く</b>', '時間', 'タワーが建つ<br>株を1枚'], ['<b>タワーを強化する</b>', '時間', 'タワーが強くなる<br>株を1枚'], ['<b>株を公開する</b>', 'お金と時間', 'その会社の株主になる']])
     + `<p>お金は、株を公開するときにだけ使います。最初は${START_MONEY}持っています。</p>`],
   () => { const paint = {}; for (const c of [3, 4, 5]) for (const r of [0, 1, 2]) paint[c + ',' + r] = ['#16284a', '#7cf9ff']; paint['4,1'] = ['#3a3413', '#ffe14d', 'stroke-dasharray="4 3"']; paint['3,2'] = htTile(COMPANIES[4].color);
