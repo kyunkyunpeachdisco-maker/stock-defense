@@ -1071,7 +1071,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.39';
+const APP_VER = 'v0.1.40';
 const AHEAD = PARAMS.get('ahead') !== '0', AH_L = +(PARAMS.get('ahl') || .5), AH_B = +(PARAMS.get('ahb') || 1);
 function waveHard(n) {
   const st = WAVE_STYLE[COURSE] || WAVE_STYLE[0], mix = st.mix(effWave(n)); let rest = 1, a = 0;
@@ -1149,7 +1149,7 @@ const TR = PARAMS.get('dbg') ? o => (G.stats.tr = G.stats.tr || []).push(o) : ()
 const TAC = new Set((PARAMS.get('tac') || '').split(',').filter(Boolean));
 // 暫定で、つよい CPU の標準にした戦術（?lead=0 で外す）：margin・focus・refound（筆頭を固める・筆頭を取りにいく・立て直し）。
 // 席を入れ替えた300組で、平均順位 2.40 対 2.60（誤差の3.7倍）、終わりのボーナスが約 +1200
-const STD_TAC = PARAMS.get('lead') === '0' ? new Set() : new Set(['margin', 'focus', 'refound', 'full', 'rst', 'xchg', 'cash2']);   // full・rst・xchg は、出た場面を数局読んでから比べた：100組で順位 2.36 対 2.64（2.9倍）、終わりのボーナス +1800、守りは全員どうしで 87 → 90
+const STD_TAC = PARAMS.get('lead') === '0' ? new Set() : new Set(['margin', 'focus', 'refound', 'full', 'rst', 'xchg', 'cash2', 'rdw3']);   // full・rst・xchg は、出た場面を数局読んでから比べた：100組で順位 2.36 対 2.64（2.9倍）、終わりのボーナス +1800、守りは全員どうしで 87 → 90
 const tac = (p, name) => (TAC.has(name) && tryOn(p)) || (STD_TAC.has(name) && !!p.strong);
 const UPCOV = PARAMS.get('upcov') !== '0';   // 敵の道に届かないタワーを、株をもらうためだけに強化しない
 const keepFp = (p, id, fp) => p.keep && p.keep[id] ? Math.max(fp, price(G.cos[id]) + 400) : fp;
@@ -1726,6 +1726,12 @@ function cpuAct(p) {
   if (PARAMS.get('dbg') === 'l0' && best) TR({ k:'l0', w:G.wave, inw:waveActive(), lives:G.lives, L0:+L0.toFixed(3), p:p.id, kind:best.rv !== undefined ? 'rev' : best.hi !== undefined ? 'place' : 'other', t:best.time, v:Math.round(best.v) });
   if (PARAMS.get('dbg') && best) (G.stats.bs = G.stats.bs || []).push(Math.round(best.score));
   if (cardFull && best) TR({ k:'full', w:G.wave, p:p.id, v:Math.round(best.v), t:best.time, kind:best.hi !== undefined ? 'place:' + p.hand[best.hi].type : 'other', money:p.money, bestCard:Math.round(bestCard) });
+  // 重いタイルを引き直す（暫定でつよい CPU の標準。100組で順位 2.47 対 2.53・誤差の0.7倍で差は出ていないが、守りは悪くならなかったので暫定で入れた。ユーザー：「重いタイルばかりになると、どうでもいい所にいやいや建てるしかなかった」。ユーザーの局：一斉駆除を時間1で引き直した）：
+  // いちばん良い手が、重いタイル（時間4以上）を値打ちの低い所に置く手のとき、置かずにそのタイルを引き直す（同じ波で2回まで）
+  if (tac(p, 'rdw3') && REDRAW && G.bag.length && best && best.hi !== undefined && best.time >= 4 && best.score < RDW_T && renewTime(p) <= 2) {
+    const h = p.hand.map(t => t.type), hv = p.hand.reduce((bi, t, i) => TYPES[t.type].time > TYPES[p.hand[bi].type].time ? i : bi, best.hi), out = h[hv]; redrawTile(p, hv);   // 手札でいちばん重いタイルを戻す
+    TR({ k:'rd3', w:G.wave, inw:waveActive(), p:p.id, hand:h.join(','), out, got:p.hand[p.hand.length - 1].type, sc:Math.round(best.score), t:best.time, L0:+L0.toFixed(2) }); return afterAction();
+  }
   if (best && best.v > 0) return best.run();
   // どの手も得に見えなくても、置けるタイルがあればパスより置く（守りの火力がいちばん増える手）
   const fallback = opts.filter(o => o.time <= 5).sort((a, b) => b.v - a.v)[0];
@@ -1776,6 +1782,7 @@ const renewTime = p => (p.renewN || 0) + 1;
 // 引き直し（?redraw=0 でなし）：手番の行動として、手札のタイル1枚を山の底に戻して1枚引く。株はもらえない。
 // 時間は、印が使えないタイルの入れ替えと合わせて、同じ波の1回目は1、2回目は2、3回目は3…（ユーザー：重いタイルばかりになると、どうでもいい所にいやいや建てるしかなかった）
 const REDRAW = PARAMS.get('redraw') !== '0';
+const RDW_T = +(PARAMS.get('rdwt') || 300);
 function redrawTile(p, idx) {
   const rt = renewTime(p), t = p.hand[idx]; p.renewN = (p.renewN || 0) + 1;
   rec(p, 'redraw', { tile:t.type, time:rt });
