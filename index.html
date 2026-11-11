@@ -637,6 +637,8 @@ const CREDIT_DMG = PARAMS.get('credit') === 'dmg';
 const normalTime = type => TYPES[type].time + CELL_EXTRA;   // 札に出すふつうの時間（印のマスならこれより CELL_EXTRA 少ない）
 const placeTime = (t0, x, y) => TYPES[t0.type].time + (CELL_EXTRA && (x !== t0.x || y !== t0.y) ? CELL_EXTRA : 0);
 function spend(p, time) { p.t += time; p.order = ++G.seq + 100; }
+// この手で線を1人ぶん以上越えると、次の波は一度も手番が来ない（越えた分は持ち越すので。6人だと1人4なので起きやすい）。打つ前にボタンに出す
+const skipWarn = time => me() && me().t + time >= G.limit + budget() ? '・次の波は手番なし' : '';
 function waveActive() { return G.spawnQueue.length > 0 || G.enemies.length > 0; }
 
 // 2人のときだけ：タイルを置いたあと、任意で手札のタイルを1枚入れ替えられる（ユーザー）。入れ替えたタイルは山の底へ。
@@ -1085,7 +1087,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.44';
+const APP_VER = 'v0.1.45';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -2728,11 +2730,11 @@ function renderHand() {
   if (up) {
     pb.style.display = '';
     pb.disabled = !(mine && canUpgrade(up));
-    pb.textContent = canUpgrade(up) ? `${label(up.x, up.y)} の${TYPES[up.type].name}を強化（段階${up.lv}→${up.lv + 1}、時間${TYPES[up.type].time}）` : (up.type === 'node' ? 'ノードは強化できない' : 'これ以上強化できない');
+    pb.textContent = canUpgrade(up) ? `${label(up.x, up.y)} の${TYPES[up.type].name}を強化（段階${up.lv}→${up.lv + 1}、時間${TYPES[up.type].time}${skipWarn(TYPES[up.type].time)}）` : (up.type === 'node' ? 'ノードは強化できない' : 'これ以上強化できない');
   } else {
     pb.style.display = sel && ok.ok && tg ? '' : 'none';
     pb.disabled = !(mine && ok && ok.ok && tg);
-    pb.textContent = sel ? (ok.ok ? (tg ? `${label(...tg)} に置く（時間${placeTime(sel, ...tg)}）` : '盤で置くマスを選ぶ') : `置けない：${ok.why}`) : 'タイルを選ぶ（盤の置かれたタイルを押すと強化）';
+    pb.textContent = sel ? (ok.ok ? (tg ? `${label(...tg)} に置く（時間${placeTime(sel, ...tg)}${skipWarn(placeTime(sel, ...tg))}）` : '盤で置くマスを選ぶ') : `置けない：${ok.why}`) : 'タイルを選ぶ（盤の置かれたタイルを押すと強化）';
     if (G.taking) { pb.disabled = true; pb.textContent = '株の場から1枚選んでください'; }
     if (G.exchanging) { pb.disabled = true; pb.textContent = '投資信託に替えるか選んでください'; }
   }
@@ -2777,7 +2779,7 @@ function renderMenu() {
   if (m.tower) {
     const t = G.tiles[key(m.x, m.y)]; if (!t) { el.style.display = 'none'; return; }
     h += `<div class="mh"><b style="color:var(--text)">${TYPES[t.type].name}</b>（段階${t.lv}）<br>${TYPE_SHORT[t.type]}</div>`;
-    if (canUpgrade(t)) h += `<button class="mi" data-up="1" ${mine ? '' : 'disabled'}><img src="${iconUrl(t.type)}" alt="">強化する<span class="t">時間${TYPES[t.type].time}</span></button>`;
+    if (canUpgrade(t)) h += `<button class="mi" data-up="1" ${mine ? '' : 'disabled'}><img src="${iconUrl(t.type)}" alt="">強化する<span class="t">時間${TYPES[t.type].time}${skipWarn(TYPES[t.type].time)}</span></button>`;
     else h += `<div class="mh">${t.type === 'node' ? 'ノードは強化できない' : 'これ以上強化できない'}</div>`;
   } else {
     const opts = buildOptions(m.x, m.y);
@@ -2785,7 +2787,7 @@ function renderMenu() {
     h += `<div class="mh">${label(m.x, m.y)} に置く${mine ? '' : '（あなたの番になったら）'}</div>`;
     const wt = opts.length && !canPlace(opts[0][0]).spots.some(s2 => s2.x === m.x && s2.y === m.y);   // 敵が通っているマス
     if (wt) h += '<div class="mh" style="color:#ffe9a8">敵が通っています。選ぶと、通り過ぎたときに建ちます</div>';
-    h += opts.map(([t, i]) => `<button class="mi" data-i="${i}" ${mine ? '' : 'disabled'}><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}<span class="t">${CELL_EXTRA && t.x === m.x && t.y === m.y ? '<b style="color:#ffe9a8">印のマス</b> ' : ''}時間${placeTime(t, m.x, m.y)}</span></button>`).join('');
+    h += opts.map(([t, i]) => `<button class="mi" data-i="${i}" ${mine ? '' : 'disabled'}><img src="${iconUrl(t.type)}" alt="">${TYPES[t.type].name}<span class="t">${CELL_EXTRA && t.x === m.x && t.y === m.y ? '<b style="color:#ffe9a8">印のマス</b> ' : ''}時間${placeTime(t, m.x, m.y)}${skipWarn(placeTime(t, m.x, m.y))}</span></button>`).join('');
   }
   el.innerHTML = h; el.style.display = 'block';
   el.querySelector('[data-c]').onclick = () => { G.menu = null; G.upSel = null; G.selected = null; G.target = null; renderAll(); };
@@ -2903,7 +2905,7 @@ function renderMarket() {
     const ok = chosen.length === 1 ? canReveal(me(), chosen[0][0], chosen[0][1]) : canRevealPair(me(), chosen[0][0], chosen[1][0]);
     const row = document.createElement('div'); row.style.cssText = 'width:100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap';
     row.innerHTML = `<span class="note">${chosen.map(([id, k]) => coOf(id).name + '×' + k).join('と')}を公開：${cost}払う${ok ? '' : '（お金が足りない）'}</span>`;
-    const go = document.createElement('button'); go.className = 'btn'; go.style.borderColor = '#7cf9ff'; go.textContent = `公開する（時間${(chosen.length === 1 ? revealTime(chosen[0][1]) : (REV_TIME ? +REV_TIME : 2)) + revExtra(me(), chosen.map(c => c[0]))}）`; go.disabled = !ok;
+    const go = document.createElement('button'); go.className = 'btn'; go.style.borderColor = '#7cf9ff'; const rvT = (chosen.length === 1 ? revealTime(chosen[0][1]) : (REV_TIME ? +REV_TIME : 2)) + revExtra(me(), chosen.map(c => c[0])); go.textContent = `公開する（時間${rvT}${skipWarn(rvT)}）`; go.disabled = !ok;
     go.onclick = () => { const c2 = chosen; G.revSel = {}; if (c2.length === 1) act(G.viewer || 0, { t:'reveal', id:c2[0][0], n:c2[0][1] }); else act(G.viewer || 0, { t:'pair', a:c2[0][0], b:c2[1][0] }); };
     const no = document.createElement('button'); no.className = 'btn'; no.textContent = 'やめる'; no.onclick = () => { G.revSel = {}; renderMarket(); };
     row.appendChild(go); row.appendChild(no); box.appendChild(row);
@@ -3073,7 +3075,7 @@ function chooseDisposal(p, co, sv, pr, n, maxPairs, cb) {
 // ルールのまとめ
 const RULES_HTML = () => `<h3>電脳都市のルール（まとめ）</h3>${POWERS ? `<h4>会社の能力</h4><p class="note">能力はその会社のタワー全部に効きます。吸収された会社の能力は消えます。</p><ul>${POWER.map((w, i) => `<li>${COMPANIES[i].name}（${w.name}）：${w.desc}</li>`).join('')}</ul>` : ''}
 <h4>目的</h4><p>ウイルス（敵）の波を全員で${WAVES}回守りきり、そのとき<b>いちばんお金の多い人</b>の勝ち。ライフが0になったら<b>全員の負け</b>。</p>
-<h4>手番の順番</h4><p>時間トラックで<b>いちばん後ろの人</b>が次に動く。行動するとその時間だけ前へ進む。1つの波で1人が使える時間は、全員の合計が24になるように人数で決まる（4人なら6、2人なら12、6人なら4）。<b>最初の波の前だけは2倍</b>。使い切ったら波が終わるまで待つ。開始画面で「持ち時間：あり」を選んだときは、波ごとに一人ひとりに持ち時間（最初の波の前は90秒、あとは45秒）がある。自分の番の間だけ減り、なくなったらその波の残りの手番は飛ばす。全員の手番が終わって敵がいなくなったら、次の波が来る。</p>
+<h4>手番の順番</h4><p>時間トラックで<b>いちばん後ろの人</b>が次に動く。行動するとその時間だけ前へ進む。1つの波で1人が使える時間は、全員の合計が24になるように人数で決まる（4人なら6、2人なら12、6人なら4）。<b>最初の波の前だけは2倍</b>。使い切ったら波が終わるまで待つ。線を越えた分は次の波に持ち越すので、1人ぶん以上越えると次の波は手番が来ない（その手のボタンに「次の波は手番なし」と出る）。開始画面で「持ち時間：あり」を選んだときは、波ごとに一人ひとりに持ち時間（最初の波の前は90秒、あとは45秒）がある。自分の番の間だけ減り、なくなったらその波の残りの手番は飛ばす。全員の手番が終わって敵がいなくなったら、次の波が来る。</p>
 <h4>手番でできること（どれか1つ）</h4><ul>
 <li><b>タイルを置く</b>：手札のタイルには<b>印のマス</b>（盤に点線で出る）と、そのマスのエリアが書いてある。${CELL_EXTRA ? `<b>同じエリアの空いているマス</b>なら、札の時間で置ける。<b>印のマスに置けば時間が${CELL_EXTRA}少ない</b>` : 'そのエリアの空いているマスならどこにでも置ける'}（盤のうすい文字 A〜F がエリア）。盤の光るマスを押すと、そこに置けるタイルが並ぶ。置いたマスは壁になり、敵はよけて進む（遠回りさせるほど守りやすい）。入口から出口への道をふさぐ置き方はできない。置いたら<b>株を1枚手札に入れる</b>。<b>2人のときだけ</b>、置いたあとに手札のタイルを1枚入れ替えてもよい（入れ替えたタイルは山の底へ）。</li>
 <li><b>強化する</b>：盤のタワーを押して強化（3段階まで）。誰が置いたタワーでもよい。強化しても株を1枚手札に入れる。</li>
