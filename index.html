@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>電脳都市 - タワーディフェンス × 株ゲー</title>
 <meta name="apple-mobile-web-app-title" content="電脳都市">
-<meta name="description" content="タワーを建ててウイルスの波から街を守り、育った会社の株でいちばんのお金持ちを目指す。守るのは全員で協力、勝つのは1人。CPUと、またはスマホ同士で2〜6人">
+<meta name="description" content="タワーを建ててウイルスの波から街を守り、育った会社の株でいちばんのお金持ちを目指す。守るのは全員で協力、勝つのは1人。">
 <meta name="theme-color" content="#05070d">
 <link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta property="og:title" content="電脳都市 - タワーディフェンス × 株ゲー">
-<meta property="og:description" content="タワーを建ててウイルスの波から街を守り、育った会社の株でいちばんのお金持ちを目指す。守るのは全員で協力、勝つのは1人。CPUと、またはスマホ同士で2〜6人">
+<meta property="og:description" content="タワーを建ててウイルスの波から街を守り、育った会社の株でいちばんのお金持ちを目指す。守るのは全員で協力、勝つのは1人。">
 <meta property="og:url" content="https://kyunkyunpeachdisco-maker.github.io/stock-defense/">
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://kyunkyunpeachdisco-maker.github.io/stock-defense/icons/ogp.png">
@@ -1092,7 +1092,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.50';
+const APP_VER = 'v0.1.51';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
