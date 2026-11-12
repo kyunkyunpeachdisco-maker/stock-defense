@@ -134,7 +134,7 @@
   <div id="info" class="note" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:2px 2px 4px"></div>
   <div id="tabs"><button class="btn on" data-tab="op">操作</button><button class="btn" data-tab="cos">会社</button><button class="btn" data-tab="log">記録</button></div>
   <div class="grp" id="gTrack">
-  <div class="sec">時間トラック<span class="q" data-tip="丸は1人ひとりのコマです。コマがいちばん左にある人が、次に行動します。行動すると、使った時間の分だけコマが右へ進みます。コマがピンクの線に着くか、線を越えた人は、次のWAVEが終わるまで行動できません">？</span></div>
+  <div class="sec">時間トラック<span class="q" data-tip="丸は、プレイヤー1人ひとりのコマだと考えてください。コマがいちばん左にある人が、次に行動します。行動すると、使った時間の分だけコマが右へ進みます。コマがピンクの線に着くか、線を越えた人は、次のWAVEが終わるまで行動できません">？</span></div>
   <div id="track"></div>
   </div>
   <div class="grp" id="gHand">
@@ -1106,7 +1106,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.80';
+const APP_VER = 'v0.1.81';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -3125,7 +3125,7 @@ const HOWTO = [
       + htSvg(260, 74, `<line x1="15" y1="30" x2="245" y2="30" stroke="#2b3a66" stroke-width="6" stroke-linecap="round"/><line x1="180" y1="10" x2="180" y2="50" stroke="#ff4dff" stroke-width="2"/>`
       + xs.map((x, i) => `<circle cx="${x}" cy="30" r="8" fill="${cols[i]}"/>`).join('') + htText(40, 52, '↑', '#ffe066', 12) + htText(44, 66, '次に行動する人', '#ffe066', 11) + htText(180, 66, '使える時間の上限', '#ff4dff', 10))
       + htCap('画面にある「時間トラック」')
-      + `<p>上の絵が時間トラックです。丸は、プレイヤー1人ひとりのコマです。あなたが時間を使うと、あなたのコマが、使った時間の分だけ右へ進みます。</p>`
+      + `<p>上の絵が時間トラックです。丸は、プレイヤー1人ひとりのコマだと考えてください。あなたが時間を使うと、あなたのコマが、使った時間の分だけ右へ進みます。</p>`
       + `<p>次に行動するのは、<b>コマがいちばん左にあるプレイヤー</b>です。</p>`
       + `<p>ピンクの線は、1人が次のWAVEまでに使える時間の上限です。あなたのコマがピンクの線に着くか、線を越えると、あなたは次のWAVEが終わるまで行動できません。全員のコマがピンクの線に着くか、線を越えると、WAVEが来ます。</p>`
       + htTable(['遊ぶ人数', '2人', '3人', '4人', '5人', '6人'], [['1人が次のWAVEまでに<br>使える時間', ...[2, 3, 4, 5, 6].map(k => PARAMS.get('tt') ? Math.round(+PARAMS.get('tt') / k) : Math.max(5, Math.round(24 / k)))]])
