@@ -128,6 +128,7 @@
     <button class="btn" id="ffBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="早回し。押すたびに1倍、2倍、3倍と切り替わります。持ち時間は早回ししても同じ速さで減ります"><svg width="11" height="12" viewBox="0 0 11 12" style="vertical-align:-1px" aria-label="早回し"><path d="M2 1.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L2.9.7a.6.6 0 0 0-.9.5z" fill="currentColor"/></svg></button>
     <button class="btn" id="soundBtn" style="padding:4px 8px;font-size:13px" data-tip="効果音のオンとオフ"></button>
     <button class="btn" id="helpBtn">？<span class="hl"> 遊び方</span></button>
+    <button class="btn" id="menuBtn" style="padding:4px 10px;font-size:13px" aria-label="メニュー">≡<span class="hl"> メニュー</span></button>
   </div>
   <div style="position:relative"><canvas id="cv"></canvas><div id="bmenu"></div></div>
   <div id="turn"></div>
@@ -399,6 +400,7 @@ const G = {
   lives: LIVES, wave: 0, waveTimer: FIRST_WAIT, spawnQueue: [], spawnTimer: 0, over:false, result:'',
   calib: 1, waveLeaks: 0, limit: 6, roundOrder: [], deck: [], market: [], stats:{ merges:0, bought:0, upgrades:0, placed:0 }, actor: null, busy:false, seq:0, log:[], selected:null, dist:null,
 };
+const G0 = JSON.stringify(G);   // 最初の形。最初からやり直すときに、G をこの形に戻す
 
 // 乱数：?seed= を付けると毎回同じ並びになる（試しで、同じ条件どうしを比べるため）。札や袋の並び（set）・敵の出方（wave）・敵の動き（move）・CPU の迷い（cpu）は別々の並びにして、打ち方を変えても場と敵はなるべく同じになるようにする
 function seeded(a) { return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
@@ -1106,7 +1108,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.82';
+const APP_VER = 'v0.1.83';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -2674,7 +2676,7 @@ function renderTrack() {
 // 「今やること」：いまの場面で何ができるかを1〜2行で出す
 function turnText() {
   const p = G.actor;
-  if (G.over) return ['終わりました', '<button class="btn" data-end="result">結果を見る</button> <button class="btn" data-end="again">もう一度</button> <button class="btn" data-end="export">記録を書き出す</button>'];
+  if (G.over) return ['終わりました', '<button class="btn" data-end="result">結果を見る</button> ' + (isClient() ? '' : '<button class="btn" data-end="again">もう一度</button> ') + '<button class="btn" data-end="export">記録を書き出す</button>'];
   const left = AUTO ? '' : `使える時間：あと${Math.max(0, G.limit - me().t)}`;
   if (!p) return ['全員の番が終わりました', 'WAVEが終わると、また行動できます'];
   if (p !== me()) return [`${p.name} の番`, left];
@@ -2705,7 +2707,7 @@ function renderTurn() {
   // 同じなら作り直さない（0.25秒ごとにボタンを作り直すと、押しそこねたり重くなったりする）
   if (el.dataset.html !== html) {
     el.dataset.html = html; el.innerHTML = html;
-    document.querySelectorAll('#turn [data-end]').forEach(bt => bt.onclick = () => bt.dataset.end === 'result' ? showResult() : bt.dataset.end === 'export' ? exportRecord() : location.reload());
+    document.querySelectorAll('#turn [data-end]').forEach(bt => bt.onclick = () => bt.dataset.end === 'result' ? showResult() : bt.dataset.end === 'export' ? exportRecord() : playAgain());
   }
   renderGuide();
 }
@@ -3207,7 +3209,7 @@ const HOWTO = [
       ['<b>場の株券を並べ直す</b>', '場に並んだ5枚の株券を山札に戻して、新しく5枚を並べる。場の5枚の中に、盤にある会社の株券が1枚もないときだけできる']])
     + `<p>使う時間は、どれも、次のWAVEが来るまでの1回目が1、2回目が2、3回目が3です。${CELL_EXTRA ? 'タイルの2つは、合わせて回数を数えます。' : ''}場の株券の並べ直しは、タイルとは別に回数を数えます。</p>`
     + `<p class="note">2人で遊ぶときだけ、タイルを置いたあとに、手札のタイルを1枚、時間を使わずに引き直すことができます。</p>`],
-  () => ['画面のボタン', htTable(['画面の上のボタン', 'はたらき'], [['縦棒2本', 'ゲームを一時停止します。1人で遊ぶときだけ使えます'], ['三角', '早回しします。押すたびに、1倍、2倍、3倍と切り替わります。1人で遊ぶときだけ使えます'], ['♪', '効果音を鳴らすか、消すかを切り替えます'], ['？', 'この「遊び方」を開きます']])
+  () => ['画面のボタン', htTable(['画面の上のボタン', 'はたらき'], [['縦棒2本', 'ゲームを一時停止します。1人で遊ぶときだけ使えます'], ['三角', '早回しします。押すたびに、1倍、2倍、3倍と切り替わります。1人で遊ぶときだけ使えます'], ['♪', '効果音を鳴らすか、消すかを切り替えます'], ['？', 'この「遊び方」を開きます'], ['≡', 'メニューを開きます。ゲームを最初からやり直すことと、タイトルの画面に戻ることができます']])
     + `<p>画面の見出しや数字の横にある「？」は、指で長押しするか、マウスのカーソルを合わせると、その項目の説明が出ます。</p>`
     + `<p><b>操作の案内</b>：自分の番のとき、次に操作する場所（タイルの手札、株券の場、「置く」ボタンなど）のまわりが、水色に光ります。</p>`],
 ];
@@ -3222,6 +3224,7 @@ function showHowTo(i = 0, onClose) {
   document.getElementById('htClose').onclick = close;
 }
 document.getElementById('helpBtn').onclick = () => showHowTo(0);
+document.getElementById('menuBtn').onclick = () => showMenu();
 const soundBtn = document.getElementById('soundBtn');
 const drawSoundBtn = () => { soundBtn.textContent = soundOn ? '♪' : '♪×'; soundBtn.style.opacity = soundOn ? 1 : .5; };
 soundBtn.onclick = () => { soundOn = !soundOn; try { localStorage.setItem(SOUND_KEY, soundOn ? '1' : '0'); } catch (e) {} drawSoundBtn(); if (soundOn) sfx('coin'); };
@@ -3249,7 +3252,51 @@ document.addEventListener('pointerup', () => clearTimeout(tipTimer));
 document.addEventListener('scroll', hideTip, true);
 
 // 結果を閉じて、盤や会社のタブを見られる（「もう一度」だけだと、閉じると始めの画面に戻っていた。ユーザー）。下の「結果を見る」でまた開く
-function showResult() { modal(`<h3>${G.lives > 0 ? '最終決算' : '全員の負け'}</h3><pre style="white-space:pre-wrap">${G.result}</pre>`, [['盤と会社を見る', () => { document.getElementById('modal').style.display = 'none'; }], ['もう一度', () => location.reload()]]); }
+function showResult() { modal(`<h3>${G.lives > 0 ? '最終決算' : '全員の負け'}</h3><pre style="white-space:pre-wrap">${G.result}</pre>`, [['盤と会社を見る', () => { document.getElementById('modal').style.display = 'none'; }], ...(isClient() ? [] : [['もう一度', () => playAgain()]])]); }
+// メニュー：最初からやり直す・タイトルに戻る（通信で遊ぶとき、読み込み直すと部屋から出てしまうため。ユーザー）
+const isHost = () => !!(G.net && G.net.role === 'host'), isClient = () => !!(G.net && G.net.role === 'client');
+// 終わったあとの「もう一度」：ホストは同じ部屋のままやり直す。1人で遊ぶときは、設定を選び直せるようにタイトルへ戻る
+const playAgain = () => isHost() ? restartGame() : location.reload();
+function resetG() {
+  const net = G.net;
+  for (const k of Object.keys(G)) delete G[k];
+  Object.assign(G, JSON.parse(G0));
+  if (net) G.net = net;
+  G.boardDirty = true; lastTileCount = -1; shownChoice = 0; peeking = false; paused = false; cpuTimer = 0; lastActor = null; branchMemo = null; fpCache = null; printedMemo.k = null;
+  document.getElementById('backChoice').style.display = 'none'; document.getElementById('pauseOv').style.display = 'none';
+}
+function restartGame() {
+  const nt = isHost() ? G.net : null, old = G.players.map(q => ({ name:q.name, remote:!!q.remote }));
+  resetG(); clearSave();
+  if (nt) nt.fx = [];
+  startGame();
+  if (nt) {
+    G.players[0].name = nt.hostName;
+    G.players.forEach((q, i) => { if (i && old[i] && old[i].remote) { q.remote = true; q.name = old[i].name; q.cpu = !(nt.peers[i] && nt.peers[i].open); } });
+    const names = G.players.map(q => q.name);
+    for (const [seat, conn] of Object.entries(nt.peers)) if (conn.open) conn.send({ type:'start', course:COURSE, n:NPLAYERS, powers:POWERS, diff:DIFF, noLimit:NO_LIMIT, seat:+seat, names, room:nt.room, key:nt.keys[seat] });
+    log('ホストが、最初からやり直した');
+  }
+  renderAll();
+}
+function toTitle() {
+  saveGame();
+  if (G.net && G.net.peer) { try { G.net.peer.destroy(); } catch (e) {} }
+  location.href = location.pathname;
+}
+function showMenu() {
+  const back = () => { shownChoice = 0; renderChoice(); };
+  const ask = (html, yes, f) => modal(html, [[yes, f, '#7cf9ff'], ['やめる', showMenu]]);
+  const playing = G.started && !G.over;
+  const restart = ['最初からやり直す', () => ask(`<h3>最初からやり直す</h3><p>${playing ? '今のゲームをやめて、' : ''}${isHost() ? '同じ部屋、同じ参加者、同じ設定で、' : '同じ設定で、'}新しいゲームを始めます。</p>`, 'やり直す', restartGame)];
+  const title = [isClient() ? '部屋を出て、タイトルに戻る' : 'タイトルに戻る', () => ask('<h3>タイトルに戻る</h3>' + (!playing ? '<p>タイトルの画面に戻ります。</p>'
+    : isHost() ? '<p>タイトルの画面に戻ると、この部屋は閉じます。</p><p>今のゲームは、タイトルの「部屋を開き直す」を押すと、同じ参加者で続きから遊べます。</p>'
+    : isClient() ? '<p>部屋を出て、タイトルの画面に戻ります。あなたの席は、CPU が代わりに遊びます。</p><p>タイトルの「部屋に戻る」を押すと、同じ席に戻れます。</p>'
+    : '<p>タイトルの画面に戻ります。</p><p>今のゲームは、タイトルの「続きから」を押すと、最後に終わったWAVEのあとから遊べます。</p>'), 'タイトルに戻る', toTitle)];
+  modal('<h3>メニュー</h3>' + (isClient() ? '<p class="note">最初からやり直すことができるのは、部屋を作ったホストだけです。</p>' : ''),
+    [...(isClient() || !G.started ? [] : [restart]), title, ['閉じる', back]]);
+  document.querySelectorAll('#mbox .row button').forEach(b => { b.style.width = '100%'; });
+}
 
 
 // ===== 何人かで遊ぶ（PeerJS。ホストが計算し、参加者には様子を送る。テンプレートの「端末間同期」の手順どおり） =====
@@ -3387,7 +3434,7 @@ function joinRoom(room, name, back) {   // back：戻るときの { seat, key }
       conn.on('data', d => {
         if (d.type === 'reject') modal('<h3>参加できませんでした</h3><p class="note">ホストに断られたか、もう始まっています</p>', [['戻る', () => location.reload()]]);
         if (d.type === 'start') {
-          useCourse(d.course); NPLAYERS = d.n; POWERS = !!d.powers; DIFF = DIFFS[d.diff] ? d.diff : 'normal'; NO_LIMIT = !!d.noLimit; setup(); resize();
+          useCourse(d.course); NPLAYERS = d.n; POWERS = !!d.powers; DIFF = DIFFS[d.diff] ? d.diff : 'normal'; NO_LIMIT = !!d.noLimit; resetG(); setup(); resize();
           G.viewer = d.seat; G.net = { role:'client', send:x => conn.send(x), fx:[] };
           G.players.forEach((q, i) => { q.name = d.names[i]; q.cpu = false; });
           G.started = true; hideModal(); renderAll(); renderLog(); retryCount = 0;
@@ -3597,6 +3644,7 @@ function showStart() {
 useCourse(COURSE); resize(); G.dist = distanceField();
 if (AUTO || PARAMS.has('start')) startGame(); else if (PARAMS.has('room')) showJoin(PARAMS.get('room')); else showStart();
 if (PARAMS.has('howto')) showHowTo(+PARAMS.get('howto') || 0);
+if (PARAMS.has('menu')) showMenu();   // メニューを直接開く（見た目の確認用）
 if (PARAMS.has('drawn')) setTimeout(() => showDrawn(coOf(+PARAMS.get('drawn')), () => {}), 500);   // 山札から引いた株の窓を直接開く（見た目の確認用）   // 遊び方のページを直接開く（見た目の確認用）
 requestAnimationFrame(loop);
 window.__G = G;
