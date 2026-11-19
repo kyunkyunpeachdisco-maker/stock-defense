@@ -22,6 +22,9 @@
   html, body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif; }
   body { min-height:100dvh; display:flex; flex-direction:column; align-items:center; }
   #wrap { width:100%; max-width:560px; padding:6px; }
+  #colL, #colR { display:contents; }   /* ふだんは1列（中の要素が #wrap にそのまま並ぶ。スマホで上の帯を固定するのにも要る） */
+  /* PC の広い画面：左に上の帯・盤・案内、右に時間トラック・手札・株券・会社・記録の2列（前は1列で、株価や手札を見るのに上下のスクロールが多かった） */
+  @media (min-width:960px) { #wrap { max-width:1060px; display:flex; gap:14px; align-items:flex-start; } #colL { display:block; flex:0 0 548px; min-width:0; } #colR { display:block; flex:1 1 0; min-width:0; max-width:480px; } }
   html { overflow-x:hidden; } body { overflow-x:clip; }   /* どれかが長くなっても、ページの幅は画面の幅のまま（body を hidden にすると、上の帯の固定が効かなくなる） */
   #top { min-width:0; }
   #top #wave { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:0 1 auto; }
@@ -47,7 +50,7 @@
   @media (max-width:480px) { .pline { gap:7px !important; } .pline .btn { min-width:40px; min-height:40px; } }
   /* 案内の枠：タイルの性能の説明は、スマホでは「くわしく」を押したときだけ出す（選ぶたびに枠が伸びて、手札が下にずれていた） */
   #turn .mbtn { display:none; margin-left:4px; padding:1px 8px; font-size:11px; }
-  @media (max-width:680px) { #turn .more { display:none; } #turn.open .more { display:inline; } #turn .mbtn { display:inline-block; } #turn.open .mbtn { display:none; } }
+  @media (max-width:680px) { #turn .more { display:none; } #turn.open .more { display:inline; } #turn .mbtn { display:inline-block; } }
   #life { color:#ff6b8b; } #wave { color:#7cf9ff; } #money { color:#ffe066; }
   canvas { display:block; width:100%; touch-action:manipulation; background:radial-gradient(circle at 50% 45%, #0b1430, #04060c 70%); border-radius:8px; }
   #track { position:relative; height:30px; margin:6px 0 2px; background:var(--panel); border-radius:6px; overflow:hidden; }
@@ -129,7 +132,7 @@
 </style>
 </head>
 <body>
-<div id="wrap">
+<div id="wrap"><div id="colL">
   <div id="top">
     <span id="wave" class="big" data-tip="いま何回目のWAVEか。WAVEとWAVEの間に、全員が順番に行動します"></span>
     <span id="life" class="big" data-tip="全員で共有するライフ。ウイルスが出口に着くと減り、0になると全員の負けです"></span>
@@ -145,6 +148,7 @@
   <div style="position:relative"><canvas id="cv"></canvas><div id="bmenu"></div></div>
   <div id="turn"></div>
   <div id="info" class="note" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:2px 2px 4px"></div>
+  </div><div id="colR">
   <div id="tabs"><button class="btn on" data-tab="op">操作</button><button class="btn" data-tab="cos">会社</button><button class="btn" data-tab="log">記録</button></div>
   <div class="grp" id="gTrack">
   <div class="sec">時間トラック<span class="q" data-tip="丸は、プレイヤー1人ひとりのコマだと考えてください。コマがいちばん左にある人が、次に行動します。行動すると、使った時間の分だけコマが右へ進みます。コマがピンクの線に着くか、線を越えた人は、次のWAVEが終わるまで行動できません">？</span></div>
@@ -170,7 +174,7 @@
   <table id="cos"></table>
   </div>
   <div class="grp" id="gLog"><button class="btn" id="exportBtn" style="margin:4px 0">記録を書き出す（JSON）</button><div id="log"></div></div>
-</div>
+</div></div>
 <div id="modal"><div class="box" id="mbox"></div></div>
 <div id="pauseOv" style="position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:20"><div style="font-size:28px;font-weight:900;color:#fff;text-shadow:0 0 12px #33f0ff">一時停止中</div><button class="btn" id="resumeBtn" style="font-size:18px;padding:10px 28px">再開する</button></div>
 <button class="btn" id="backChoice" style="display:none;position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:8;box-shadow:0 0 12px #7cf9ff;border-color:#7cf9ff"></button>
@@ -1120,7 +1124,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.86';
+const APP_VER = 'v0.1.87';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -2724,7 +2728,7 @@ function renderTurn() {
   if (el.dataset.html !== html) {
     el.dataset.html = html; el.innerHTML = html;
     el.classList.remove('open');
-    const mb = el.querySelector('[data-more]'); if (mb) mb.onclick = () => el.classList.add('open');
+    const mb = el.querySelector('[data-more]'); if (mb) mb.onclick = () => { mb.textContent = el.classList.toggle('open') ? 'とじる' : 'くわしく'; };   // 開いたら「とじる」で閉じられる
     document.querySelectorAll('#turn [data-end]').forEach(bt => bt.onclick = () => bt.dataset.end === 'result' ? showResult() : bt.dataset.end === 'export' ? exportRecord() : playAgain());
   }
   renderGuide();
@@ -3154,7 +3158,7 @@ const HOWTO = [
   () => { const box = (y, h, extra = '') => `<rect x="34" y="${y}" width="216" height="${h}" rx="5" fill="#141d38" stroke="#2b3a66" stroke-width="1.5" ${extra}/>`, num = (y, t) => htText(17, y, t, '#ffe066', 15);
     const tabs = ['操作', '会社', '記録'].map((t, i) => `<rect x="${38 + i * 70}" y="170" width="66" height="18" rx="4" fill="${i ? '#0f1730' : '#1b2a55'}" stroke="${i ? '#2b3a66' : '#7cf9ff'}"/>` + htText(71 + i * 70, 183, t, i ? '#8a94b4' : '#fff', 10)).join('');
     const hexes = [[70, 78], [96, 78], [122, 78], [83, 100], [109, 100], [135, 100], [161, 78], [187, 78], [174, 100], [200, 100]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="9" fill="#0f1730" stroke="#2b3a66"/>`).join('');
-    return ['画面の見かた', htSvg(260, 250, box(6, 40) + htText(40, 22, `次はWAVE 3/${WAVES}`, '#7cf9ff', 10, 'start') + htText(244, 22, '‖ ▶ ♪ ？ ≡', '#cfd8ff', 10, 'end') + htText(40, 39, `♥ ${LIVES}`, '#ff6b81', 10, 'start') + htText(78, 39, `所持金 ${START_MONEY}`, '#ffe066', 10, 'start')
+    return ['画面の見かた', htSvg(260, 250, box(6, 40) + htText(40, 22, `WAVE 3/${WAVES}`, '#7cf9ff', 10, 'start') + htText(244, 22, '‖ ▶ ♪ ？ ≡', '#cfd8ff', 10, 'end') + htText(40, 39, `♥ ${LIVES}`, '#ff6b81', 10, 'start') + htText(78, 39, `所持金 ${START_MONEY}`, '#ffe066', 10, 'start')
       + box(52, 74) + hexes + htText(48, 93, '入', '#ff4dff', 11) + htText(226, 93, '出', '#fff', 11)
       + box(132, 28) + htText(40, 150, 'あなたの番', '#7cf9ff', 10, 'start')
       + box(166, 26) + tabs
@@ -3163,7 +3167,8 @@ const HOWTO = [
     + htTable(['', '場所', '出ているもの'], [['①', '<span style="white-space:nowrap">いちばん上</span>', '次に来るWAVEが何回目か、ライフ（♥）、あなたの所持金。右はボタン（最後のページで説明します）'],
       ['②', '盤', 'タワーを建てる場所。WAVEが来ると、ウイルスがここを進む'], ['③', '案内', '今だれの番か。あなたの番なら、今できること'], ['④', 'タブ', '押すと、⑤に出るものが切り替わる']])
     + htTable(['<span style="white-space:nowrap">④のタブ</span>', '⑤に出るもの'], [['<b>操作</b>', '時間トラックと、あなたの手札（タイルと株券）。自分の番の行動は、ここでする'], ['<b>会社</b>', '会社ごとの株価と、プレイヤーごとの、公開している株券の枚数'], ['<b>記録</b>', 'これまでに起きたこと']])
-    + `<p>あなたの番が来ると、タブは自動で「操作」に切り替わります。タイル、株券、会社は、このあとのページで説明します。</p>`]; },
+    + `<p>あなたの番が来ると、タブは自動で「操作」に切り替わります。タイル、株券、会社は、このあとのページで説明します。</p>`
+    + `<p class="note">パソコンなどの広い画面では④のタブはなく、⑤のものが全部並びます（とても広い画面では盤の右、そうでなければ盤の下）。</p>`]; },
   () => ['自分の番にやること', `<p>自分の番が来たら、次の3つの行動から1つを選びます。</p>`
     + htTable(['行動', '使うもの', 'その行動で起きること'], [['<b>タイルを置く</b>', '時間', '置いたマスにタワーが建つ。<br>あなたは株券を1枚得る'], ['<b>タワーを強化する</b>', '時間', 'そのタワーの射程と威力が上がる。<br>あなたは株券を1枚得る'], ['<b>株券を公開する</b>', 'お金と時間', 'あなたがその会社の株主になる']])
     + `<p>タワーを建てるか強化することで株券が得られますが、株主になるためには株券を公開する必要があります。</p><p>株券の公開には、株価ぶんのお金がかかります。</p>`],
@@ -3250,10 +3255,19 @@ function showHowTo(i = 0, onClose) {
   const [ttl, body] = pages[i], last = i === n - 1;
   // 前へは左、次へは右。閉じるは右上の×（最後のページだけ、右のボタンが「閉じる」になる）
   const close = () => { document.getElementById('modal').style.display = 'none'; (onClose || (() => {}))(); };
-  modal(`<div style="display:flex;justify-content:space-between;align-items:center"><span class="note">遊び方 ${i + 1} / ${n}</span><button class="btn" id="htClose" aria-label="閉じる" style="padding:0;width:44px;height:44px;font-size:20px">×</button></div><h3 style="margin-top:4px">${ttl}</h3>${body}`,
+  modal(`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="note">遊び方 ${i + 1} / ${n}</span><button class="btn" id="htToc" style="margin-left:auto;padding:0 12px;height:44px;font-size:14px">目次</button><button class="btn" id="htClose" aria-label="閉じる" style="padding:0;width:44px;height:44px;font-size:20px">×</button></div><h3 style="margin-top:4px">${ttl}</h3>${body}`,
     [['← 前へ', () => showHowTo(i - 1, onClose)], last ? ['閉じる', onClose || (() => {}), '#7cf9ff'] : ['次へ →', () => showHowTo(i + 1, onClose), '#7cf9ff']]);
   const row = document.querySelector('#mbox .row'); row.style.justifyContent = 'space-between'; if (!i) row.firstChild.style.visibility = 'hidden';
   document.getElementById('htClose').onclick = close;
+  document.getElementById('htToc').onclick = () => showHowToToc(i, onClose);
+}
+// 遊び方の目次：ページの見出しを並べ、押すとそのページへ（前は「前へ／次へ」で1ページずつ送るしかなかった）
+function showHowToToc(cur, onClose) {
+  const pages = HOWTO.map(f => f()).filter(Boolean);
+  modal(`<div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">遊び方の目次</h3><button class="btn" id="htClose" aria-label="閉じる" style="padding:0;width:44px;height:44px;font-size:20px">×</button></div>`,
+    pages.map(([ttl], k) => [`${k + 1}. ${ttl}`, () => showHowTo(k, onClose), k === cur ? '#7cf9ff' : null]));
+  document.querySelectorAll('#mbox .row button').forEach(b => { b.style.width = '100%'; b.style.textAlign = 'left'; });
+  document.getElementById('htClose').onclick = () => { document.getElementById('modal').style.display = 'none'; (onClose || (() => {}))(); };
 }
 document.getElementById('helpBtn').onclick = () => showHowTo(0);
 document.getElementById('menuBtn').onclick = () => showMenu();
