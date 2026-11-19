@@ -22,7 +22,7 @@
   html, body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif; }
   body { min-height:100dvh; display:flex; flex-direction:column; align-items:center; }
   #wrap { width:100%; max-width:560px; padding:6px; }
-  html, body { overflow-x:hidden; }   /* どれかが長くなっても、ページの幅は画面の幅のまま */
+  html { overflow-x:hidden; } body { overflow-x:clip; }   /* どれかが長くなっても、ページの幅は画面の幅のまま（body を hidden にすると、上の帯の固定が効かなくなる） */
   #top { min-width:0; }
   #top #wave { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:0 1 auto; }
   #top #life, #top #money { flex:none; }
@@ -32,11 +32,19 @@
   #top .big { font-size:16px; font-weight:bold; white-space:nowrap; }
   /* スマホ：1行目に波（と持ち時間）とボタン、2行目にライフと所持金（1行だと波の表示が押し出されて消えていた） */
   #top .brk { display:none; }
-  @media (max-width:480px) { #top { flex-wrap:wrap; gap:2px 6px; } #top #wave { flex:1 1 0; } #top .btn { order:1; } #top .brk { display:block; flex-basis:100%; height:0; order:2; } #top #life { order:3; } #top #money { order:4; } #top .big { font-size:14px; } #setupNote { display:none; } #helpBtn .hl { display:none; } #top .btn { white-space:nowrap; }
+  #top .hl { display:none; }   /* 「遊び方」「メニュー」の文字は出さず、？と≡だけ（文字ありだと、どの幅でもメニューが2段目に折り返していた） */
+  @media (max-width:480px) { #top { flex-wrap:wrap; gap:2px 6px; } #top #wave { flex:1 1 0; } #top .btn { order:1; } #top .brk { display:block; flex-basis:100%; height:0; order:2; } #top #life { order:3; } #top #money { order:4; } #top .big { font-size:14px; } #setupNote { display:none; } #top .btn { white-space:nowrap; }
     /* スマホ：縦に長くならないよう、手札・ボタン・株の場を詰める */
     .tile { min-width:0; flex:1 1 30%; padding:3px 5px; font-size:11px; } .tile b { font-size:13px; } .tile img { width:18px !important; height:18px !important; }
     #acts .btn { padding:5px 8px; font-size:12px; } #market .btn { padding:4px 7px; font-size:12px; }
     #turn { padding:4px 6px; } #turn .sub { font-size:11px; } table { font-size:11px; } th, td { padding:2px 3px; } }
+  /* スマホ：上の帯（WAVE・ハート・所持金）は、スクロールしても画面の上に残す */
+  @media (max-width:680px) { #top { position:sticky; top:0; z-index:6; background:var(--bg); } #market { scroll-margin-top:64px; } }
+  /* スマホ：始める前の画面の、人数などのボタンを押しやすく */
+  @media (max-width:480px) { .pline { gap:7px !important; } .pline .btn { min-width:40px; min-height:40px; } }
+  /* 案内の枠：タイルの性能の説明は、スマホでは「くわしく」を押したときだけ出す（選ぶたびに枠が伸びて、手札が下にずれていた） */
+  #turn .mbtn { display:none; margin-left:4px; padding:1px 8px; font-size:11px; }
+  @media (max-width:680px) { #turn .more { display:none; } #turn.open .more { display:inline; } #turn .mbtn { display:inline-block; } #turn.open .mbtn { display:none; } }
   #life { color:#ff6b8b; } #wave { color:#7cf9ff; } #money { color:#ffe066; }
   canvas { display:block; width:100%; touch-action:manipulation; background:radial-gradient(circle at 50% 45%, #0b1430, #04060c 70%); border-radius:8px; }
   #track { position:relative; height:30px; margin:6px 0 2px; background:var(--panel); border-radius:6px; overflow:hidden; }
@@ -81,6 +89,7 @@
   th:first-child, td:first-child { text-align:left; }
   td .sw { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px; }
   #log { font-size:12px; color:var(--dim); max-height:110px; overflow:auto; padding:4px 2px; border-top:1px solid var(--line); margin-top:6px; }
+  body.pre #turn, body.pre #info, body.pre #tabs, body.pre .grp { visibility:hidden; }   /* 始める前の画面：後ろの操作の部分が押せそうに見えないよう隠す */
   #modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:9; }
   #modal .box { background:var(--panel); border:1px solid #2c3d6b; border-radius:12px; padding:16px; max-width:92%; width:380px; }
   #modal h3 { margin:0 0 8px; font-size:17px; }
@@ -127,8 +136,8 @@
     <button class="btn" id="pauseBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="一時停止"><svg width="11" height="12" viewBox="0 0 11 12" style="vertical-align:-1px" aria-label="一時停止"><rect x="1" y="1" width="3" height="10" rx="1" fill="currentColor"/><rect x="7" y="1" width="3" height="10" rx="1" fill="currentColor"/></svg></button>
     <button class="btn" id="ffBtn" style="padding:4px 8px;font-size:13px;display:none" data-tip="早回し。押すたびに1倍、2倍、3倍と切り替わります。持ち時間は早回ししても同じ速さで減ります"><svg width="11" height="12" viewBox="0 0 11 12" style="vertical-align:-1px" aria-label="早回し"><path d="M2 1.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L2.9.7a.6.6 0 0 0-.9.5z" fill="currentColor"/></svg></button>
     <button class="btn" id="soundBtn" style="padding:4px 8px;font-size:13px" data-tip="効果音のオンとオフ"></button>
-    <button class="btn" id="helpBtn">？<span class="hl"> 遊び方</span></button>
-    <button class="btn" id="menuBtn" style="padding:4px 10px;font-size:13px" aria-label="メニュー">≡<span class="hl"> メニュー</span></button>
+    <button class="btn" id="helpBtn" data-tip="遊び方" aria-label="遊び方">？<span class="hl"> 遊び方</span></button>
+    <button class="btn" id="menuBtn" style="padding:4px 10px;font-size:13px" aria-label="メニュー" data-tip="メニュー">≡<span class="hl"> メニュー</span></button>
   </div>
   <div style="position:relative"><canvas id="cv"></canvas><div id="bmenu"></div></div>
   <div id="turn"></div>
@@ -2647,13 +2656,13 @@ function renderTop() {
   document.getElementById('pauseBtn').style.display = canPause() ? '' : 'none';
   document.getElementById('ffBtn').style.display = canPause() ? '' : 'none';
   const ac = waveActive();
-  { const el = document.getElementById('wave'), mine = me(), n = `次はWAVE ${G.wave + 1}/${WAVES}`;
+  { const el = document.getElementById('wave'), mine = me(), sm = innerWidth <= 480, n = `${sm ? '' : '次は'}WAVE ${G.wave + 1}/${WAVES}`;   // スマホは幅が足りず末尾が切れていたので短く
     const done = !mine || mine.t >= G.limit || (!NO_LIMIT && (mine.clock ?? FIRST_WAIT) <= 0);
     // 人が遊ぶとき：自分の考える時間はいつも出す。自分の番で減っている間は明るく、ほかの人の番では灰色
     el.innerHTML = G.over ? '終了' : ac ? `WAVE ${G.wave}/${WAVES} 進行中` : G.wave >= WAVES ? '最後のWAVE'
       : AUTO ? `${n}・あと${Math.ceil(G.waveTimer)}秒`
       : !nextActor() ? `${n}・あと${Math.max(0, Math.ceil(G.waveTimer))}秒`
-      : done ? `${n}・あなたの番は終わり`
+      : done ? `${n}・${sm ? '' : 'あなたの'}番は終わり`
       : NO_LIMIT ? `${n}・${G.actor === mine ? 'あなたの番' : 'ほかの人の番'}`
       : `${n}・<span data-tip="あなたの持ち時間（秒）。自分の番の間だけ減ります" style="color:${G.actor === mine ? '#ffe066' : '#6f7a99'}">${Math.max(0, Math.ceil(mine.clock ?? FIRST_WAIT))}秒</span>`; }
   document.getElementById('life').textContent = '♥ ' + G.lives;
@@ -2664,13 +2673,14 @@ function renderTrack() {
   const span = Math.max(8, Math.max(max, G.limit) - min);
   el.innerHTML = '';
   const lim = document.createElement('div'); lim.style.cssText = `position:absolute;top:0;bottom:0;width:2px;background:#ff4dff;left:${Math.min(98, (G.limit - min) / span * 85)}%`; lim.title = 'このWAVEで使える時間の終わり'; el.appendChild(lim);
-  const stacked = {};
-  [...G.players].sort((a, b) => a.order - b.order).forEach(p => {
+  // 同じ所や近い所のコマは、重ならないよう前のコマの右に並べる（前は6pxずらすだけで、「あなた」の下のコマが隠れていた）
+  const W = el.clientWidth, stacked = {}; let right = -Infinity;
+  [...G.players].sort((a, b) => a.t - b.t || a.order - b.order).forEach(p => {
     const d = document.createElement('div'); d.className = 'mk'; d.style.background = p.color;
-    const s = stacked[p.t] = (stacked[p.t] || 0) + 1;
-    d.style.left = `calc(${(p.t - min) / span * 85}% + ${(s - 1) * 6}px)`; d.textContent = p.name.replace('CPU', 'C');
-    d.title = `${p.name}：時間 ${p.t}`;
+    d.textContent = p.name.replace('CPU', 'C'); d.title = `${p.name}：時間 ${p.t}`;
     el.appendChild(d);
+    if (!W) { const s = stacked[p.t] = (stacked[p.t] || 0) + 1; d.style.left = `calc(${(p.t - min) / span * 85}% + ${(s - 1) * 6}px)`; return; }   // 隠れているとき（スマホの別のタブ）は幅が測れない
+    const x = Math.max((p.t - min) / span * .85 * W, right + 2); d.style.left = x + 'px'; right = x + d.offsetWidth;
   });
 }
 // 「今やること」：いまの場面で何ができるかを1〜2行で出す
@@ -2689,10 +2699,10 @@ function turnText() {
   if (up) return [`${label(up.x, up.y)} の${TYPES[up.type].name}（${TYPE_SHORT[up.type]}）`, canUpgrade(up) ? `「強化する」を押すと、射程と威力が上がります（時間${TYPES[up.type].time}）。強化したあと、株券を1枚得ます。${left}` : 'このタワーは強化できません'];
   if (sel && AREA_MODE) { const c = canPlace(sel), tg = chosenOf(sel);
     if (!c.ok) return [`${tileName(sel)}には置けません（${c.why}）`, '別のタイルを選んでください'];
-    if (!tg) return [`${tileName(sel)}の光っているマスに${TYPES[sel.type].name}を置けます`, `${TYPES[sel.type].name}：${TYPE_DESC[sel.type]}。光っているマスを押してください。時間${normalTime(sel.type)}${CELL_EXTRA ? `（印のマスなら${CELL_EXTRA}少ない）` : ''}。やめるときは、札をもう一度押します。${left}`];
+    if (!tg) return [`${tileName(sel)}の光っているマスに${TYPES[sel.type].name}を置けます`, `光っているマスを押してください。時間${normalTime(sel.type)}${CELL_EXTRA ? `（印のマスなら${CELL_EXTRA}少ない）` : ''}。やめるときは、札をもう一度押します。${left}`, `${TYPES[sel.type].name}：${TYPE_DESC[sel.type]}。`];
     // メニューに並んだタイルの種類の説明も出す（札を押したときと同じように。ユーザー）
     const descs = [...new Set(buildOptions(...tg).map(([t]) => t.type))].map(ty => `${TYPES[ty].name}：${TYPE_DESC[ty]}。`).join('');
-    return [`${label(...tg)} に置くタイルを選んでください`, `${descs}盤のメニューから選ぶと、そこに置きます。置いたあと、株券を1枚得ます。${left}`]; }
+    return [`${label(...tg)} に置くタイルを選んでください`, `盤のメニューから選ぶと、そこに置きます。置いたあと、株券を1枚得ます。${left}`, descs]; }
   if (sel) { const c = canPlace(sel), tg = targetOf(sel); return [c.ok ? `${label(...tg)} に${TYPES[sel.type].name}を置けます` : `${tileName(sel)}${AREA_MODE ? '' : ' のまわり'}には置けません（${c.why}）`, c.ok ? `${AREA_MODE ? tileName(sel) + 'の中の' : label(sel.x, sel.y) + ' か、そのまわりの'}光っているマスに置けます。マスを選んで「置く」を押してください。置いたあと、株券を1枚得ます。${left}` : '別のタイルを選んでください'];  }
   const can = [];
   if (me().hand.some(t => canPlace(t).ok)) can.push('タイルを置く（盤の光るマスを押す）');
@@ -2702,11 +2712,14 @@ function turnText() {
   return ['あなたの番です。どれか1つ選んでください', can.join(' ／ ') + (waveActive() && me().cards.length ? '。ウイルスが来ている間は公開できません' : '') + `。${left}`];
 }
 function renderTurn() {
-  const [a, b] = turnText(), el = document.getElementById('turn');
-  const html = `<span class="now">${a}</span>${b ? `<span class="sub">${b}</span>` : ''}`;
+  const [a, b, more] = turnText(), el = document.getElementById('turn');
+  // more：タイルの性能の説明。PC はいつも出し、スマホは「くわしく」を押したときだけ（前に置く）
+  const html = `<span class="now">${a}</span>${b || more ? `<span class="sub">${more ? `<span class="more">${more}</span>` : ''}${b || ''}${more ? '<button class="btn mbtn" data-more="1">くわしく</button>' : ''}</span>` : ''}`;
   // 同じなら作り直さない（0.25秒ごとにボタンを作り直すと、押しそこねたり重くなったりする）
   if (el.dataset.html !== html) {
     el.dataset.html = html; el.innerHTML = html;
+    el.classList.remove('open');
+    const mb = el.querySelector('[data-more]'); if (mb) mb.onclick = () => el.classList.add('open');
     document.querySelectorAll('#turn [data-end]').forEach(bt => bt.onclick = () => bt.dataset.end === 'result' ? showResult() : bt.dataset.end === 'export' ? exportRecord() : playAgain());
   }
   renderGuide();
@@ -2935,7 +2948,7 @@ function renderMarket() {
 }
 document.getElementById('exportBtn').onclick = exportRecord;
 function renderLog() { document.getElementById('log').innerHTML = G.log.map(t => `<div>${t}</div>`).join(''); }
-function renderAll() { G.boardDirty = true; renderChoice(); renderInfo(); renderTop(); renderTrack(); renderTurn(); renderHand(); renderMarket(); renderCos(); renderLayout(); renderMenu(); }
+function renderAll() { G.boardDirty = true; renderChoice(); renderInfo(); renderTop(); renderTurn(); renderHand(); renderMarket(); renderCos(); renderLayout(); renderTrack(); renderMenu(); }   // トラックは、タブが決まって見えるようになってから並べる
 // スマホの表示：タブと、今の手順に要るまとまりだけを出す（PC はいつも全部）
 const MOBILE = window.matchMedia('(max-width:680px)');
 let tab = 'op', lastActor = null;
@@ -2957,7 +2970,7 @@ function renderLayout() {
   }
   ['gTrack', 'gHand', 'gStock', 'gCos', 'gLog'].forEach(id => document.getElementById(id).classList.toggle('hide', MOBILE.matches && !show[id]));
 }
-document.querySelectorAll('#tabs [data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; renderLayout(); if (tab === 'log') renderLog(); });
+document.querySelectorAll('#tabs [data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; renderLayout(); if (tab === 'log') renderLog(); if (tab === 'op') renderTrack(); });
 MOBILE.addEventListener && MOBILE.addEventListener('change', renderLayout);
 
 document.getElementById('removeBtn').onclick = () => { if (!G.upSel) return; const k = G.upSel; G.upSel = null; act(G.viewer || 0, { t:'remove', k }); };
@@ -3036,6 +3049,7 @@ function modal(html, buttons) {
   const row = box.querySelector('.row');
   buttons.forEach(([t, f, color]) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = t; if (color) b.style.borderColor = color; b.onclick = () => { document.getElementById('modal').style.display = 'none'; f(); }; row.appendChild(b); });
   document.getElementById('modal').style.display = 'flex';
+  box.scrollTop = 0;   // 前の画面を下まで読んでいても、次の画面は上から（見えるようにしてから戻す。隠れている間に戻しても効かない）
 }
 // 選んでもらう：G.choosing に「誰に・何を」を置き、その人の画面に出す。答えは act(誰, { t:'choose', v }) で来る
 function requestChoice(p, kind, data, cb) { G.choosing = { p, kind, data, cb, seq:++G.seq }; renderAll(); }
@@ -3231,7 +3245,7 @@ function showHowTo(i = 0, onClose) {
   const [ttl, body] = pages[i], last = i === n - 1;
   // 前へは左、次へは右。閉じるは右上の×（最後のページだけ、右のボタンが「閉じる」になる）
   const close = () => { document.getElementById('modal').style.display = 'none'; (onClose || (() => {}))(); };
-  modal(`<div style="display:flex;justify-content:space-between;align-items:center"><span class="note">遊び方 ${i + 1} / ${n}</span><button class="btn" id="htClose" aria-label="閉じる" style="padding:2px 12px;font-size:16px">×</button></div><h3 style="margin-top:4px">${ttl}</h3>${body}`,
+  modal(`<div style="display:flex;justify-content:space-between;align-items:center"><span class="note">遊び方 ${i + 1} / ${n}</span><button class="btn" id="htClose" aria-label="閉じる" style="padding:0;width:44px;height:44px;font-size:20px">×</button></div><h3 style="margin-top:4px">${ttl}</h3>${body}`,
     [['← 前へ', () => showHowTo(i - 1, onClose)], last ? ['閉じる', onClose || (() => {}), '#7cf9ff'] : ['次へ →', () => showHowTo(i + 1, onClose), '#7cf9ff']]);
   const row = document.querySelector('#mbox .row'); row.style.justifyContent = 'space-between'; if (!i) row.firstChild.style.visibility = 'hidden';
   document.getElementById('htClose').onclick = close;
@@ -3523,6 +3537,7 @@ function loop(now) {
   if (TURBO) return turboLoop();
   const dt = paused ? 0 : Math.min(.05, (now - last) / 1000) * SPEED * FF; last = now;   // 一時停止中は時間を進めない
   if (G.started) G.clock = (G.clock || 0) + dt;
+  document.body.classList.toggle('pre', !G.started);
   const client = G.net && G.net.role === 'client';
   // 早送りや遅い端末でも、1/60 秒より粗く刻まない（試しの早回しと同じ刻みにそろえる。粗い刻みだとタワーの撃つ間隔が延びる。0.35 秒 → 0.40 秒）。
   // 守りきる率は、刻みでは変わらなかった（300局で、1/60 秒刻みも 0.05 秒刻みも 203局）
@@ -3629,7 +3644,7 @@ function showStart() {
     document.querySelectorAll('#mbox .row button').forEach(b => { b.style.width = '100%'; });   // 縦に並べる
   };
   // 2. ルールを選ぶ：1項目1行
-  const line = (label, items, attr, cur) => `<div style="display:flex;align-items:center;gap:6px;margin:7px 0"><span style="width:5.4em;flex:none;color:#7cf9ff;font-weight:bold;font-size:13px">${label}</span><div class="pick" style="margin:0;gap:4px;flex-wrap:nowrap">${items.map(([k, t]) => `<button class="btn${k === cur ? ' on' : ''}" data-${attr}="${k}" style="padding:5px 7px;font-size:13px;white-space:nowrap">${t}</button>`).join('')}</div></div>`;
+  const line = (label, items, attr, cur) => `<div style="display:flex;align-items:center;gap:6px;margin:7px 0"><span style="width:5.4em;flex:none;color:#7cf9ff;font-weight:bold;font-size:13px">${label}</span><div class="pick pline" style="margin:0;gap:4px;flex-wrap:nowrap">${items.map(([k, t]) => `<button class="btn${k === cur ? ' on' : ''}" data-${attr}="${k}" style="padding:5px 7px;font-size:13px;white-space:nowrap">${t}</button>`).join('')}</div></div>`;
   const rules = () => {
     modal(`<h3>${mode === 'host' ? '部屋を作る' : 'ひとりで遊ぶ'}</h3>` +
       line('人数', [2, 3, 4, 5, 6].map(k => [k, k + '人']), 'n', n) +
