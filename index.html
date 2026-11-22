@@ -3348,7 +3348,10 @@ function showMenu() {
 // ===== 何人かで遊ぶ（PeerJS。ホストが計算し、参加者には様子を送る。テンプレートの「端末間同期」の手順どおり） =====
 const NET_PREFIX = 'denno-toshi-', ROOM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // O/0/I/1 を除いた32文字
 function loadScript(src) { return new Promise((ok, ng) => { const sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = ng; document.head.appendChild(sc); }); }
-const loadPeer = () => window.Peer ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js');
+// 直接つながらないときの中継役（game-relay）。空なら PeerJS だけで動く
+const RELAY_URL = 'https://game-relay.game-relay-worker.workers.dev';
+const loadPeer = () => (window.Peer ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js'))
+  .then(() => window.NetPeer || loadScript('netpeer.js')).then(() => { NetPeer.relay = RELAY_URL; });
 const loadQR = () => window.qrcode ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js');
 function netFx(f, args) { if (G.net && G.net.role === 'host' && G.started) G.net.fx.push([f, args]); }
 const pendPid = x => x ? x.p.id : -1;
@@ -3412,7 +3415,7 @@ function hostLobby(n, hostName) {
   G.net = { role:'host', room, peers:{}, fx:[], syncT:0, joined:[], pending:[], hostName:hostName || 'ホスト', n };
   modal('<h3>部屋を作っています…</h3><p class="note">通信の準備をしています</p>', [['やめる', () => location.reload()]]);
   Promise.all([loadPeer(), loadQR()]).then(() => {
-    const peer = new Peer(NET_PREFIX + room); G.net.peer = peer;
+    const peer = new NetPeer(NET_PREFIX + room); G.net.peer = peer;
     peer.on('error', err => { if (err.type === 'unavailable-id') { peer.destroy(); hostLobby(n, hostName); } else modal(`<h3>つなげませんでした</h3><p class="note">${err.type}</p>`, [['戻る', () => location.reload()]]); });
     peer.on('open', () => drawLobby());
     peer.on('connection', hostConn);
@@ -3471,7 +3474,7 @@ function joinRoom(room, name, back) {   // back：戻るときの { seat, key }
   room = String(room || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
   modal(back ? `<h3>部屋 ${room} に戻っています…</h3><p class="note">ホストにつないでいます</p>` : `<h3>部屋 ${room} に入っています…</h3><p class="note">ホストの許可を待っています</p>`, [['やめる', () => { clearNetSave(); location.href = location.pathname; }]]);
   loadPeer().then(() => {
-    const peer = new Peer();
+    const peer = new NetPeer();
     peer.on('error', err => { if (back && err.type === 'peer-unavailable') { peer.destroy(); return retryJoin(room, name, back); }   // ホストが部屋を開き直すのを待つ
       modal(`<h3>つなげませんでした</h3><p class="note">部屋番号が合っているか確かめてください（${err.type}）</p>`, [['戻る', () => location.reload()]]); });
     peer.on('open', () => {
@@ -3618,7 +3621,7 @@ function reopenHost(sv) {
   G.net = { role:'host', room:sv.net.room, peers:{}, fx:[], syncT:0, joined:[], pending:[], hostName:sv.net.hostName, n:NPLAYERS, keys:sv.net.keys || {} };
   let tries = 0;
   const open = () => loadPeer().then(() => {
-    const peer = new Peer(NET_PREFIX + sv.net.room); G.net.peer = peer;
+    const peer = new NetPeer(NET_PREFIX + sv.net.room); G.net.peer = peer;
     peer.on('open', () => { hideModal(); log(`部屋 ${sv.net.room} を開き直した。参加者が戻るまで CPU が代わりに打つ`); });
     peer.on('error', err => { if (err.type === 'unavailable-id' && ++tries < 20) { peer.destroy(); modal(`<h3>部屋 ${sv.net.room} を開き直しています…（${tries}回目）</h3><p class="note">前の部屋が閉じるのを待っています</p>`, []); setTimeout(open, 3000); } });
     peer.on('connection', hostConn);
