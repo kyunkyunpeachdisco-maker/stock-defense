@@ -1124,7 +1124,7 @@ function forkDefense(dist, towers) {
 // 全員 CPU の200局ずつで、守りきる割合が 87.5% → 93.5%、残りライフが +0.8。点数はほぼ同じ）：
 // 敵の体力を、その波に出る種類の割合で均す。届いたときに減るライフが多い敵（硬い・ボス）は重く見る。5波目までは今までと同じ数（1.15）になる
 // 記録に入れる版の番号（リリースのたびに手で上げる。どの版で遊んだ記録かを見分けるため）
-const APP_VER = 'v0.1.90';
+const APP_VER = 'v0.1.91';
 // 吸収された会社の公開株は残せない（暫定。?keep=1 で前の形＝アクワイアどおり持ち続けられる。ユーザー：同じ1枚を残して、建て直して合併するたびに払わずに1人だけの株主になれた。1局で4回）：
 // 売るか、2枚を残る会社の1枚に交換するかだけ。交換で余った1枚は売る。手札の株は今までどおり手札に残る（使えば減る）
 const KEEP_OK = PARAMS.get('keep') === '1';
@@ -3369,11 +3369,11 @@ function snapshot(seat) {
     log:G.log.slice(0, 30), nextWave:G.nextWave || null, lastSettle:G.lastSettle || null, over:G.over, result:G.result,
     pend:{ taking:pendPid(G.taking), exchanging:pendPid(G.exchanging), discarding:pendPid(G.discarding), swapping:pendPid(G.swapping),
       choosing:G.choosing ? { pid:G.choosing.p.id, kind:G.choosing.kind, data:G.choosing.data, seq:G.choosing.seq } : null },
-    fx:G.net.fx };
+    fx:G.net.fx, sn:G.net.sn };
 }
 function netHostTick(dt) {
-  const n = G.net; n.syncT -= dt; if (n.syncT > 0) return; n.syncT = .1;
-  for (const [seat, conn] of Object.entries(n.peers)) if (conn.open) conn.send(snapshot(+seat));
+  const n = G.net; n.syncT -= dt; if (n.syncT > 0) return; n.syncT = .1; n.sn = (n.sn || 0) + 1;
+  for (const [seat, conn] of Object.entries(n.peers)) if (conn.open && !conn.lost) conn.send(snapshot(+seat));   // 途切れている相手には、ためない（戻ったら、今の様子だけを送る）
   n.fx = [];
 }
 // 参加者：届いた様子を写す
@@ -3431,7 +3431,17 @@ function hostConn(conn) {
       conn.send({ type:'start', course:COURSE, n:NPLAYERS, powers:POWERS, diff:DIFF, noLimit:NO_LIMIT, seat, names:G.players.map(o => o.name), room:G.net.room, key:d.key });
       conn.send(snapshot(seat)); log(`${q.name} が戻った`); renderAll();
     }
+    if (d.type === 'act' && G.started && d.sn !== undefined && G.net.sn - d.sn > 50) return;   // 途切れている間に押した行動（5秒より前の様子を見て押したもの）
     if (d.type === 'act' && G.started) { const seat = Object.entries(G.net.peers).find(([, c]) => c === conn); if (seat) act(+seat[0], d.a); }
+  });
+  // 途切れて5秒たったら、戻るまで CPU が代わりに打つ
+  conn.on('lost', () => setTimeout(() => {
+    const seat = Object.entries(G.net.peers).find(([, c]) => c === conn), q = seat && G.players[+seat[0]];
+    if (q && G.started && conn.open && conn.lost && !q.cpu) { q.cpu = true; conn.stand = true; log(`${q.name} とつなぎ直している間、CPU が代わりに打つ`); renderAll(); }
+  }, 5000));
+  conn.on('back', () => {
+    const seat = Object.entries(G.net.peers).find(([, c]) => c === conn), q = seat && G.players[+seat[0]];
+    if (q && G.started && conn.open && conn.stand) { conn.stand = false; q.cpu = false; log(`${q.name} が戻った`); renderAll(); }
   });
   conn.on('close', () => {
     const seat = Object.entries(G.net.peers).find(([, c]) => c === conn);
@@ -3479,17 +3489,22 @@ function joinRoom(room, name, back) {   // back：戻るときの { seat, key }
       modal(`<h3>つなげませんでした</h3><p class="note">部屋番号が合っているか確かめてください（${err.type}）</p>`, [['戻る', () => location.reload()]]); });
     peer.on('open', () => {
       const conn = peer.connect(NET_PREFIX + room, { reliable:true });
+      let late = null;
       conn.on('open', () => conn.send(back ? { type:'rejoin', seat:back.seat, key:back.key } : { type:'join', name }));
       conn.on('data', d => {
         if (d.type === 'reject') modal('<h3>参加できませんでした</h3><p class="note">ホストに断られたか、もう始まっています</p>', [['戻る', () => location.reload()]]);
         if (d.type === 'start') {
           useCourse(d.course); NPLAYERS = d.n; POWERS = !!d.powers; DIFF = DIFFS[d.diff] ? d.diff : 'normal'; NO_LIMIT = !!d.noLimit; resetG(); setup(); resize();
-          G.viewer = d.seat; G.net = { role:'client', send:x => conn.send(x), fx:[] };
+          G.viewer = d.seat; G.net = { role:'client', send:x => { if (!conn.lost) conn.send(x.type === 'act' ? { ...x, sn:G.net.sn } : x); }, fx:[] };
           G.players.forEach((q, i) => { q.name = d.names[i]; q.cpu = false; });
           G.started = true; hideModal(); renderAll(); renderLog(); retryCount = 0;
           if (d.key) { try { localStorage.setItem(NET_SAVE_KEY, JSON.stringify({ role:'client', room:d.room || room, seat:d.seat, key:d.key, name })); } catch (e) {} }
         }
-        if (d.type === 'state' && G.started) applyState(d);
+        if (d.type === 'state' && G.started) {   // まとめて届いたら、いちばん新しい様子だけを写す
+          G.net.sn = d.sn; const was = late; late = d;
+          if (was) { d.fx = was.fx.concat(d.fx).slice(-40); return; }
+          setTimeout(() => { const m = late; late = null; if (m && G.started) applyState(m); }, 0);
+        }
       });
       conn.on('close', () => {   // ホストが切れた：開き直すのを待って、つなぎ直す
         if (G.over) return;
